@@ -51,14 +51,15 @@ ENV HOSTNAME=0.0.0.0
 # sharp, the image optimizer. libuv lets getaddrinfo use at most half of it,
 # so 8 doubles the concurrent DNS lookups and a few slow tenant nameservers
 # hold up Supabase, Meta and Razorpay lookups less easily.
-# The pool size also caps parallel image encodes: sharp runs one encode per
-# slot, with one libvips thread each (imgOptConcurrency in next.config.ts).
-# At 8 the peak is 8 encode threads, no more than the 4 encodes x half the
-# cores Next ran before on any host with 4 or more cores; lower it on a
-# smaller host. A burst of 8 or more uncached images still fills every slot
-# and can keep every core busy. The hard bound on image CPU is the Cloudflare
-# cache and rate rule on /_next/image
-# (docs/ops/app-admin-inspection-2026-10-15.md, section 9).
+# The pool size also caps parallel image encodes: sharp runs each encode on a
+# pool slot, so 8 raises the most encodes at once from 4 to 8. On this base
+# image (glibc, no jemalloc, no MALLOC_ARENA_MAX) sharp already limits each
+# encode to one libvips thread by itself, so imgOptConcurrency in
+# next.config.ts changes nothing here. A burst of 8 or more uncached images
+# fills every slot and can keep every core busy. The Cloudflare cache and rate
+# rule on /_next/image must be in place before this ships; it is the hard
+# bound on image CPU (docs/ops/app-admin-inspection-2026-10-15.md, section 9).
+# The pool size itself is left to the owner (same report, section 11).
 ENV UV_THREADPOOL_SIZE=8
 
 # Identifies the build itself. This cannot drift from the image it is baked into.

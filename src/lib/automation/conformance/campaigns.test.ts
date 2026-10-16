@@ -363,4 +363,24 @@ describe("comment-to-link campaign when Meta limits the account", () => {
     expect(privateReplies()).toHaveLength(1);
     expect(await participantFor(automation)).toMatchObject({ state: "OPENING_SENT", openingStatus: "SENT" });
   });
+
+  it("sends nothing for a comment parked by a throttle pause once the owner pauses the automation", async () => {
+    const automation = await addAutomation(repository, "Launch", campaign({ publicReplies: [] }));
+    const start = Date.now();
+    for (let index = 0; index < 3; index += 1) {
+      await recordAccountThrottle({ channel: "instagram", accountId: IG_ACCOUNT }, { now: start });
+    }
+    await withClock(start, () => deliverInstagram(commentPayload({ from: person(), text: "link", mediaId: MEDIA.id })));
+    expect(queuedJobs("instagram-event").filter((job) => job.state === "delayed")).toHaveLength(1);
+
+    // The kill switch, pressed while the DM is parked.
+    await repository.updateAutomation(WORKSPACE_ID, automation.id, { status: "PAUSED" });
+
+    const after = await withClock(start + 16 * 60_000 + 1_000, () => drain());
+    expect(after.failed).toHaveLength(0);
+    expect(privateReplies()).toHaveLength(0);
+    expect(fakeMeta.sends()).toHaveLength(0);
+    // Left unsent, for the hourly sweep to expire.
+    expect(await participantFor(automation)).toMatchObject({ state: "COMMENT_MATCHED", openingStatus: "PENDING" });
+  });
 });

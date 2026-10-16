@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { seoTopics, type SeoPage } from "@/src/content/seo";
 import { ButtonRoll } from "../../../button-roll";
 import { MockAvatar } from "../../mock-ui";
@@ -37,7 +36,7 @@ export function OverviewStatement({ page }: { page: SeoPage }) {
           <p className={styles.lead}>{lead}</p>
           {rest ? <p className={styles.body}>{rest}</p> : null}
           <div className={shell.actions}>
-            <Link className={shell.primaryAction} href="/signup"><ButtonRoll label={overviewCta} /></Link>
+            <a className={shell.primaryAction} href="/signup"><ButtonRoll label={overviewCta} /></a>
           </div>
         </div>
       </div>

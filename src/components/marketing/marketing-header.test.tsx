@@ -1,10 +1,18 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import type { ComponentProps } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MarketingHeader } from "./marketing-header";
 
 const pathname = vi.hoisted(() => ({ current: "/" }));
 vi.mock("next/navigation", () => ({ usePathname: () => pathname.current }));
+// The real next/link still renders every link; this only marks its anchors so
+// a test can tell them from plain <a> elements.
+vi.mock("next/link", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("next/link")>();
+  const RealLink = actual.default;
+  return { ...actual, default: (props: ComponentProps<typeof RealLink>) => <RealLink {...props} data-next-link="" /> };
+});
 
 let animationFrames: FrameRequestCallback[] = [];
 
@@ -480,6 +488,54 @@ describe("MarketingHeader", () => {
     fireEvent.click(screen.getByRole("button", { name: "Open menu" }));
     view.unmount();
     expect(document.body.style.overflow).toBe("");
+  });
+
+  it("loads the account pages with plain links, so nothing is prefetched or fetched across hosts", () => {
+    installBrowserControls();
+    render(<MarketingHeader />);
+    // /signup and /login live on app.linkar.in. A next/link would prefetch or
+    // fetch them from linkar.in or admin.linkar.in, follow the redirect and
+    // trip connect-src, so each one must be a plain link loaded as a page.
+    const accountLinks = () => Array.from(header().querySelectorAll<HTMLAnchorElement>('a[href^="/signup"], a[href^="/login"]'));
+    const expectPlain = (links: HTMLElement[]) => {
+      for (const link of links) {
+        expect(link.hasAttribute("data-next-link"), link.textContent ?? "").toBe(false);
+        expect(link.hasAttribute("prefetch")).toBe(false);
+      }
+    };
+
+    // Desktop Get started and Sign in, and the phone's Get started.
+    expect(accountLinks().map((link) => link.getAttribute("href"))).toEqual(["/signup", "/login", "/signup"]);
+    expectPlain(accountLinks());
+    // Marketing pages keep client-side navigation.
+    expect(within(screen.getByRole("navigation", { name: "Primary" })).getByRole("link", { name: "Product" }).hasAttribute("data-next-link")).toBe(true);
+
+    fireEvent.click(screen.getByRole("button", { name: "Open menu" }));
+    const menu = within(screen.getByRole("navigation", { name: "Mobile primary" }));
+    const sheetLinks = [menu.getByRole("link", { name: "Sign in" }), menu.getByRole("link", { name: "Get started" })];
+    expect(sheetLinks.map((link) => link.getAttribute("href"))).toEqual(["/login", "/signup"]);
+    expectPlain(sheetLinks);
+
+    // Choosing one still closes the sheet. jsdom cannot load another page, so
+    // the test stops the browser's own navigation.
+    sheetLinks[0].addEventListener("click", (event) => event.preventDefault());
+    fireEvent.click(sheetLinks[0]);
+    expect(screen.queryByRole("dialog", { name: "Menu" })).toBeNull();
+    expect(document.body.style.overflow).toBe("");
+  });
+
+  it("keeps the account links relative on the app host's auth screens", () => {
+    installBrowserControls();
+    render(<MarketingHeader siteOrigin="https://linkar.in" />);
+    const account = within(screen.getByRole("navigation", { name: "Account" }));
+    expect(account.getByRole("link", { name: "Get started" }).getAttribute("href")).toBe("/signup");
+    expect(account.getByRole("link", { name: "Sign in" }).getAttribute("href")).toBe("/login");
+    expect(within(screen.getByRole("navigation", { name: "Primary" })).getByRole("link", { name: "Product" }).getAttribute("href")).toBe("https://linkar.in/features");
+
+    fireEvent.click(screen.getByRole("button", { name: "Open menu" }));
+    const menu = within(screen.getByRole("navigation", { name: "Mobile primary" }));
+    expect(menu.getByRole("link", { name: "Sign in" }).getAttribute("href")).toBe("/login");
+    expect(menu.getByRole("link", { name: "Get started" }).getAttribute("href")).toBe("/signup");
   });
 
   it("keeps the header visible under reduced motion while preserving threshold changes", () => {

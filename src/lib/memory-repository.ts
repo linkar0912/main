@@ -87,6 +87,15 @@ function copy<T>(value: T): T {
   return structuredClone(value);
 }
 
+/** Same shape as Prisma's unique-constraint error, so callers that recover
+ * from a create race (P2002) behave the same against this repository. */
+function uniqueViolation(model: string, field: string): Error {
+  return Object.assign(new Error(`Unique constraint failed on ${model}.${field}`), {
+    code: "P2002",
+    meta: { modelName: model, target: [field] },
+  });
+}
+
 function validatePositiveInteger(value: number, name: string): void {
   if (!Number.isInteger(value) || value <= 0) {
     throw new Error(`${name} must be a positive integer`);
@@ -679,9 +688,10 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
     },
 
     async createAutomation(workspaceId, input: CreateAutomationInput) {
+      if (input.id && automations.has(input.id)) throw uniqueViolation("Automation", "id");
       const timestamp = now();
       const automation: AutomationRecord = {
-        id: createId("automation"),
+        id: input.id ?? createId("automation"),
         workspaceId,
         provider: input.provider ?? (input.facebookPageId ? "FACEBOOK" : "INSTAGRAM"),
         name: input.name.trim(),
@@ -2597,9 +2607,10 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
     },
 
     async createBroadcast(workspaceId, input) {
+      if (input.id && broadcasts.has(input.id)) throw uniqueViolation("Broadcast", "id");
       const timestamp = now();
       const record: BroadcastRecord = {
-        id: createId("broadcast"),
+        id: input.id ?? createId("broadcast"),
         workspaceId,
         name: input.name.trim(),
         text: input.text,

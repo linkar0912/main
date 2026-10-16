@@ -15,6 +15,14 @@ vi.mock("next/link", () => ({
 }));
 
 const { LoginScreen } = await import("./login-screen");
+const {
+  adoptOnboardingIdentity,
+  deferOnboarding,
+  ONBOARDING_DEFERRED_KEY,
+  ONBOARDING_IDENTITY_KEY,
+  ONBOARDING_NOT_REQUIRED_KEY,
+  rememberOnboardingNotRequired,
+} = await import("@/src/lib/onboarding/redirect");
 
 describe("LoginScreen host routing", () => {
   beforeEach(() => {
@@ -105,5 +113,34 @@ describe("LoginScreen host routing", () => {
     expect(form.getAttribute("action")).toBe("/api/auth/login");
     expect(form.getAttribute("method")).toBe("post");
     expect(form.querySelector<HTMLInputElement>('input[name="next"]')?.value).toBe("/automations/new");
+  });
+
+  it("drops the last account's onboarding flags for this tab, so the next sign-in starts clean", () => {
+    try {
+      adoptOnboardingIdentity("first@example.com");
+      deferOnboarding();
+      rememberOnboardingNotRequired(true);
+      window.sessionStorage.setItem("linkar:home-range", "30");
+
+      render(<LoginScreen nextPath="/dashboard" />);
+
+      for (const key of [ONBOARDING_DEFERRED_KEY, ONBOARDING_NOT_REQUIRED_KEY, ONBOARDING_IDENTITY_KEY]) {
+        expect(window.sessionStorage.getItem(key), key).toBeNull();
+      }
+      // Only the onboarding flags go.
+      expect(window.sessionStorage.getItem("linkar:home-range")).toBe("30");
+    } finally {
+      window.sessionStorage.clear();
+    }
+  });
+
+  it("still renders when the browser blocks storage", () => {
+    const blocked = vi.spyOn(window, "sessionStorage", "get").mockImplementation(() => { throw new Error("blocked"); });
+    try {
+      render(<LoginScreen nextPath="/dashboard" />);
+      expect(screen.getByRole("form", { name: "Sign in to Linkar" })).toBeTruthy();
+    } finally {
+      blocked.mockRestore();
+    }
   });
 });

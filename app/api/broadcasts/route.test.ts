@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   listBroadcasts: vi.fn(),
   listBroadcastRecipients: vi.fn(),
   createBroadcast: vi.fn(),
+  getBroadcast: vi.fn(),
   getMessagingWindow: vi.fn(),
   incrementBroadcastCounters: vi.fn(),
   finalizeBroadcastIfDone: vi.fn(),
@@ -33,6 +34,7 @@ vi.mock("@/src/lib/repository-provider", () => ({
     listBroadcasts: mocks.listBroadcasts,
     listBroadcastRecipients: mocks.listBroadcastRecipients,
     createBroadcast: mocks.createBroadcast,
+    getBroadcast: mocks.getBroadcast,
     getMessagingWindow: mocks.getMessagingWindow,
     incrementBroadcastCounters: mocks.incrementBroadcastCounters,
     finalizeBroadcastIfDone: mocks.finalizeBroadcastIfDone,
@@ -59,13 +61,15 @@ vi.mock("@/src/lib/entitlements/service", async (importOriginal) => ({
 
 const { GET, POST } = await import("./route");
 
-function create(body: unknown = { name: "Update", text: "Hello", segment: "all_contacts" }) {
+function create(body: unknown = { name: "Update", text: "Hello", segment: "all_contacts" }, idempotencyKey?: string) {
   return POST(new Request("http://localhost/api/broadcasts", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", ...(idempotencyKey ? { "idempotency-key": idempotencyKey } : {}) },
     body: JSON.stringify(body),
   }));
 }
+
+const DERIVED_BROADCAST_ID = /^broadcast_[0-9a-f]{8}-[0-9a-f]{4}-8[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 const createdBroadcast = {
   id: "broadcast_1", workspaceId: "workspace_1", name: "Update", text: "Hello", segment: "all_contacts", status: "RUNNING", total: 2, sent: 0, failed: 0, skipped: 0,
@@ -78,6 +82,7 @@ describe("/api/broadcasts", () => {
     mocks.listBroadcasts.mockReset().mockResolvedValue([]);
     mocks.listBroadcastRecipients.mockReset().mockResolvedValue({ recipients: [], totalEligible: 0 });
     mocks.createBroadcast.mockReset().mockResolvedValue({ ...createdBroadcast, total: 0, status: "COMPLETED" });
+    mocks.getBroadcast.mockReset().mockResolvedValue(null);
     mocks.getMessagingWindow.mockReset().mockResolvedValue(null);
     mocks.incrementBroadcastCounters.mockReset();
     mocks.finalizeBroadcastIfDone.mockReset();
@@ -248,11 +253,296 @@ describe("/api/broadcasts", () => {
     });
     mocks.createBroadcast.mockResolvedValue(createdBroadcast);
     mocks.ensureOutboundDeliveries.mockRejectedValue(new Error("pool timeout"));
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => undefined);
 
-    await expect(create()).rejects.toThrow("pool timeout");
+    const response = await create();
+
+    // queued: 0 lets the screen start a fresh send instead of replaying this closed one.
+    expect(response.status).toBe(500);
+    const body = await response.json() as { error: string; queued?: number };
+    expect(body.queued).toBe(0);
+    expect(body.error).toMatch(/nobody was messaged/);
+    expect(body.error).not.toMatch(/pool timeout/);
+    expect(errorLog).toHaveBeenCalled();
     expect(mocks.cancelBroadcast).toHaveBeenCalledWith("workspace_1", "broadcast_1");
     expect(mocks.releaseMonthlyBroadcast).toHaveBeenCalledWith("workspace_1", expect.stringMatching(/-01$/));
     expect(mocks.enqueueBroadcastSends).not.toHaveBeenCalled();
+    // Counts come up to date after the close, so a lost-answer retry replays a broadcast that reached nobody.
+    expect(mocks.reconcileBroadcastCounters).toHaveBeenCalledWith("workspace_1", "broadcast_1");
+    errorLog.mockRestore();
+  });
+
+  it("leaves the counts alone when the broadcast could not be closed after its deliveries failed to store", async () => {
+    // A recount of a running row with no deliveries would mark it finished
+    // with nobody to send to, and a retry would replay that as sent.
+    mocks.getValidatedSession.mockResolvedValue({ userId: "user_1", workspaceId: "workspace_1" });
+    mocks.listBroadcastRecipients.mockResolvedValue({
+      recipients: [{ instagramAccountId: "ig_a", igScopedUserId: "recipient_a" }],
+      totalEligible: 1,
+    });
+    mocks.createBroadcast.mockResolvedValue(createdBroadcast);
+    mocks.ensureOutboundDeliveries.mockRejectedValue(new Error("pool timeout"));
+    mocks.cancelBroadcast.mockRejectedValue(new Error("db down"));
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    const response = await create();
+
+    expect(response.status).toBe(500);
+    expect(mocks.reconcileBroadcastCounters).not.toHaveBeenCalled();
+    errorLog.mockRestore();
+  });
+
+  describe("when the queue takes nobody", () => {
+    const twoPeople = {
+      recipients: [
+        { instagramAccountId: "ig_a", igScopedUserId: "recipient_a" },
+        { instagramAccountId: "ig_b", igScopedUserId: "recipient_b" },
+      ],
+      totalEligible: 2,
+    };
+    const rejectEveryone = async (jobs: { igAccountId: string; igScopedUserId: string }[]) => ({
+      accepted: [],
+      rejected: jobs.map(({ igAccountId, igScopedUserId }) => ({ igAccountId, igScopedUserId })),
+    });
+
+    beforeEach(() => {
+      mocks.getValidatedSession.mockResolvedValue({ userId: "user_1", workspaceId: "workspace_1" });
+      mocks.listBroadcastRecipients.mockResolvedValue(twoPeople);
+      mocks.createBroadcast.mockResolvedValue(createdBroadcast);
+      mocks.enqueueBroadcastSends.mockImplementation(rejectEveryone);
+    });
+
+    it("closes the broadcast, gives the month's broadcast back and answers queued: 0", async () => {
+      const warnLog = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+
+      const response = await create();
+
+      expect(response.status).toBe(503);
+      const body = await response.json() as { error: string; queued?: number; data: { status: string } };
+      expect(body.queued).toBe(0);
+      expect(body.error).toMatch(/nobody was messaged/);
+      expect(body.error).not.toMatch(/recipient|partial/i);
+      expect(body.data.status).toBe("CANCELLED");
+      expect(mocks.cancelBroadcast).toHaveBeenCalledWith("workspace_1", "broadcast_1");
+      expect(mocks.releaseMonthlyBroadcast).toHaveBeenCalledWith("workspace_1", expect.stringMatching(/-01$/));
+      // Not recorded as a finished broadcast with everyone failed. The counts
+      // are brought up to date after the close, so the cancelled deliveries
+      // count as skipped and a same-key replay reads as reaching nobody.
+      expect(mocks.failOutboundDelivery).not.toHaveBeenCalled();
+      expect(mocks.reconcileBroadcastCounters).toHaveBeenCalledWith("workspace_1", "broadcast_1");
+      expect(mocks.reconcileBroadcastCounters.mock.invocationCallOrder[0]).toBeGreaterThan(mocks.cancelBroadcast.mock.invocationCallOrder[0]);
+      warnLog.mockRestore();
+    });
+
+    it("lets a fresh key send for real once the queue is back, and a same-key retry gets the closed broadcast", async () => {
+      const memory = createMemoryRepository();
+      mocks.createBroadcast.mockImplementation(memory.createBroadcast);
+      mocks.getBroadcast.mockImplementation(memory.getBroadcast);
+      mocks.cancelBroadcast.mockImplementation(memory.cancelBroadcast);
+      const warnLog = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+
+      const first = await create(undefined, "send-key-down");
+      expect(first.status).toBe(503);
+      const firstId = (await first.json() as { data: { id: string } }).data.id;
+      expect(await memory.getBroadcast("workspace_1", firstId)).toMatchObject({ status: "CANCELLED", sent: 0 });
+
+      // Queue back.
+      mocks.enqueueBroadcastSends.mockImplementation(async (jobs: { igAccountId: string; igScopedUserId: string }[]) => ({
+        accepted: jobs.map(({ igAccountId, igScopedUserId }) => ({ igAccountId, igScopedUserId })),
+        rejected: [],
+      }));
+      const sameKey = await create(undefined, "send-key-down");
+      expect(sameKey.status).toBe(200);
+      await expect(sameKey.json()).resolves.toMatchObject({ replayed: true, data: { id: firstId, status: "CANCELLED", sent: 0 } });
+
+      const freshKey = await create(undefined, "send-key-up");
+      expect(freshKey.status).toBe(201);
+      expect((await freshKey.json() as { data: { id: string } }).data.id).not.toBe(firstId);
+      expect(mocks.enqueueBroadcastSends).toHaveBeenCalledTimes(2);
+      // The failed try gave its slot back, so the month counts one broadcast.
+      expect(mocks.reserveMonthlyBroadcast).toHaveBeenCalledTimes(2);
+      expect(mocks.releaseMonthlyBroadcast).toHaveBeenCalledTimes(1);
+      warnLog.mockRestore();
+    });
+
+    it("records everyone as failed, as before, when the broadcast cannot be closed", async () => {
+      mocks.cancelBroadcast.mockRejectedValue(new Error("db down"));
+
+      const response = await create();
+
+      expect(response.status).toBe(502);
+      expect(mocks.failOutboundDelivery).toHaveBeenCalledTimes(2);
+      expect(mocks.reconcileBroadcastCounters).toHaveBeenCalledWith("workspace_1", "broadcast_1");
+      expect(mocks.releaseMonthlyBroadcast).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("idempotency key", () => {
+    const twoPeople = {
+      recipients: [
+        { instagramAccountId: "ig_a", igScopedUserId: "recipient_a" },
+        { instagramAccountId: "ig_b", igScopedUserId: "recipient_b" },
+      ],
+      totalEligible: 2,
+    };
+
+    /** Broadcast rows live in a real memory repository, so the second
+     * attempt finds what the first one stored. */
+    function useStoredBroadcasts() {
+      const memory = createMemoryRepository();
+      mocks.createBroadcast.mockImplementation(memory.createBroadcast);
+      mocks.getBroadcast.mockImplementation(memory.getBroadcast);
+      return memory;
+    }
+
+    beforeEach(() => {
+      mocks.getValidatedSession.mockResolvedValue({ userId: "user_1", workspaceId: "workspace_1" });
+      mocks.listBroadcastRecipients.mockResolvedValue(twoPeople);
+      mocks.enqueueBroadcastSends.mockImplementation(async (jobs: { igAccountId: string; igScopedUserId: string }[]) => ({
+        accepted: jobs.map(({ igAccountId, igScopedUserId }) => ({ igAccountId, igScopedUserId })),
+        rejected: [],
+      }));
+    });
+
+    it("replays the trimmed name, text and segment the screen compares against", async () => {
+      // The broadcasts screen tells an edited send from a plain retry by
+      // comparing the replayed row with what it posted (trimmed). If a replay
+      // stopped carrying these, an edited message could again be dropped.
+      useStoredBroadcasts();
+      const body = { name: "  Drop  ", text: " New stock \n", segment: "captured_email" };
+
+      await create(body, "send-key-trim");
+      const replay = await create(body, "send-key-trim");
+
+      expect(replay.status).toBe(200);
+      await expect(replay.json()).resolves.toMatchObject({
+        replayed: true,
+        data: { name: "Drop", text: "New stock", segment: "captured_email" },
+      });
+    });
+
+    it("answers the same body and key twice with one broadcast and one reservation", async () => {
+      useStoredBroadcasts();
+
+      const first = await create(undefined, "send-key-1");
+      const second = await create(undefined, "send-key-1");
+
+      expect(first.status).toBe(201);
+      expect(second.status).toBe(200);
+      const firstBody = await first.json() as { data: { id: string } };
+      const secondBody = await second.json() as { data: { id: string }; replayed?: boolean };
+      expect(firstBody.data.id).toMatch(DERIVED_BROADCAST_ID);
+      expect(secondBody).toMatchObject({ replayed: true, data: { id: firstBody.data.id } });
+      expect(mocks.createBroadcast).toHaveBeenCalledTimes(1);
+      expect(mocks.createBroadcast).toHaveBeenCalledWith("workspace_1", expect.objectContaining({ id: firstBody.data.id }));
+      expect(mocks.reserveMonthlyBroadcast).toHaveBeenCalledTimes(1);
+      expect(mocks.releaseMonthlyBroadcast).not.toHaveBeenCalled();
+      expect(mocks.ensureOutboundDeliveries).toHaveBeenCalledTimes(1);
+      expect(mocks.enqueueBroadcastSends).toHaveBeenCalledTimes(1);
+      // The replay is answered before the audience query and the plan checks.
+      expect(mocks.listBroadcastRecipients).toHaveBeenCalledTimes(1);
+      expect(mocks.assertEntitled).toHaveBeenCalledTimes(1);
+    });
+
+    it("queues nobody twice when a partial-queue 502 is retried with the same key", async () => {
+      useStoredBroadcasts();
+      mocks.enqueueBroadcastSends.mockResolvedValueOnce({
+        accepted: [{ igAccountId: "ig_a", igScopedUserId: "recipient_a" }],
+        rejected: [{ igAccountId: "ig_b", igScopedUserId: "recipient_b" }],
+      });
+
+      const first = await create(undefined, "send-key-2");
+      expect(first.status).toBe(502);
+      const firstBody = await first.json() as { error: string; data: { id: string } };
+      expect(firstBody.error).not.toMatch(/recipient/i);
+
+      const retry = await create(undefined, "send-key-2");
+
+      expect(retry.status).toBe(200);
+      await expect(retry.json()).resolves.toMatchObject({ replayed: true, data: { id: firstBody.data.id } });
+      expect(mocks.enqueueBroadcastSends).toHaveBeenCalledTimes(1);
+      expect(mocks.ensureOutboundDeliveries).toHaveBeenCalledTimes(1);
+      expect(mocks.failOutboundDelivery).toHaveBeenCalledTimes(1);
+      expect(mocks.reserveMonthlyBroadcast).toHaveBeenCalledTimes(1);
+      expect(mocks.createBroadcast).toHaveBeenCalledTimes(1);
+    });
+
+    it("hands back the winner's broadcast and gives the reservation back when a same-key attempt loses the create race", async () => {
+      const memory = useStoredBroadcasts();
+      // Both attempts passed the lookup before either stored its row.
+      mocks.getBroadcast.mockResolvedValueOnce(null);
+      mocks.createBroadcast.mockImplementationOnce(async (workspaceId: string, input: Parameters<typeof memory.createBroadcast>[1]) => {
+        await memory.createBroadcast(workspaceId, input);
+        return memory.createBroadcast(workspaceId, input);
+      });
+
+      const response = await create(undefined, "send-key-3");
+
+      expect(response.status).toBe(200);
+      const body = await response.json() as { data: { id: string }; replayed?: boolean };
+      expect(body.replayed).toBe(true);
+      expect(body.data.id).toMatch(DERIVED_BROADCAST_ID);
+      expect(mocks.releaseMonthlyBroadcast).toHaveBeenCalledWith("workspace_1", expect.stringMatching(/-01$/));
+      expect(mocks.ensureOutboundDeliveries).not.toHaveBeenCalled();
+      expect(mocks.enqueueBroadcastSends).not.toHaveBeenCalled();
+    });
+
+    it("replays instead of refusing when a same-key attempt alongside it took the month's last broadcast", async () => {
+      useStoredBroadcasts();
+      const winner = await create(undefined, "send-key-4");
+      expect(winner.status).toBe(201);
+      const winnerId = (await winner.json() as { data: { id: string } }).data.id;
+
+      // The other attempt's lookup ran before the winner stored its row, and
+      // the winner's reservation used the last slot.
+      mocks.getBroadcast.mockResolvedValueOnce(null);
+      mocks.reserveMonthlyBroadcast.mockResolvedValueOnce({ reserved: false, used: 4 });
+      const loser = await create(undefined, "send-key-4");
+
+      expect(loser.status).toBe(200);
+      await expect(loser.json()).resolves.toMatchObject({ replayed: true, data: { id: winnerId } });
+      expect(mocks.createBroadcast).toHaveBeenCalledTimes(1);
+      expect(mocks.enqueueBroadcastSends).toHaveBeenCalledTimes(1);
+    });
+
+    it("still refuses at the monthly limit when no same-key broadcast exists", async () => {
+      useStoredBroadcasts();
+      mocks.reserveMonthlyBroadcast.mockResolvedValue({ reserved: false, used: 4 });
+
+      const response = await create(undefined, "send-key-5");
+
+      expect(response.status).toBe(409);
+      expect(mocks.getBroadcast).toHaveBeenCalledTimes(2);
+      expect(mocks.createBroadcast).not.toHaveBeenCalled();
+    });
+
+    it("keys the derived id to the workspace, so another workspace's same key makes its own broadcast", async () => {
+      useStoredBroadcasts();
+
+      const first = await create(undefined, "shared-key");
+      mocks.getValidatedSession.mockResolvedValue({ userId: "user_2", workspaceId: "workspace_2" });
+      const second = await create(undefined, "shared-key");
+
+      expect(first.status).toBe(201);
+      expect(second.status).toBe(201);
+      const [firstId, secondId] = mocks.createBroadcast.mock.calls.map(([, input]) => (input as { id?: string }).id);
+      expect(firstId).toMatch(DERIVED_BROADCAST_ID);
+      expect(secondId).toMatch(DERIVED_BROADCAST_ID);
+      expect(secondId).not.toBe(firstId);
+    });
+
+    it.each([
+      ["no header", undefined],
+      ["a malformed header", "not a valid key!"],
+    ])("keeps the old behaviour with %s: no lookup and a fresh id", async (_label, key) => {
+      mocks.createBroadcast.mockResolvedValue(createdBroadcast);
+
+      const response = await create(undefined, key);
+
+      expect(response.status).toBe(201);
+      expect(mocks.getBroadcast).not.toHaveBeenCalled();
+      expect(mocks.createBroadcast.mock.calls[0][1]).not.toHaveProperty("id");
+    });
   });
 
   it("returns the literal broadcast-feature contract", async () => {
@@ -264,6 +554,35 @@ describe("/api/broadcasts", () => {
 
     expect(response.status).toBe(403);
     await expect(response.json()).resolves.toEqual({ error: "entitlement_required", capability: "broadcasts" });
+  });
+});
+
+describe("createBroadcast with a caller-supplied id", () => {
+  const input = { name: "Update", text: "Hello", segment: "all_contacts" as const, total: 2 };
+
+  it("memory: stores the given id and refuses a second create with it like a unique constraint", async () => {
+    const memory = createMemoryRepository();
+
+    const created = await memory.createBroadcast("workspace_1", { ...input, id: "broadcast_fixed" });
+
+    expect(created.id).toBe("broadcast_fixed");
+    expect(await memory.getBroadcast("workspace_1", "broadcast_fixed")).toEqual(created);
+    await expect(memory.createBroadcast("workspace_1", { ...input, id: "broadcast_fixed" })).rejects.toMatchObject({ code: "P2002" });
+    expect((await memory.createBroadcast("workspace_1", input)).id).toMatch(/^broadcast_/);
+  });
+
+  it("prisma: writes the given id, and a fresh one without it", async () => {
+    const create = vi.fn(async ({ data }: { data: Record<string, unknown> }) => ({
+      ...data, sent: 0, failed: 0, skipped: 0, createdAt: new Date(0), completedAt: null, cancelledAt: null,
+    }));
+    const repository = createPrismaRepository({ broadcast: { create } } as unknown as typeof prisma);
+
+    await repository.createBroadcast("workspace_1", { ...input, id: "broadcast_fixed" });
+    await repository.createBroadcast("workspace_1", input);
+
+    expect(create.mock.calls[0][0].data.id).toBe("broadcast_fixed");
+    expect(create.mock.calls[1][0].data.id).toMatch(/^broadcast_/);
+    expect(create.mock.calls[1][0].data.id).not.toBe("broadcast_fixed");
   });
 });
 

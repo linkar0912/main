@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { FlowDefinition, FlowDefinitionV1, NormalizedEvent } from "./types";
-import { evaluateFlow } from "./engine";
+import { evaluateFlow, UNSUPPORTED_REGEX_REASON } from "./engine";
 
 const commentEvent: NormalizedEvent = {
   id: "comment_1",
@@ -119,6 +119,31 @@ describe("evaluateFlow", () => {
       actions: [],
     });
     expect(performance.now() - started).toBeLessThan(50);
+  });
+
+  it("tells a regex pattern the matcher cannot run apart from a comment that did not match", () => {
+    const flow = (keywords: string[]): FlowDefinitionV1 => ({
+      version: 1,
+      trigger: { type: "comment", match: "keyword", mode: "regex", keywords, mediaIds: [] },
+      conditions: [],
+      actions: [{ type: "private_reply", text: "Sent" }],
+    });
+    const event = { ...commentEvent, id: "legacy_regex", text: "I am interested!" };
+
+    // Saved before the matcher's rules: a lookbehind never matches, and says why.
+    expect(evaluateFlow(flow(["(?<!not )interested"]), event)).toEqual({
+      status: "skipped",
+      reason: UNSUPPORTED_REGEX_REASON,
+      actions: [],
+    });
+    expect(UNSUPPORTED_REGEX_REASON).toBe("regex pattern not supported");
+    // A keyword that does compile still answers for the automation.
+    expect(evaluateFlow(flow(["(?<!not )interested", "interested"]), event)).toMatchObject({
+      status: "matched",
+      matchedKeyword: "interested",
+    });
+    // Valid patterns that miss read as an ordinary miss.
+    expect(evaluateFlow(flow(["price"]), event)).toEqual({ status: "skipped", reason: "trigger did not match", actions: [] });
   });
 });
 

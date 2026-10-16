@@ -16,18 +16,27 @@ const RETRY_BASE_MS = 2_000;
 const RETRY_CAP_MS = 30_000;
 /** After this many failures in a row the message stops asking for retries. */
 const CALM_AFTER_FAILURES = 3;
+/**
+ * Each request to /api/onboarding gives up after this long. A save that
+ * never answers then fails like a 502 (no status, so it can be sent again),
+ * which bounds every turn in the save queue: Skip and Finish go through, or
+ * fall back to the deferral, in bounded time instead of waiting forever.
+ */
+export const ONBOARDING_REQUEST_TIMEOUT_MS = 15_000;
 
 /**
  * PUT /api/onboarding, as onboarding-client.ts sends it, but a failure
  * carries the HTTP status so the flow's save queue can tell "try again
  * later" (a 502) from a refusal a resend cannot change (signed out, not
- * allowed, a rejected answer), and never resends those.
+ * allowed, a rejected answer), and never resends those. A timeout carries
+ * no status, so it counts as "try again later".
  */
 async function saveOnboarding(body: OnboardingSave): Promise<OnboardingView> {
   const response = await fetch("/api/onboarding", {
     method: "PUT",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(ONBOARDING_REQUEST_TIMEOUT_MS),
   });
   const payload = (await response.json().catch(() => ({}))) as { data?: OnboardingView; error?: string };
   if (response.ok && payload.data !== undefined) return payload.data;
@@ -62,7 +71,8 @@ export function OnboardingScreen({ connectReturn, planIntent }: { connectReturn?
 
   useEffect(() => {
     let active = true;
-    fetch("/api/onboarding")
+    // A load that never answers fails like any other (deferral, Try again).
+    fetch("/api/onboarding", { signal: AbortSignal.timeout(ONBOARDING_REQUEST_TIMEOUT_MS) })
       .then(async (response) => {
         if (response.status === 401) {
           router.replace("/login?next=/onboarding");

@@ -166,6 +166,24 @@ describe("processNormalizedFacebookEvent", () => {
     expect(postCommentReply).toHaveBeenCalledTimes(1);
   });
 
+  it("renders {keyword} with the keyword the trigger matched in its own mode, such as a regex pattern", async () => {
+    const repository = createMemoryRepository();
+    await seedConnection(repository, "page_1");
+    await seedActiveAutomation(repository, "Prices", { match: "keyword", keywords: ["pri[cz]e"] }, {
+      trigger: { type: "comment", match: "keyword", mode: "regex", keywords: ["pri[cz]e"], mediaIds: [] },
+      actions: [{ type: "private_reply", text: "Here is the {keyword} list" }],
+    });
+    const { client, postCommentReply } = fakeClient();
+
+    const result = await processNormalizedFacebookEvent(commentEvent({ text: "what is the prize?" }), repository, {
+      client,
+      tokenEncryptionKey: TOKEN_KEY,
+    });
+
+    expect(result.sent).toBe(1);
+    expect(postCommentReply.mock.calls[0][2]).toBe("Here is the pri[cz]e list");
+  });
+
   it("selects one reply variant deterministically from the comment id", () => {
     const flow = definition({ match: "any", keywords: [] });
     flow.actions = [{ type: "private_reply", text: "One", textVariants: ["Two", "Three", "Four"] }];

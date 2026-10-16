@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { logger } from "../logger";
 import type { FlowDefinition, FlowDefinitionV1, NormalizedEvent } from "./types";
 import {
   compileRegexKeyword,
+  describeRegexKeyword,
   evaluateTrigger,
   findMatchedKeyword,
   KEYWORD_MATCHER_CACHE_SIZE,
@@ -394,5 +396,262 @@ describe("evaluateTrigger", () => {
       actions: [{ type: "private_reply", text: "Sent" }],
     };
     expect(evaluateTrigger(flow, commentEvent)).toEqual({ matched: true });
+  });
+});
+
+function keywordFlow(keywords: string[], extra: Partial<Extract<FlowDefinitionV1["trigger"], { type: "comment" }>> = {}): FlowDefinitionV1 {
+  return {
+    version: 1,
+    trigger: { type: "comment", match: "keyword", keywords, mediaIds: [], ...extra },
+    conditions: [],
+    actions: [{ type: "private_reply", text: "Sent" }],
+  };
+}
+
+function messageFlow(keywords: string[], mode: "regex" | "any"): FlowDefinitionV1 {
+  return {
+    version: 1,
+    trigger: { type: "message", match: "keyword", mode, keywords },
+    conditions: [],
+    actions: [{ type: "send_text", text: "Sent" }],
+  };
+}
+
+const dmEvent: NormalizedEvent = {
+  id: "dm_1",
+  accountId: "ig_1",
+  type: "message.received",
+  text: "hello",
+  recipientId: "person_1",
+  timestamp: 1,
+};
+
+// 90 arrows and math symbols: ordinary text is never in the class, so each
+// pattern keeps up to 199 states alive on every character.
+const heavySymbols = Array.from({ length: 90 }, (_, index) => String.fromCharCode(0x2190 + index)).join("");
+/** Regex keywords that spend a whole event's budget on a 2,200-character comment. */
+const budgetSpender = regexFlow(Array.from({ length: 50 }, (_, index) => `[^${heavySymbols}]{${199 - index}}x`));
+const longComment = "please send me the course guide and price list ".repeat(50).slice(0, MAX_MATCH_TEXT_LENGTH);
+
+describe("one keyword budget per event for every match mode", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  it("checks a keyword repeated across automations once per event", () => {
+    const indexOf = vi.spyOn(String.prototype, "indexOf");
+    const includes = vi.spyOn(String.prototype, "includes");
+    const event = { ...commentEvent, id: "repeated_keyword", text: "Can I get the brochure as a pdf?" };
+    const anyFlow = keywordFlow(["brochure"]);
+    const allFlow = keywordFlow(["brochure", "pdf"], { mode: "all" });
+    const withCondition = { ...keywordFlow(["brochure"]), conditions: [{ type: "contains_keyword" as const, keywords: ["pdf"] }] };
+
+    for (const flow of [anyFlow, allFlow, withCondition, anyFlow]) expect(matchesTrigger(flow, event)).toBe(true);
+    // "all" shares the "any" results, and a contains check is remembered too.
+    expect(indexOf.mock.calls.filter(([word]) => word === "brochure")).toHaveLength(1);
+    expect(includes.mock.calls.filter(([word]) => word === "pdf")).toHaveLength(1);
+  });
+
+  it("rules out a phrase with a missing word before building or running its pattern", () => {
+    const exec = vi.spyOn(RegExp.prototype, "exec");
+    const ran = (word: string) => exec.mock.contexts.filter((pattern) => (pattern as RegExp).source.includes(word)).length;
+    const event = { ...commentEvent, id: "prefilter", text: "send the guide" };
+
+    expect(matchesTrigger(keywordFlow(["free yoga guide"]), event)).toBe(false);
+    expect(ran("yoga")).toBe(0);
+    // Every word is there but not as one phrase, so the pattern runs and says no.
+    expect(matchesTrigger(keywordFlow(["guide send"]), event)).toBe(false);
+    expect(ran("guide\\s+send")).toBe(1);
+  });
+
+  it("counts any-mode keywords as no match once the event's budget is spent", () => {
+    const event = { ...commentEvent, id: "phrase_shared_budget", text: longComment };
+    expect(matchesTrigger(keywordFlow(["price list"]), event)).toBe(true);
+    expect(matchesTrigger(budgetSpender, event)).toBe(false);
+    // Already checked: same answer for the rest of the event ...
+    expect(matchesTrigger(keywordFlow(["price list"]), event)).toBe(true);
+    // ... while a new phrase, or "all" keywords, find the budget spent ...
+    expect(matchesTrigger(keywordFlow(["course guide"]), event)).toBe(false);
+    expect(matchesTrigger(keywordFlow(["course", "list"], { mode: "all" }), event)).toBe(false);
+    // ... and the next event starts with a fresh budget.
+    expect(matchesTrigger(keywordFlow(["course guide"]), { ...event, id: "phrase_next_event" })).toBe(true);
+  });
+
+  it("still checks negative keywords, contains conditions and exact keywords after the budget is spent", () => {
+    const event = { ...commentEvent, id: "spent_then_negative", text: `${longComment.slice(0, 2_000)} spam` };
+    expect(matchesTrigger(budgetSpender, event)).toBe(false);
+    const anyComment = (negativeKeywords: string[], conditions: FlowDefinitionV1["conditions"] = []): FlowDefinitionV1 => ({
+      version: 1,
+      trigger: { type: "comment", match: "any", keywords: [], mediaIds: [], negativeKeywords },
+      conditions,
+      actions: [{ type: "private_reply", text: "Sent" }],
+    });
+    expect(matchesTrigger(anyComment(["spam"]), event)).toBe(false);
+    expect(matchesTrigger(anyComment(["refund"]), event)).toBe(true);
+    expect(matchesTrigger(anyComment([], [{ type: "contains_keyword", keywords: ["course"] }]), event)).toBe(true);
+    expect(matchesTrigger(keywordFlow(["guide"], { mode: "contains" }), event)).toBe(true);
+    expect(matchesTrigger(keywordFlow([event.text], { mode: "exact" }), event)).toBe(true);
+  });
+
+  it("keeps 100 automations of 50 maximum-length phrases on a 2,200-character comment well under 100 ms", () => {
+    // 49 words, 97 characters, distinct per keyword: 36 a's, then a tail of
+    // a's and b's with at least one b. Every word is in the comment, and each
+    // phrase matches up to 36 words at every position before failing.
+    const tail = (variant: number) => Array.from({ length: 13 }, (_, bit) => (((variant + 1) >> bit) & 1 ? "b" : "a")).join(" ");
+    const flows = Array.from({ length: 100 }, (_, flowIndex) =>
+      keywordFlow(Array.from({ length: 50 }, (_, index) => `${"a ".repeat(36)}${tail(flowIndex * 50 + index)}`)));
+    const comment = `b ${"a ".repeat(1_099)}`;
+    expect(comment).toHaveLength(MAX_MATCH_TEXT_LENGTH);
+    expect(flows[99].trigger.type === "comment" && flows[99].trigger.keywords[49]).toHaveLength(97);
+
+    // Worker time is CPU time: on a busy test machine the wall clock also
+    // counts the time this process waits for a core.
+    const cpuTimes: number[] = [];
+    const wallTimes: number[] = [];
+    for (let run = 0; run < 3; run += 1) {
+      const event = { ...commentEvent, id: `phrase_worst_case_${run}`, text: comment };
+      const cpuStart = process.cpuUsage();
+      const started = performance.now();
+      const matched = flows.filter((flow) => matchesTrigger(flow, event)).length;
+      wallTimes.push(performance.now() - started);
+      const cpu = process.cpuUsage(cpuStart);
+      cpuTimes.push((cpu.user + cpu.system) / 1_000);
+      expect(matched).toBe(0);
+    }
+    // Without the budget each event took about 1.5 s on a laptop.
+    expect(Math.min(...cpuTimes)).toBeLessThan(100);
+    expect(Math.min(...wallTimes)).toBeLessThan(1_000);
+  });
+
+  it("logs one warning per event that spends its budget, with how many checks it skipped", () => {
+    vi.useFakeTimers();
+    const warn = vi.spyOn(logger, "warn").mockImplementation(() => {});
+    const forEvent = (eventId: string) => warn.mock.calls.filter(([, context]) => context?.eventId === eventId);
+    const event = { ...commentEvent, id: "budget_warning", text: longComment };
+
+    expect(matchesTrigger(budgetSpender, event)).toBe(false);
+    expect(matchesTrigger(regexFlow(["\\bguide\\b"]), event)).toBe(false);
+    expect(matchesTrigger(keywordFlow(["course guide"]), event)).toBe(false);
+    expect(forEvent("budget_warning")).toHaveLength(0);
+    vi.advanceTimersByTime(1_000);
+
+    const calls = forEvent("budget_warning");
+    expect(calls).toHaveLength(1);
+    expect(calls[0][1]).toMatchObject({ eventId: "budget_warning" });
+    // At least the two checks after the spend, plus the spender's own unfinished ones.
+    expect(Number(calls[0][1]?.skippedKeywordChecks)).toBeGreaterThanOrEqual(2);
+
+    expect(matchesTrigger(regexFlow(["\\bprice\\b"]), event)).toBe(false);
+    vi.advanceTimersByTime(5_000);
+    expect(forEvent("budget_warning")).toHaveLength(1);
+  });
+});
+
+describe("the 2,200-character cut", () => {
+  it("stops reading at the cut but checks $ and \\b against the real text", () => {
+    const text = `${"x".repeat(2_197)}buy${"y".repeat(330)}`;
+    expect(text).toHaveLength(2_530);
+    const event = { ...dmEvent, id: "long_dm", text };
+    expect(matchesTrigger(messageFlow(["buy$"], "regex"), event)).toBe(false);
+    expect(matchesTrigger(messageFlow(["buy\\b"], "regex"), event)).toBe(false);
+    expect(matchesTrigger(messageFlow(["buy"], "regex"), event)).toBe(true);
+
+    // "buy" ends at the cut and a space follows it, past the cut: a real word boundary.
+    const spaced = { ...event, id: "long_dm_spaced", text: `${"x".repeat(2_196)} buy ${"later ".repeat(60)}` };
+    expect(spaced.text.slice(2_197, 2_200)).toBe("buy");
+    expect(matchesTrigger(messageFlow(["\\bbuy\\b"], "regex"), spaced)).toBe(true);
+    expect(matchesTrigger(messageFlow(["buy$"], "regex"), spaced)).toBe(false);
+    expect(matchesTrigger(messageFlow(["later$"], "regex"), spaced)).toBe(false);
+  });
+
+  it("counts the cut in characters a person sees, so an emoji is one", () => {
+    const text = `${"🔥".repeat(1_100)} link`;
+    expect(text.length).toBeGreaterThan(MAX_MATCH_TEXT_LENGTH);
+    const event = { ...commentEvent, id: "emoji_comment", text };
+    expect(matchesTrigger(regexFlow(["\\blink\\b"]), event)).toBe(true);
+    expect(matchesTrigger(keywordFlow(["link"]), event)).toBe(true);
+    expect(findMatchedKeyword(text, ["link"])).toBe("link");
+    // The 2,201st character is past the cut, whatever its width.
+    const past = `${"🔥".repeat(MAX_MATCH_TEXT_LENGTH)}link`;
+    expect(matchesTrigger(regexFlow(["link"]), { ...event, id: "emoji_past_cut", text: past })).toBe(false);
+    expect(findMatchedKeyword(past, ["link"], "contains")).toBeUndefined();
+  });
+});
+
+describe("regex keywords the engine refuses", () => {
+  it("says why a pattern cannot run", () => {
+    const reasons: Array<[string, ReturnType<typeof describeRegexKeyword>]> = [
+      ["price", null],
+      ["(?<a>x)(?<b>y)", null],
+      ["(", "syntax"],
+      ["x{3,1}", "syntax"],
+      ["(?<1>x)", "syntax"],
+      ["(?P<name>x)", "syntax"],
+      ["(?=a)a", "lookaround"],
+      ["(?!spam).*price", "lookaround"],
+      ["(?<!not )interested", "lookaround"],
+      ["(?<=x)y", "lookaround"],
+      ["(ha)\\1", "backreference"],
+      ["(?<a>x)\\k<a>", "backreference"],
+      ["(?i)link", "inline_flags"],
+      ["(?i:link)", "inline_flags"],
+      ["(?-i:link)", "inline_flags"],
+      ["\\p{L}+", "unsupported_escape"],
+      ["\\cJ", "unsupported_escape"],
+      ["\\01", "unsupported_escape"],
+      ["a{2000}", "too_large"],
+      ["price.{0,150}", "too_large"],
+      ["(price|cost|rate|kitna|how much){1,10}", "too_large"],
+      ["(?<a>x)(?<a>y)", "duplicate_name"],
+      ["(?<a>x)|(?<a>y)", "duplicate_name"],
+      ["a".repeat(101), "too_long"],
+    ];
+    for (const [pattern, reason] of reasons) {
+      expect(describeRegexKeyword(pattern), pattern).toBe(reason);
+      expect(compileRegexKeyword(pattern) === null, pattern).toBe(reason !== null);
+    }
+  });
+
+  it("refuses two groups with one name, which JavaScript rejects too", () => {
+    expect(() => new RegExp("(?<a>x)(?<a>y)")).toThrow();
+    expect(compileRegexKeyword("(?<a>x)(?<a>y)")).toBeNull();
+    expect(matchesTrigger(regexFlow(["(?<a>x)(?<a>y)"]), { ...commentEvent, id: "duplicate_names", text: "xy" })).toBe(false);
+  });
+
+  it("reports a trigger that missed because a saved pattern cannot run", () => {
+    const event = { ...commentEvent, id: "legacy_trigger", text: "I am interested!" };
+    expect(evaluateTrigger(regexFlow(["(?<!not )interested"]), event)).toEqual({ matched: false, unsupportedPattern: true });
+    expect(evaluateTrigger(regexFlow(["^price", "a".repeat(120)]), event)).toEqual({ matched: false, unsupportedPattern: true });
+    expect(evaluateTrigger(regexFlow(["(?<!not )interested", "interested!$"]), event))
+      .toEqual({ matched: true, keyword: "interested!$" });
+    expect(evaluateTrigger(regexFlow(["^price"]), event)).toEqual({ matched: false });
+    // Not a regex trigger, or nothing to read: an ordinary miss.
+    expect(evaluateTrigger(keywordFlow(["(?<!not )interested"]), event)).toEqual({ matched: false });
+    expect(evaluateTrigger(regexFlow(["(?<!not )interested"]), { ...event, text: "" })).toEqual({ matched: false });
+  });
+
+  it("warns once per automation per process, naming the automation but not the pattern", () => {
+    const warn = vi.spyOn(logger, "warn").mockImplementation(() => {});
+    try {
+      const flow = regexFlow(["^ok$", "(?<!never )unsupported-once"]);
+      for (const id of ["legacy_a", "legacy_b", "legacy_c"]) {
+        evaluateTrigger(flow, { ...commentEvent, id, text: "unsupported-once" }, { automationId: "automation_legacy_1" });
+      }
+      evaluateTrigger(flow, { ...commentEvent, id: "legacy_d", text: "nope" }, { automationId: "automation_legacy_2" });
+      const legacyCalls = warn.mock.calls.filter(([, context]) => String(context?.automationId).startsWith("automation_legacy_"));
+      expect(legacyCalls.map(([, context]) => context?.automationId)).toEqual(["automation_legacy_1", "automation_legacy_2"]);
+      expect(legacyCalls[0][1]).toMatchObject({ accountId: "ig_1", triggerType: "comment", keywordIndexes: [1] });
+      expect(JSON.stringify(legacyCalls)).not.toContain("unsupported-once");
+
+      // Without an id, the account and keyword list stand in for the automation.
+      const anonymous = regexFlow(["(?<!never )anonymous-legacy"]);
+      evaluateTrigger(anonymous, { ...commentEvent, id: "legacy_e", text: "x" });
+      evaluateTrigger(anonymous, { ...commentEvent, id: "legacy_f", text: "y" });
+      expect(warn.mock.calls.filter(([, context]) => context?.automationId === undefined && context?.triggerType === "comment"))
+        .toHaveLength(1);
+    } finally {
+      warn.mockRestore();
+    }
   });
 });

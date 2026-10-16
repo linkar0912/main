@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { MetaApiError, MetaClient, buildDirectMessagePayload, buildPrivateReplyPayload } from "./client";
+import { META_RATE_LIMIT_CODES } from "./errors";
 
 describe("Meta message payloads", () => {
   it("rejects Meta client versions other than Instagram Login v25.0", () => {
@@ -148,6 +149,40 @@ describe("Meta message payloads", () => {
       fetcher: async () => new Response(JSON.stringify({ error: { message: "Try again", code: 2, is_transient: true } }), { status: 400 }),
     });
     await expect(graphClient.sendPrivateReply({ igUserId: "ig_1", accessToken: "secret" }, "comment_1", "Hello")).rejects.toMatchObject({ retryable: true, status: 400 });
+  });
+
+  // Meta sends throttling as HTTP 400, often without is_transient. Reads
+  // (follow status, media) are not routed through the send ledger, so the
+  // client's own flag is what decides whether they are retried.
+  it.each([1, 2, 4, 17, 32, 341, 613, 80002, 80006])("marks Graph code %i on HTTP 400 as retryable", async (code) => {
+    const client = new MetaClient({
+      apiVersion: "v25.0",
+      fetcher: async () => new Response(JSON.stringify({ error: { message: "Slow down", code } }), { status: 400 }),
+    });
+    await expect(client.getUserFollowStatus({ igUserId: "ig_1", accessToken: "secret" }, "person_1"))
+      .rejects.toMatchObject({ status: 400, code, responseReceived: true, retryable: true });
+  });
+
+  it("treats every code the send path reads as throttling as retryable, so the two cannot drift apart", async () => {
+    expect([...META_RATE_LIMIT_CODES]).toEqual(expect.arrayContaining([80002, 80006]));
+    for (const code of META_RATE_LIMIT_CODES) {
+      const client = new MetaClient({
+        apiVersion: "v25.0",
+        fetcher: async () => new Response(JSON.stringify({ error: { message: "Slow down", code } }), { status: 400 }),
+      });
+      const error = await client.getMedia({ igUserId: "ig_1", accessToken: "secret" }, "media_1").catch((thrown: unknown) => thrown);
+      expect(error).toBeInstanceOf(MetaApiError);
+      expect((error as MetaApiError).retryable).toBe(true);
+    }
+  });
+
+  it.each([10, 100, 190, 200, 368, 551])("leaves Graph code %i on HTTP 400 not retryable", async (code) => {
+    const client = new MetaClient({
+      apiVersion: "v25.0",
+      fetcher: async () => new Response(JSON.stringify({ error: { message: "Rejected", code } }), { status: 400 }),
+    });
+    await expect(client.sendPrivateReply({ igUserId: "ig_1", accessToken: "secret" }, "comment_1", "Hello"))
+      .rejects.toMatchObject({ status: 400, code, retryable: false });
   });
 
   it("records whether a Meta HTTP response was received", async () => {

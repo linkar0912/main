@@ -143,6 +143,10 @@ export async function getHealthRedis(redisUrl: string): Promise<import("ioredis"
         lazyConnect: true,
         maxRetriesPerRequest: 1,
       });
+      // Failures surface on each probe; the event is handled so ioredis does
+      // not also print an unhandled-error warning on every reconnect. (Optional
+      // call only because the ioredis double in health.redis.test.ts has no on().)
+      client.on?.("error", () => undefined);
       if (globalForHealth.linkarHealthRedisUrl !== redisUrl) client.disconnect();
       return client;
     });

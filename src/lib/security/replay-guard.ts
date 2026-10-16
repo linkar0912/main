@@ -19,7 +19,12 @@ export class ReplayGuard {
   ) {
     // commandTimeout: a connected but silent Valkey must reject quickly so the
     // in-process fallback runs instead of the callback hanging.
-    this.redis = redisUrl ? new Redis(redisUrl, { maxRetriesPerRequest: 1, connectTimeout: 3_000, commandTimeout: 1_500 }) : undefined;
+    if (redisUrl) {
+      this.redis = new Redis(redisUrl, { maxRetriesPerRequest: 1, connectTimeout: 3_000, commandTimeout: 1_500 });
+      // Failures surface on each command and fall back in-process; the event
+      // is handled so ioredis does not also print an unhandled-error warning.
+      this.redis.on("error", () => undefined);
+    }
   }
 
   /** True the first time `key` is claimed within the TTL, false for a replay. */

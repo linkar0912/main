@@ -147,6 +147,24 @@ describe("FacebookClient", () => {
     expect(error).toMatchObject({ status: 400, graphCode: 80001, responseReceived: true, retryable: true });
     expect(facebookAccountSignal(error)).toBe("rate_limited");
   });
+
+  it.each([1, 2, 4, 17, 32, 341, 613, 80001, 80002, 80006])("marks Graph code %i on HTTP 400 as retryable", async (code) => {
+    globalThis.fetch = vi.fn(async () => jsonResponse(400, { error: { message: "Slow down", code } })) as typeof fetch;
+    const client = new FacebookClient({ apiVersion: "v25.0", baseUrl: "https://graph.facebook.com" });
+
+    const error = await client.postCommentReply({ pageId: "p", accessToken: "t" }, "c", "m").catch((thrown: unknown) => thrown);
+
+    expect(error).toMatchObject({ status: 400, graphCode: code, responseReceived: true, retryable: true });
+  });
+
+  it.each([10, 100, 190, 200, 368])("leaves Graph code %i on HTTP 400 not retryable", async (code) => {
+    globalThis.fetch = vi.fn(async () => jsonResponse(400, { error: { message: "Rejected", code } })) as typeof fetch;
+    const client = new FacebookClient({ apiVersion: "v25.0", baseUrl: "https://graph.facebook.com" });
+
+    const error = await client.postCommentReply({ pageId: "p", accessToken: "t" }, "c", "m").catch((thrown: unknown) => thrown);
+
+    expect(error).toMatchObject({ status: 400, graphCode: code, retryable: false });
+  });
 });
 
 describe("facebookAccountSignal", () => {

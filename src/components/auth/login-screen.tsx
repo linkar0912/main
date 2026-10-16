@@ -4,6 +4,7 @@ import { MarketingFooter } from "@/src/components/marketing/marketing-footer";
 import { OAuthButtons } from "@/src/components/auth/oauth-buttons";
 import { AuthLegalNotice } from "@/src/components/auth/legal-notice";
 import { SubmitButton } from "@/src/components/auth/submit-button";
+import { ClearOnboardingFlags } from "@/src/components/auth/clear-onboarding-flags";
 import { getServerEnv } from "@/src/lib/env";
 
 type LoginScreenProps = {
@@ -39,6 +40,8 @@ export function LoginScreen({ nextPath, invite, error, notice, resend, adminHost
   const appOrigin = appUrl.replace(/\/+$/, "");
   return (
     <div data-header-tone="light">
+      {/* The next account on this tab must not inherit the last one's onboarding flags. */}
+      <ClearOnboardingFlags />
       <MarketingHeader siteOrigin={publicSiteUrl} />
       <main className="auth-page-section" data-login-layout="conversation-desk" data-auth-tone="editorial">
         <div className="auth-page-frame">

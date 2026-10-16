@@ -95,6 +95,10 @@ export async function executeAdminOperation(kind: AdminOperationKind, id: string
     } else {
       const versionNumber = z.number().int().positive().parse(command.input.versionNumber);
       const snapshot = await prisma.automationVersion.findUnique({ where: { automationId_version: { automationId: id, version: versionNumber } } }); if (!snapshot) throw new AdminWorkspaceError(404, "version_not_found");
+      // The same check as activate and update (and the customer's own restore):
+      // a snapshot saved before a rule tightened is refused with a 422 and the
+      // plain reason before anything is written.
+      validAutomationDefinition(snapshot.definition);
       await prisma.$transaction(async (tx) => { const current = await tx.automation.findFirst({ where: { id, version: command.version } }); if (!current) throw new AdminWorkspaceError(409, "stale_version"); await tx.automationVersion.create({ data: { id: createId("automation_version"), automationId: id, workspaceId: record.workspaceId, version: await nextSnapshotNumber(tx, id), provider: record.provider, name: record.name, definition: record.definition as Prisma.InputJsonValue, status: record.status, priority: record.priority, activatedAt: record.activatedAt, boundMediaId: record.boundMediaId, instagramAccountId: record.instagramAccountId, facebookPageId: record.facebookPageId, snapshotBy: actorUserId } }); changed((await tx.automation.updateMany({ where: { id, version: command.version }, data: { name: snapshot.name, definition: snapshot.definition as Prisma.InputJsonValue, ...(snapshot.provider ? { provider: snapshot.provider } : {}), status: snapshot.status, priority: snapshot.priority, activatedAt: snapshot.activatedAt, boundMediaId: snapshot.boundMediaId, instagramAccountId: snapshot.instagramAccountId, facebookPageId: snapshot.facebookPageId, archivedAt: null, version: { increment: 1 } } })).count); });
     }
     return { id, kind, action: command.action, version: command.version + 1 };

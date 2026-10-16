@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { matchCampaign, selectPublicReply } from "./campaign-match";
-import type { FlowDefinitionV2, NormalizedEvent } from "./types";
+import { matchesTrigger } from "./match";
+import type { FlowDefinitionV1, FlowDefinitionV2, NormalizedEvent } from "./types";
 
 const campaignDefinition: FlowDefinitionV2 = {
   version: 2,
@@ -106,6 +107,30 @@ describe("matchCampaign", () => {
       matched: true,
       keyword: "guide",
     });
+  });
+
+  it("spends the event's shared keyword budget, so classic automations and campaigns are bounded together", () => {
+    const symbols = Array.from({ length: 90 }, (_, index) => String.fromCharCode(0x2190 + index)).join("");
+    const heavy: FlowDefinitionV1 = {
+      version: 1,
+      trigger: {
+        type: "comment",
+        match: "keyword",
+        mode: "regex",
+        keywords: Array.from({ length: 50 }, (_, index) => `[^${symbols}]{${199 - index}}x`),
+        mediaIds: [],
+      },
+      conditions: [],
+      actions: [{ type: "private_reply", text: "Sent" }],
+    };
+    const text = `${"please send the guide ".repeat(100)}`.slice(0, 2_200);
+    const event = { ...commentEvent, id: "shared_campaign_budget", text };
+
+    expect(matchesTrigger(heavy, event)).toBe(false);
+    // The heavy patterns used up this event's budget, so the campaign's keyword counts as no match ...
+    expect(matchCampaign(campaignDefinition, event)).toEqual({ matched: false, reason: "keyword did not match" });
+    // ... and a fresh event has its own budget.
+    expect(matchCampaign(campaignDefinition, { ...event, id: "fresh_campaign_event" })).toEqual({ matched: true, keyword: "guide" });
   });
 
   it("defers next-media matching until a runner binds media", () => {

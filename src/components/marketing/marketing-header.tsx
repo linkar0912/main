@@ -431,19 +431,22 @@ export function MarketingHeader({ siteOrigin, forceSurface }: MarketingHeaderPro
         </nav>
 
         <div className={styles.rightRail}>
+          {/* /signup and /login live on app.linkar.in. Plain links load them as
+              pages: a next/link would prefetch or fetch them from linkar.in
+              or admin.linkar.in, follow the redirect and trip connect-src. */}
           <nav className={styles.accountNavigation} aria-label="Account">
             <ul>
               <li>
-                <Link className={styles.getStarted} href="/signup" prefetch={false}><ButtonRoll label="Get started" /></Link>
+                <a className={styles.getStarted} href="/signup"><ButtonRoll label="Get started" /></a>
               </li>
               <li>
-                <Link className={styles.login} href="/login" prefetch={false}>Sign in</Link>
+                <a className={styles.login} href="/login">Sign in</a>
               </li>
             </ul>
           </nav>
           <ThemeToggle className={styles.themeToggle} />
           <div className={styles.mobileActions}>
-            <Link className={styles.mobileGetStarted} href="/signup" prefetch={false}><ButtonRoll label="Get started" /></Link>
+            <a className={styles.mobileGetStarted} href="/signup"><ButtonRoll label="Get started" /></a>
             <button
             ref={openerRef}
             className={styles.menuButton}
@@ -490,7 +493,7 @@ export function MarketingHeader({ siteOrigin, forceSurface }: MarketingHeaderPro
                   ))}
                   {accountItems.map((item) => (
                     <li key={item.label} data-account={item.kind}>
-                      <Link href={marketingHref(item.href, siteOrigin)} prefetch={false} onClick={() => closeMenu(false)}>{item.label}</Link>
+                      <a href={item.href} onClick={() => closeMenu(false)}>{item.label}</a>
                     </li>
                   ))}
                 </ul>

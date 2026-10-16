@@ -69,10 +69,12 @@ type RouteContext = { params: Promise<{ slug: string }> };
 // Clicks counted per link per visitor per minute. Past the cap the visitor is
 // still redirected, but nothing is written and no conversion callback fires,
 // so a refresh loop can neither inflate the stats nor turn the link into a
-// request flood against the customer's conversion endpoint. Visitors without
-// a known address ("anon") all share one bucket per link.
+// request flood against the customer's conversion endpoint. Behind a trusted
+// proxy, visitors without a known address ("anon") all share one bucket per
+// link; without one, every visitor is "anon" and none is capped.
 const CLICKS_PER_VISITOR_PER_MINUTE = 30;
 let clickLimiter: LoginRateLimitStore | undefined;
+let warnedNoTrustedProxy = false;
 
 // GET /r/[slug] - public redirect. Records a click (with keyed IP hash) then
 // 302s the visitor to the destination with UTM params appended. Disabled links
@@ -89,6 +91,10 @@ export async function GET(request: Request, context: RouteContext) {
   // entry is client-controlled, so it would let a visitor pick their own
   // "unique" identity and inflate unique-click counts.
   const env = getServerEnv();
+  if (env.trustedProxyHops === 0 && process.env.NODE_ENV === "production" && !warnedNoTrustedProxy) {
+    warnedNoTrustedProxy = true;
+    logger.warn("TRUSTED_PROXY_HOPS is 0, so tracked-link clicks cannot tell visitors apart; set it to 1 behind the Cloudflare Tunnel");
+  }
   const ipHash = hashIp(clientAddress(request, env.trustedProxyHops), env.authSessionSecret);
   const country = readCountry(request);
   const userAgent = readUserAgent(request);
@@ -110,12 +116,14 @@ export async function GET(request: Request, context: RouteContext) {
   clickLimiter ??= new LoginRateLimitStore(env.redisUrl, CLICKS_PER_VISITOR_PER_MINUTE, 60_000, "link-click");
   const limiter = clickLimiter;
   afterResponse("Tracked-link click recording", async () => {
-    // Visitors without a known address ("anon") have nothing of their own to
-    // key on, so they share the `<link>:anon` bucket instead of skipping the
-    // limiter. A request with no client address (a direct hit on the origin,
-    // or an internal one) must not get unlimited clicks and conversion calls.
-    // A real ipHash is 16 hex characters, so it never lands in that bucket.
-    if (!(await limiter.consume(`${link.id}:${ipHash}`))) return;
+    // Behind a trusted proxy, a visitor without a known address ("anon") is a
+    // direct hit on the origin or an internal request, so those share the
+    // `<link>:anon` bucket instead of getting unlimited clicks and conversion
+    // calls. A real ipHash is 16 hex characters, so it never lands there.
+    // With no trusted proxy (TRUSTED_PROXY_HOPS=0) every visitor is "anon",
+    // and one shared cap of 30 a minute would drop real clicks on any busy
+    // link, so those clicks are counted without the cap.
+    if ((ipHash !== "anon" || env.trustedProxyHops > 0) && !(await limiter.consume(`${link.id}:${ipHash}`))) return;
     await repository.recordTrackedLinkClick(link.id, {
       workspaceId: link.workspaceId,
       ipHash,

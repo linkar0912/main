@@ -26,6 +26,7 @@ import { LinkarMark } from "@/src/components/linkar-mark";
 import { getWorkspaceBootstrap, peekWorkspaceBootstrap, refreshWorkspaceBootstrap, WORKSPACE_CHANGE_EVENT, type WorkspaceBootstrap } from "@/src/lib/client/workspace-data";
 import {
   adoptOnboardingIdentity,
+  clearOnboardingTabFlags,
   mayRedirectToOnboarding,
   onboardingKnownNotRequired,
   readOnboardingDeferral,
@@ -131,10 +132,21 @@ function routePathname(pathname: string): string {
   return pathname.startsWith(DEV_PREVIEW_PREFIX) ? pathname.slice(DEV_PREVIEW_PREFIX.length) || "/" : pathname;
 }
 
-/** Window focus re-reads the shell payload at most once a minute. */
-const FOCUS_REFRESH_MIN_AGE_MS = 60_000;
+/** Window focus re-reads the shell bootstrap at most once a minute (Home's own focus refresh uses it too). */
+export const FOCUS_REFRESH_MIN_AGE_MS = 60_000;
 
 const subscribeNever = () => () => undefined;
+
+/**
+ * The bootstrap to show for an answer that just arrived. A slower, older answer
+ * must not overwrite a newer one already on screen (a workspace change can
+ * start a second request while the first is still out): workspace-data.ts
+ * caches only the newest request's answer, so the cached bootstrap, when
+ * there is one, is never older than `answer`.
+ */
+function latestBootstrap(answer: WorkspaceBootstrap): WorkspaceBootstrap {
+  return peekWorkspaceBootstrap() ?? answer;
+}
 
 /**
  * Whether page content should wait for the onboarding decision when the
@@ -234,7 +246,13 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
   // A new owner (or invited member) who has not finished or skipped
   // onboarding is sent there before the app. The flag rides the bootstrap
   // payload, so this costs no extra request.
-  const routeOnboarding = useEffectEvent((data: WorkspaceBootstrap) => {
+  //
+  // Only the bootstrap the shell mounts with may redirect (`allowRedirect`).
+  // A focus or workspace-change refresh still updates the onboarding state
+  // and the tab's flags, but never pulls someone off a page they are using:
+  // a deferral running out while the builder holds unsaved edits must not
+  // throw those edits away. The next shell mount or full load asks again.
+  const routeOnboarding = useEffectEvent((data: WorkspaceBootstrap, allowRedirect: boolean) => {
     setOnboarding(data.onboarding ?? null);
     // A different account signed in on this tab: the deferral and the
     // "not required" flag were someone else's.
@@ -243,6 +261,8 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
     // A deferral (onboarding could not load, or a skip could not be saved)
     // lets people use the app instead of bouncing them straight back.
     if (shouldRedirectToOnboarding(data.onboarding, window.location.pathname, window.location.search, readOnboardingDeferral())) {
+      // A held page stays held: the mount's own answer decides it.
+      if (!allowRedirect) return;
       setToOnboarding(true);
       router.replace("/onboarding");
       return;
@@ -260,8 +280,9 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
   useEffect(() => {
     let mounted = true;
     getWorkspaceBootstrap()
-      .then((data) => {
+      .then((answer) => {
         if (!mounted) return;
+        const data = latestBootstrap(answer);
         setEmail(data.email ?? "");
         setRole(data.role ?? "");
         setPlan(data.plan ?? "free");
@@ -270,7 +291,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
         setIgAvatarUrl(data.igAvatarUrl ?? "");
         setPlatformOwner(data.platformOwner ?? false);
         setIdentityError("");
-        routeOnboarding(data);
+        routeOnboarding(data, true);
       })
       .catch((caught: unknown) => {
         if (!mounted) return;
@@ -294,8 +315,9 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
     let active = true;
     function refresh(request: Promise<WorkspaceBootstrap>) {
       void request
-        .then((data) => {
+        .then((answer) => {
           if (!active) return;
+          const data = latestBootstrap(answer);
           setEmail(data.email ?? "");
           setRole(data.role ?? "");
           setPlan(data.plan ?? "free");
@@ -304,7 +326,8 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
           setIgAvatarUrl(data.igAvatarUrl ?? "");
           setPlatformOwner(data.platformOwner ?? false);
           setIdentityError("");
-          routeOnboarding(data);
+          // Never a redirect from here (see routeOnboarding).
+          routeOnboarding(data, false);
         })
         .catch(() => undefined);
     }
@@ -502,7 +525,8 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
                       </Fragment>
                     ))}
                     <MenuDivider />
-                    <form action="/api/auth/logout" method="post">
+                    {/* The next account on this tab must not inherit this one's onboarding flags. */}
+                    <form action="/api/auth/logout" method="post" onSubmit={() => clearOnboardingTabFlags()}>
                       <button className="menu-item is-danger" type="submit" {...menuItemProps}>
                         <LogOut size={16} strokeWidth={1.9} aria-hidden />
                         <span className="menu-item-label">Sign out</span>

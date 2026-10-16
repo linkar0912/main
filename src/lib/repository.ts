@@ -269,6 +269,10 @@ export type AutomationDailySendCounterRecord = {
 };
 
 export type CreateAutomationInput = {
+  /** Caller-chosen id, for idempotent creates (the API derives it from the
+   * request's idempotency key). A second create with the same id fails with
+   * a unique violation instead of making a duplicate. Omitted: a fresh id. */
+  id?: string;
   /** Required at API boundaries. Optional only for legacy repository callers,
    * which are deterministically treated as Instagram unless Page-pinned. */
   provider?: AutomationProvider;
@@ -280,6 +284,16 @@ export type CreateAutomationInput = {
   status?: Extract<AutomationStatus, "DRAFT" | "ACTIVE">;
   activatedAt?: string;
   boundMediaId?: string;
+};
+
+export type CreateBroadcastInput = {
+  /** Caller-chosen id (see CreateAutomationInput.id). Omitted: a fresh id. */
+  id?: string;
+  name: string;
+  text: string;
+  segment: BroadcastSegment;
+  total: number;
+  status?: BroadcastStatus;
 };
 
 export type UpdateAutomationInput = Partial<Pick<AutomationRecord, "name" | "status" | "definition" | "activatedAt" | "priority">> & {
@@ -1335,9 +1349,12 @@ export interface AutomationRepository {
   cancelSequenceEnrollment(id: string): Promise<boolean>;
   cancelEnrollmentsForContact(contactId: string): Promise<number>;
   // Broadcasts (one-off DM blasts to a segment).
+  /** `id` is optional: the API passes one derived from the request's
+   * idempotency key, so a retried send finds (or collides with) the first
+   * broadcast instead of creating a second one. */
   createBroadcast(
     workspaceId: string,
-    input: { name: string; text: string; segment: BroadcastSegment; total: number; status?: BroadcastStatus },
+    input: CreateBroadcastInput,
   ): Promise<BroadcastRecord>;
   getBroadcast(workspaceId: string, id: string): Promise<BroadcastRecord | null>;
   listBroadcasts(workspaceId: string, limit: number): Promise<BroadcastRecord[]>;

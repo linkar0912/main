@@ -1377,7 +1377,7 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
     async createAutomation(workspaceId, input: CreateAutomationInput) {
       const record = await client.automation.create({
         data: {
-          id: createId("automation"),
+          id: input.id ?? createId("automation"),
           workspaceId,
           provider: input.provider ?? (input.facebookPageId ? "FACEBOOK" : "INSTAGRAM"),
           name: input.name.trim(),
@@ -3638,7 +3638,7 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
     async createBroadcast(workspaceId, input) {
       const created = await client.broadcast.create({
         data: {
-          id: createId("broadcast"),
+          id: input.id ?? createId("broadcast"),
           workspaceId,
           name: input.name.trim(),
           text: input.text,

@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { ArrowUpRight, Check } from "lucide-react";
 import { useMemo, useState, type CSSProperties } from "react";
 
@@ -169,10 +168,10 @@ export function PlanFinder() {
               </ul>
               <div className={styles.finderFoot}>
                 <button className={styles.finderBack} type="button" onClick={restart}>Start over</button>
-                <Link className={styles.finderNext} href={signupHref(recommended.key, interval)} prefetch={false}>
+                <a className={styles.finderNext} href={signupHref(recommended.key, interval)}>
                   Start with {recommended.name}
                   <ArrowUpRight size={16} aria-hidden="true" />
-                </Link>
+                </a>
               </div>
             </div>
           ) : (

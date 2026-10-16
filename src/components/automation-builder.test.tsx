@@ -13,7 +13,25 @@ type FetchOverrides = {
   patchOk?: boolean;
   connection?: unknown;
   facebookPages?: unknown;
+  /** Answers POST and PATCH writes itself when it returns a response. */
+  write?: (url: string, init: RequestInit) => Response | undefined | Promise<Response | undefined>;
 };
+
+function jsonResponse(status: number, body: unknown): Response {
+  return { ok: status >= 200 && status < 300, status, json: async () => body } as Response;
+}
+
+/** The POST and PATCH calls a test made, in order, with their create keys. */
+function writeCalls(fetchMock: ReturnType<typeof stubFetch>) {
+  return fetchMock.mock.calls
+    .filter(([, init]) => (init as RequestInit | undefined)?.method === "POST" || (init as RequestInit | undefined)?.method === "PATCH")
+    .map(([url, init]) => ({
+      url: String(url),
+      method: (init as RequestInit).method,
+      key: ((init as RequestInit).headers as Record<string, string>)["idempotency-key"],
+      body: JSON.parse(String((init as RequestInit).body)) as Record<string, unknown>,
+    }));
+}
 
 const defaultConnection = {
   id: "conn_default",
@@ -36,6 +54,10 @@ function stubFetch(overrides: FetchOverrides = {}) {
     }
     if (url.endsWith("/api/facebook/connection") || url.includes("/api/facebook/connection?")) {
       return { ok: true, json: async () => overrides.facebookPages ?? { data: [] } } as Response;
+    }
+    if (init?.method === "POST" || init?.method === "PATCH") {
+      const custom = await overrides.write?.(url, init);
+      if (custom) return custom;
     }
     if (!init?.method || init.method === "POST") {
       return {
@@ -1100,6 +1122,44 @@ describe("AutomationBuilder", () => {
     expect(fetchMock.mock.calls.some(([, init]) => (init as RequestInit | undefined)?.method === "PATCH")).toBe(false);
   });
 
+  it("retries a failed first campaign save under the same create key, and PATCHes a replayed create before calling it saved", async () => {
+    const posts = [
+      jsonResponse(502, { error: "Could not save this automation. Try again in a moment." }),
+      jsonResponse(200, { data: { id: "automation_first" }, replayed: true }),
+    ];
+    const fetchMock = stubFetch({
+      media: { data: [reel], paging: {} },
+      write: (url, init) => {
+        if (init.method === "POST") return posts.shift();
+        return jsonResponse(200, { data: { id: "automation_first", name: "Reel drop" } });
+      },
+    });
+    const onSaved = vi.fn();
+    render(<AutomationBuilder onSaved={onSaved} />);
+
+    await waitFor(() => expect(screen.getAllByRole("checkbox").length).toBeGreaterThan(0));
+    fireEvent.click(screen.getByRole("checkbox"));
+    await fillRequiredCampaignFields();
+    goToReviewStep();
+    fireEvent.click(screen.getByRole("button", { name: /save draft/i }));
+    expect((await screen.findByRole("alert")).textContent).toMatch(/try again in a moment/i);
+
+    fireEvent.click(screen.getByRole("button", { name: /save draft/i }));
+    await screen.findByText(/saved to your workspace/i);
+
+    const writes = writeCalls(fetchMock);
+    expect(writes.map(({ url, method }) => [url, method])).toEqual([
+      ["/api/automations", "POST"],
+      ["/api/automations", "POST"],
+      ["/api/automations/automation_first", "PATCH"],
+    ]);
+    expect(writes[0].key).toMatch(/^[a-zA-Z0-9_-]{1,100}$/);
+    expect(writes[1].key).toBe(writes[0].key);
+    expect(writes[2].key).toBeUndefined();
+    expect(writes[2].body).toEqual(writes[1].body);
+    expect(onSaved).toHaveBeenCalledWith({ id: "automation_first", name: "Reel drop" });
+  });
+
   it("saves an edited campaign as a draft in the same request as its definition", async () => {
     const existingDefinition: FlowDefinitionV2 = {
       version: 2,
@@ -1409,6 +1469,109 @@ describe("AutomationBuilder", () => {
         ["/api/automations/automation_created", "PATCH"],
       ]);
       expect(screen.getByRole("heading", { name: /edit automatic reply/i })).toBeTruthy();
+    });
+
+    it("retries a failed first save with the same create key instead of making a second automation", async () => {
+      window.history.replaceState(null, "", "/automations/new?type=classic");
+      const posts = [
+        jsonResponse(502, { error: "Could not save this automation. Try again in a moment." }),
+        jsonResponse(201, { data: { id: "automation_created" } }),
+      ];
+      const fetchMock = stubFetch({ write: (_url, init) => (init.method === "POST" ? posts.shift() : undefined) });
+      render(<AutomationBuilder variant="classic" initialDefinition={dmKeyword} initialName="Menu" />);
+
+      for (let i = 0; i < 5; i += 1) fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
+      fireEvent.click(screen.getByRole("button", { name: /save draft/i }));
+      expect((await screen.findByRole("alert")).textContent).toMatch(/try again in a moment/i);
+      expect(window.location.pathname).toBe("/automations/new");
+
+      fireEvent.click(screen.getByRole("button", { name: /save draft/i }));
+      await screen.findByText(/saved to your workspace/i);
+
+      const writes = writeCalls(fetchMock);
+      expect(writes.map(({ url, method }) => [url, method])).toEqual([
+        ["/api/automations", "POST"],
+        ["/api/automations", "POST"],
+      ]);
+      expect(writes[0].key).toBeTruthy();
+      expect(writes[1].key).toBe(writes[0].key);
+      expect(window.location.pathname).toBe("/automations/automation_created/edit");
+    });
+
+    it("adopts a replayed create, PATCHes the form as it is now, and only then shows it saved", async () => {
+      window.history.replaceState(null, "", "/automations/new?type=classic");
+      let releasePatch!: () => void;
+      const patchGate = new Promise<void>((resolve) => { releasePatch = resolve; });
+      const posts = [
+        jsonResponse(502, { error: "Could not save this automation. Try again in a moment." }),
+        // The first try did reach the server, with the old name.
+        jsonResponse(200, { data: { id: "automation_first", name: "Menu" }, replayed: true }),
+      ];
+      const fetchMock = stubFetch({
+        write: async (_url, init) => {
+          if (init.method === "POST") return posts.shift();
+          await patchGate;
+          return jsonResponse(200, { data: { id: "automation_first", name: "Menu, edited" } });
+        },
+      });
+      render(<AutomationBuilder variant="classic" initialDefinition={dmKeyword} initialName="Menu" />);
+
+      for (let i = 0; i < 5; i += 1) fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
+      fireEvent.click(screen.getByRole("button", { name: /save draft/i }));
+      await screen.findByRole("alert");
+
+      fireEvent.change(screen.getByLabelText(/automation name/i), { target: { value: "Menu, edited" } });
+      fireEvent.click(screen.getByRole("button", { name: /save draft/i }));
+
+      await waitFor(() => expect(writeCalls(fetchMock).some(({ method }) => method === "PATCH")).toBe(true));
+      // The id is adopted at once, but nothing reads as saved while the PATCH is out.
+      expect(window.location.pathname).toBe("/automations/automation_first/edit");
+      expect(screen.queryByText(/all changes saved/i)).toBeNull();
+      expect(screen.getByText(/unsaved changes/i)).toBeTruthy();
+      expect(screen.queryByText(/saved to your workspace/i)).toBeNull();
+
+      releasePatch();
+      await screen.findByText(/saved to your workspace/i);
+      expect(await screen.findByText(/all changes saved/i)).toBeTruthy();
+
+      const writes = writeCalls(fetchMock);
+      expect(writes.map(({ url, method }) => [url, method])).toEqual([
+        ["/api/automations", "POST"],
+        ["/api/automations", "POST"],
+        ["/api/automations/automation_first", "PATCH"],
+      ]);
+      expect(writes[1].key).toBe(writes[0].key);
+      expect(writes[2].body).toMatchObject({ name: "Menu, edited", status: "DRAFT" });
+    });
+
+    it("keeps a replayed create unsaved when its follow-up PATCH fails, and PATCHes again on the next save", async () => {
+      window.history.replaceState(null, "", "/automations/new?type=classic");
+      const patches = [
+        jsonResponse(409, { error: "This Instagram account needs to be reconnected." }),
+        jsonResponse(200, { data: { id: "automation_first" } }),
+      ];
+      const fetchMock = stubFetch({
+        write: (_url, init) => init.method === "POST"
+          ? jsonResponse(200, { data: { id: "automation_first" }, replayed: true })
+          : patches.shift(),
+      });
+      render(<AutomationBuilder variant="classic" initialDefinition={dmKeyword} initialName="Menu" />);
+
+      for (let i = 0; i < 5; i += 1) fireEvent.click(screen.getByRole("button", { name: /^next$/i }));
+      fireEvent.click(screen.getByRole("button", { name: /save draft/i }));
+      expect((await screen.findByRole("alert")).textContent).toMatch(/needs to be reconnected/i);
+      // The form never changed, but the server still holds the earlier try.
+      expect(screen.queryByText(/all changes saved/i)).toBeNull();
+      expect(screen.getByText(/unsaved changes/i)).toBeTruthy();
+
+      fireEvent.click(screen.getByRole("button", { name: /save draft/i }));
+      await screen.findByText(/saved to your workspace/i);
+
+      expect(writeCalls(fetchMock).map(({ url, method }) => [url, method])).toEqual([
+        ["/api/automations", "POST"],
+        ["/api/automations/automation_first", "PATCH"],
+        ["/api/automations/automation_first", "PATCH"],
+      ]);
     });
 
     it.each([

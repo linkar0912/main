@@ -28,6 +28,35 @@ async function processingReady(check: () => boolean | Promise<boolean>): Promise
   }
 }
 
+/** A BullMQ Worker and the ioredis connection it was given, as src/worker.ts wires them. */
+export type ProcessingConsumer = {
+  consumer: { isRunning(): boolean; isPaused(): boolean; waitUntilReady(): Promise<unknown> };
+  connection: { status: string };
+};
+
+/**
+ * True while every consumer is running, not paused, and connected: its own
+ * Redis connection and BullMQ's dedicated blocking client both ready.
+ */
+export async function consumersProcessing(entries: readonly ProcessingConsumer[]): Promise<boolean> {
+  const ready = await Promise.all(entries.map(async ({ consumer, connection }) => {
+    if (!consumer.isRunning() || consumer.isPaused()) return false;
+    await consumer.waitUntilReady();
+    if (connection.status !== "ready") return false;
+    // Reads a BullMQ 6.1.2 internal: the Worker's dedicated blocking client,
+    // which waits for new jobs. After a Valkey outage, BullMQ's stuck-command
+    // watchdog plus ioredis 6.0.0's disconnect() can leave that client in
+    // "reconnecting" for good while the main connection is ready again, so
+    // the worker stops taking jobs but would still look alive (verifier
+    // wedge-repro.mts). A Worker without this internal keeps the check above.
+    const blocking = await (consumer as unknown as {
+      backend?: { blockingClient?: Promise<{ status?: string } | undefined> };
+    }).backend?.blockingClient;
+    return !blocking || blocking.status === "ready";
+  }));
+  return ready.every(Boolean);
+}
+
 export type WorkerHeartbeatWriter = (beat: WorkerHeartbeat) => Promise<void>;
 
 /** Writes the heartbeat with a TTL so a dead worker expires on its own. */

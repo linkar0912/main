@@ -12,7 +12,14 @@ vi.mock("next/navigation", () => ({ usePathname: () => navigation.pathname, useR
 const { AppShell } = await import("./app-shell");
 const { invalidateWorkspaceResource, notifyWorkspaceChanged } = await import("@/src/lib/client/workspace-data");
 const { OnboardingScreen } = await import("./onboarding/onboarding-screen");
-const { deferOnboarding, ONBOARDING_NOT_REQUIRED_KEY, readOnboardingDeferral } = await import("@/src/lib/onboarding/redirect");
+const {
+  deferOnboarding,
+  ONBOARDING_DEFERRED_KEY,
+  ONBOARDING_IDENTITY_KEY,
+  ONBOARDING_NOT_REQUIRED_KEY,
+  readOnboardingDeferral,
+  rememberOnboardingNotRequired,
+} = await import("@/src/lib/onboarding/redirect");
 const { renderToString } = await import("react-dom/server");
 
 const requiredOnboarding = { required: true, flow: "owner", invite: false, planCard: false, goals: [], displayName: null };
@@ -587,6 +594,96 @@ describe("AppShell", () => {
     expect(bootstrapCalls()).toBe(2);
     expect(screen.getByRole("button", { name: "Account menu" })).toBeTruthy();
     expect(screen.queryByText("Account unavailable")).toBeNull();
+  });
+
+  it("asks again about onboarding only when the shell mounts, never from a focus or workspace-change refresh", async () => {
+    router.replace.mockClear();
+    let now = Date.parse("2026-10-16T10:00:00.000Z");
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    window.history.replaceState(null, "", "/automations/new");
+    navigation.pathname = "/automations/new";
+    let plan = "free";
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).includes("/api/workspace/bootstrap")) {
+        return { ok: true, json: async () => ({ data: { email: "new.owner@example.com", role: "OWNER", plan, onboarding: requiredOnboarding } }) } as Response;
+      }
+      return { ok: true, json: async () => ({ data: [] }) } as Response;
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const bootstrapCalls = () => fetchMock.mock.calls.filter(([url]) => String(url).includes("/api/workspace/bootstrap")).length;
+    try {
+      // Onboarding could not load at T, so this tab deferred it; they went on to build an automation.
+      deferOnboarding();
+      render(<AppShell><p>Builder with unsaved edits</p></AppShell>);
+      await screen.findByRole("button", { name: "Account menu" });
+      expect(screen.getByText("Builder with unsaved edits")).toBeTruthy();
+
+      // 31 minutes on the deferral has run out, and they come back to the window.
+      now += 31 * 60_000;
+      plan = "growth";
+      await act(async () => { window.dispatchEvent(new Event("focus")); });
+      await waitFor(() => expect(bootstrapCalls()).toBe(2));
+      // The refresh still updates the identity...
+      fireEvent.click(screen.getByRole("button", { name: "Account menu" }));
+      expect(await screen.findByText("Owner · Growth plan")).toBeTruthy();
+      fireEvent.keyDown(document.activeElement as HTMLElement, { key: "Escape" });
+      // ...but the edits on screen are never thrown away by a redirect.
+      expect(router.replace).not.toHaveBeenCalledWith("/onboarding");
+      expect(screen.getByText("Builder with unsaved edits")).toBeTruthy();
+
+      // Nor by a workspace change (a billing change or a new connection).
+      await act(async () => { notifyWorkspaceChanged(); });
+      await waitFor(() => expect(bootstrapCalls()).toBe(3));
+      expect(router.replace).not.toHaveBeenCalledWith("/onboarding");
+      expect(screen.getByText("Builder with unsaved edits")).toBeTruthy();
+
+      // The next shell mount (a new page in the app, or a full load) asks again.
+      cleanup();
+      render(<AppShell><p>Home content</p></AppShell>);
+      await waitFor(() => expect(router.replace).toHaveBeenCalledWith("/onboarding"));
+    } finally {
+      window.history.replaceState(null, "", "/");
+    }
+  });
+
+  it("keeps the newer identity when an older shell request answers last", async () => {
+    const answers: Array<(plan: string) => void> = [];
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
+      if (String(input).includes("/api/workspace/bootstrap")) {
+        return new Promise<Response>((resolve) => {
+          answers.push((plan) => resolve({ ok: true, json: async () => ({ data: { email: "alex.rivera@example.com", role: "OWNER", plan } }) } as Response));
+        });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({ data: [] }) } as Response);
+    }));
+    render(<AppShell><main>Workspace</main></AppShell>);
+    await waitFor(() => expect(answers).toHaveLength(1));
+
+    // An upgrade lands while the first read is still out, so the shell asks again.
+    await act(async () => { notifyWorkspaceChanged(); });
+    expect(answers).toHaveLength(2);
+    await act(async () => { answers[1]("growth"); });
+    // The first, older request answers last, with the plan from before the upgrade.
+    await act(async () => { answers[0]("free"); });
+
+    fireEvent.click(await screen.findByRole("button", { name: "Account menu" }));
+    expect(await screen.findByText("Owner · Growth plan")).toBeTruthy();
+    expect(screen.queryByText("Owner · Free plan")).toBeNull();
+  });
+
+  it("clears this tab's onboarding flags on sign-out, so the next account starts clean", async () => {
+    stubShellFetch("OWNER");
+    render(<AppShell><main>Workspace</main></AppShell>);
+    fireEvent.click(await screen.findByRole("button", { name: "Account menu" }));
+    deferOnboarding();
+    rememberOnboardingNotRequired(true);
+    expect(window.sessionStorage.getItem(ONBOARDING_IDENTITY_KEY)).not.toBeNull();
+
+    fireEvent.submit(screen.getByRole("menuitem", { name: "Sign out" }).closest("form") as HTMLFormElement);
+
+    for (const key of [ONBOARDING_DEFERRED_KEY, ONBOARDING_NOT_REQUIRED_KEY, ONBOARDING_IDENTITY_KEY]) {
+      expect(window.sessionStorage.getItem(key), key).toBeNull();
+    }
   });
 
   it("does not redirect when the bootstrap carries no onboarding requirement", async () => {

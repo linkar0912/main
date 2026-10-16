@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { ZodError } from "zod";
 import { validateFlowDefinition, validateFlowDefinitionForTarget } from "./definition";
 
 const campaign = {
@@ -32,6 +33,17 @@ const campaign = {
     buttonLabel: "Open guide",
   },
 };
+
+/** The validation issues for a definition, or none when it saves. Anything but a ZodError is rethrown. */
+function validationIssues(input: unknown): Array<{ path: PropertyKey[]; message: string }> {
+  try {
+    validateFlowDefinition(input);
+    return [];
+  } catch (error) {
+    if (!(error instanceof ZodError)) throw error;
+    return error.issues.map((issue) => ({ path: issue.path, message: issue.message }));
+  }
+}
 
 describe("validateFlowDefinition", () => {
   it("returns field-addressable errors for a definition incompatible with its channel", () => {
@@ -84,6 +96,33 @@ describe("validateFlowDefinition", () => {
         actions: [{ type: "send_link", text: "Click", url: "not-a-url" }],
       }),
     ).toThrow();
+  });
+
+  it("reports a link that is not a URL as a validation error on its field, not a crash", () => {
+    const messageFlow = (action: Record<string, unknown>, extra: Record<string, unknown> = {}) => ({
+      version: 1,
+      trigger: { type: "message", match: "any", keywords: [] },
+      conditions: [],
+      actions: [action],
+      ...extra,
+    });
+    const linkCases: Array<[unknown, PropertyKey[]]> = [
+      [messageFlow({ type: "send_link", text: "Click", url: "not a url" }), ["actions", 0, "url"]],
+      [messageFlow({ type: "send_button", text: "Hi", buttonLabel: "Open", url: "not a url" }), ["actions", 0, "url"]],
+      [messageFlow({ type: "send_text", text: "Hi" }, {
+        followUps: [{ delayMinutes: 5, text: "Still there?", buttonLabel: "Open", url: "not a url" }],
+      }), ["followUps", 0, "url"]],
+      [{ ...campaign, delivery: { ...campaign.delivery, url: "not a url" } }, ["delivery", "url"]],
+      [{
+        ...campaign,
+        trigger: { ...campaign.trigger, mediaSnapshots: [{ ...campaign.trigger.mediaSnapshots[0], permalink: "not a url" }] },
+      }, ["trigger", "mediaSnapshots", 0, "permalink"]],
+    ];
+    for (const [input, path] of linkCases) {
+      const issues = validationIssues(input);
+      expect(issues.length, path.join(".")).toBeGreaterThan(0);
+      expect(issues.every((issue) => issue.path.join(".") === path.join(".")), path.join(".")).toBe(true);
+    }
   });
 
   it("allows only one private text reply for comment triggers", () => {
@@ -436,9 +475,19 @@ describe("validateFlowDefinition", () => {
     });
 
     it("rejects regex keywords the matcher cannot compile or that exceed 100 characters", () => {
-      for (const pattern of ["(", "(?=price)p", "(a)\\1", "\\p{L}+", "a{5000}"]) {
-        expect(() => validateFlowDefinition(commentFlow({ mode: "regex", keywords: ["ok", pattern] })), pattern)
-          .toThrow("This pattern is not valid or uses something the matcher does not support");
+      const refusals: Array<[string, string]> = [
+        ["(", "This pattern is not a valid regular expression. Check its brackets, parentheses and repeats"],
+        ["(?=price)p", "This pattern uses a lookaround, such as (?=...) or (?<!...), which the matcher does not support"],
+        ["(a)\\1", "This pattern uses a backreference, such as \\1, which the matcher does not support"],
+        ["(?i)link", "This pattern uses inline flags, such as (?i), which the matcher does not support"],
+        ["\\p{L}+", "This pattern uses an escape the matcher does not support, such as \\p{...}"],
+        ["a{5000}", "This pattern is too big once its repeats are counted"],
+      ];
+      for (const [pattern, message] of refusals) {
+        const issues = validationIssues(commentFlow({ mode: "regex", keywords: ["ok", pattern] }));
+        expect(issues, pattern).toHaveLength(1);
+        expect(issues[0], pattern).toMatchObject({ path: ["trigger", "keywords", 1] });
+        expect(issues[0].message, pattern).toContain(message);
       }
       expect(() => validateFlowDefinition(commentFlow({ mode: "regex", keywords: [`${"a".repeat(99)}+$`] })))
         .toThrow("Keep each keyword to 100 characters or fewer");
@@ -447,7 +496,30 @@ describe("validateFlowDefinition", () => {
         trigger: { type: "story_reply", match: "keyword", mode: "regex", keywords: ["(?<=x)y"] },
         conditions: [],
         actions: [{ type: "send_text", text: "Hi" }],
-      })).toThrow("This pattern is not valid");
+      })).toThrow("This pattern uses a lookaround");
+    });
+
+    it("explains a pattern that is too big once its repeats are counted, not as a lookaround", () => {
+      for (const pattern of ["price.{0,150}", "(price|cost|rate|kitna|how much){1,10}"]) {
+        const issues = validationIssues(commentFlow({ mode: "regex", keywords: [pattern] }));
+        expect(issues.map((issue) => issue.message), pattern).toEqual([
+          "This pattern is too big once its repeats are counted. Use smaller repeat numbers, such as {0,20} instead of {0,150}, or fewer alternatives",
+        ]);
+        expect(issues[0].message).not.toMatch(/lookaround|backreference/);
+      }
+      // The smaller repeat the message suggests saves.
+      expect(validateFlowDefinition(commentFlow({ mode: "regex", keywords: ["price.{0,20}"] })).trigger)
+        .toMatchObject({ keywords: ["price.{0,20}"] });
+    });
+
+    it("rejects a pattern that gives two groups the same name, as JavaScript does", () => {
+      const issues = validationIssues(commentFlow({ mode: "regex", keywords: ["(?<a>x)(?<a>y)"] }));
+      expect(issues).toEqual([expect.objectContaining({
+        path: ["trigger", "keywords", 0],
+        message: "Two groups in this pattern share a name. Give each named group its own name",
+      })]);
+      expect(validateFlowDefinition(commentFlow({ mode: "regex", keywords: ["(?<a>x)(?<b>y)"] })).trigger)
+        .toMatchObject({ keywords: ["(?<a>x)(?<b>y)"] });
     });
 
     it("keeps the case of regex keywords so escapes like \\D keep their meaning", () => {

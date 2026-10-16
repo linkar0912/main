@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AddressInfo } from "node:net";
-import { createWorkerHealthServer, startWorkerHeartbeat } from "./worker-health";
+import { consumersProcessing, createWorkerHealthServer, startWorkerHeartbeat } from "./worker-health";
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -172,6 +172,50 @@ describe("worker liveness", () => {
       const response = await fetch(`${baseUrl}/live`, { signal: AbortSignal.timeout(8_000) });
       expect(response.status).toBe(503);
       expect(Date.now() - started).toBeLessThan(5_000);
+    });
+  });
+});
+
+describe("consumersProcessing", () => {
+  /** A BullMQ Worker stand-in; `blocking` adds the backend's dedicated blocking client. */
+  function stubWorker(options: { running?: boolean; paused?: boolean; blocking?: { status?: string } | null } = {}) {
+    return {
+      isRunning: () => options.running ?? true,
+      isPaused: () => options.paused ?? false,
+      waitUntilReady: async () => undefined,
+      ...(options.blocking !== undefined ? { backend: { blockingClient: Promise.resolve(options.blocking ?? undefined) } } : {}),
+    };
+  }
+  const ready = { status: "ready" };
+
+  it("is true when the main connection and BullMQ's blocking client are both ready", async () => {
+    await expect(consumersProcessing([
+      { consumer: stubWorker({ blocking: { status: "ready" } }), connection: ready },
+      { consumer: stubWorker({ blocking: { status: "ready" } }), connection: ready },
+    ])).resolves.toBe(true);
+  });
+
+  it("is false when a blocking client is stuck reconnecting while the main connection is ready", async () => {
+    // What a Valkey outage can leave behind: jobs stop, the main connection looks fine.
+    await expect(consumersProcessing([
+      { consumer: stubWorker({ blocking: { status: "ready" } }), connection: ready },
+      { consumer: stubWorker({ blocking: { status: "reconnecting" } }), connection: ready },
+    ])).resolves.toBe(false);
+  });
+
+  it("keeps the main-connection check for a worker without the BullMQ internal", async () => {
+    await expect(consumersProcessing([{ consumer: stubWorker(), connection: ready }])).resolves.toBe(true);
+    await expect(consumersProcessing([{ consumer: stubWorker({ blocking: null }), connection: ready }])).resolves.toBe(true);
+    await expect(consumersProcessing([{ consumer: stubWorker(), connection: { status: "reconnecting" } }])).resolves.toBe(false);
+    await expect(consumersProcessing([{ consumer: stubWorker({ paused: true }), connection: ready }])).resolves.toBe(false);
+    await expect(consumersProcessing([{ consumer: stubWorker({ running: false }), connection: ready }])).resolves.toBe(false);
+  });
+
+  it("turns /live to 503 when a blocking client is stuck", async () => {
+    const consumer = stubWorker({ blocking: { status: "reconnecting" } });
+    const server = createWorkerHealthServer({}, () => consumersProcessing([{ consumer, connection: ready }]), { heartbeat: false });
+    await withServer(server, async (baseUrl) => {
+      expect((await fetch(`${baseUrl}/live`)).status).toBe(503);
     });
   });
 });

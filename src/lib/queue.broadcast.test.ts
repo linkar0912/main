@@ -4,6 +4,7 @@ const state = vi.hoisted(() => ({
   redisUrl: "redis://queue.test:6379",
   directMessageRateLimitPerHour: 0,
   add: vi.fn(),
+  waitUntilReady: vi.fn(),
   redisOptions: [] as unknown[],
 }));
 
@@ -20,6 +21,8 @@ vi.mock("ioredis", () => ({
 vi.mock("bullmq", () => ({
   Queue: class Queue {
     add = state.add;
+    waitUntilReady = state.waitUntilReady;
+    on() { return this; }
   },
 }));
 
@@ -45,6 +48,7 @@ const jobs = [
 describe("broadcast queue fan-out", () => {
   beforeEach(() => {
     state.add.mockReset().mockResolvedValue({ id: "job" });
+    state.waitUntilReady.mockReset().mockResolvedValue(undefined);
     state.directMessageRateLimitPerHour = 0;
     delete (globalThis as { linkarWebhookQueue?: unknown }).linkarWebhookQueue;
     delete (globalThis as { linkarBulkQueue?: unknown }).linkarBulkQueue;
@@ -107,8 +111,29 @@ describe("broadcast queue fan-out", () => {
     const interval = Math.ceil(3_600_000 / 175);
     expect(state.add.mock.calls.map((call) => call[2].delay)).toEqual([5_000, 5_000, 5_000 + interval, 5_000 + interval]);
   });
-  it("opens producer connections that fail fast while Redis is down", async () => {
+  it("opens producer connections that fail fast while Redis is down or stalled", async () => {
     await enqueueBroadcastSends([jobs[0]]);
-    expect(state.redisOptions.at(-1)).toEqual({ maxRetriesPerRequest: 1, enableOfflineQueue: false });
+    expect(state.redisOptions.at(-1)).toEqual({
+      maxRetriesPerRequest: 1,
+      enableOfflineQueue: false,
+      connectTimeout: 3_000,
+      commandTimeout: 1_500,
+    });
+  });
+
+  it("rejects every recipient when the queue's connection is not ready in time", async () => {
+    vi.useFakeTimers();
+    try {
+      state.waitUntilReady.mockReturnValue(new Promise(() => undefined));
+      const result = enqueueBroadcastSends(jobs);
+      await vi.advanceTimersByTimeAsync(3_000);
+      await expect(result).resolves.toEqual({
+        accepted: [],
+        rejected: jobs.map(({ igAccountId, igScopedUserId }) => ({ igAccountId, igScopedUserId })),
+      });
+      expect(state.add).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

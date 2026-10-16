@@ -21,7 +21,7 @@ import { reconcileStaleExecutions } from "./lib/automation/execution-reconciliat
 import { processLeadDelivery } from "./lib/automation/lead-delivery";
 import { processFlowFollowUp, type FlowFollowUpRunnerOptions } from "./lib/automation/followup-runner";
 import type { FlowFollowUpJob } from "./lib/queue";
-import { createWorkerHealthServer, workerHealthPort } from "./lib/worker-health";
+import { consumersProcessing, createWorkerHealthServer, workerHealthPort } from "./lib/worker-health";
 import { reconcileUsageReservations } from "./lib/admin/system/usage-reconciliation";
 import { sweepLapsedBillingEntitlements } from "./lib/billing/expiry-sweep";
 import { processAdminDeletion } from "./lib/admin/deletion/processor";
@@ -205,15 +205,12 @@ if (!env.redisUrl) {
   const workers = [worker, bulkWorker];
 
   // Dependency probes alone can be green when BullMQ has stopped consuming.
-  // Require both consumers to be running with ready Redis connections.
-  const healthServer = createWorkerHealthServer({}, async () => {
-    const ready = await Promise.all(workers.map(async (consumer, index) => {
-      if (!consumer.isRunning() || consumer.isPaused()) return false;
-      await consumer.waitUntilReady();
-      return (index === 0 ? redis : bulkRedis).status === "ready";
-    }));
-    return ready.every(Boolean);
-  });
+  // Require both consumers to be running with ready Redis connections,
+  // BullMQ's blocking clients included (see consumersProcessing).
+  const healthServer = createWorkerHealthServer({}, () => consumersProcessing([
+    { consumer: worker, connection: redis },
+    { consumer: bulkWorker, connection: bulkRedis },
+  ]));
   healthServer.listen(workerHealthPort(), () =>
     logger.info("Worker health server listening", { port: workerHealthPort() }));
   healthServer.unref();

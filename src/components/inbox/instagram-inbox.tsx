@@ -173,6 +173,14 @@ const INBOX_FRESH_FOR_MS = 120_000;
 export const INBOX_LIVE_REFRESH_MS = 8_000;
 /** Failed checks back off from that, doubling each time, up to this. */
 export const INBOX_LIVE_REFRESH_MAX_MS = 120_000;
+/** Each request of a live check gives up after this long, and the check counts as failed. */
+export const INBOX_LIVE_TIMEOUT_MS = 15_000;
+/**
+ * While checks back off, a tab coming back into view checks once at once
+ * if the last attempt is at least this old (or as soon as it is), instead
+ * of waiting out a backoff of up to two minutes.
+ */
+const INBOX_VISIBLE_RECHECK_MS = 2 * INBOX_LIVE_REFRESH_MS;
 const INBOX_CACHE_LIMIT = 20;
 const inboxFirstPageCache = new Map<string, InboxListSnapshot>();
 
@@ -318,6 +326,9 @@ export function InstagramInbox() {
   const contactsAbortRef = useRef<AbortController | null>(null);
   const conversationAbortRef = useRef<AbortController | null>(null);
   const activeContactIdRef = useRef<string | null>(null);
+  // The open conversation the server no longer has (a live check got a 404):
+  // live checks stop asking for its thread until a conversation is opened again.
+  const goneContactIdRef = useRef<string | null>(null);
 
   const loadContacts = useCallback(async (replace: boolean, cursor?: string) => {
     const isFirstPage = replace && !cursor;
@@ -412,7 +423,8 @@ export function InstagramInbox() {
     const openId = selectedId;
     const stillCurrent = () => guard.filtersKey === requestKey && !guard.busy;
     try {
-      const listResponse = await fetch(inboxUrl(requestFilters));
+      // A check that hangs gives up (and backs off) instead of holding every later check.
+      const listResponse = await fetch(inboxUrl(requestFilters), { signal: AbortSignal.timeout(INBOX_LIVE_TIMEOUT_MS) });
       const listPayload = (await listResponse.json().catch(() => ({}))) as InboxPayload;
       // A failed list means the server is struggling: skip the thread too.
       if (!listResponse.ok || !listPayload.data) return "failed";
@@ -422,10 +434,21 @@ export function InstagramInbox() {
         if (page.members) setMembers(page.members);
         writeInboxCache(requestFilters, { contacts: page.contacts, members: page.members ?? [], nextCursor: page.nextCursor });
       }
-      if (openId && activeContactIdRef.current === openId) {
-        const threadResponse = await fetch(`/api/inbox/${openId}`);
+      if (openId && activeContactIdRef.current === openId && goneContactIdRef.current !== openId) {
+        const threadResponse = await fetch(`/api/inbox/${openId}`, { signal: AbortSignal.timeout(INBOX_LIVE_TIMEOUT_MS) });
+        // Only a struggling server slows the checks down (5xx, 429, or no
+        // answer at all). Any other refusal is about this one conversation,
+        // so the list keeps its normal pace.
+        if (threadResponse.status >= 500 || threadResponse.status === 429) return "failed";
+        if (!threadResponse.ok) {
+          if (threadResponse.status === 404 && activeContactIdRef.current === openId) {
+            goneContactIdRef.current = openId;
+            setThreadError("This conversation is no longer available.");
+          }
+          return "ok";
+        }
         const threadPayload = (await threadResponse.json().catch(() => ({}))) as ConversationPayload;
-        if (!threadResponse.ok || !threadPayload.data) return "failed";
+        if (!threadPayload.data) return "failed";
         if (activeContactIdRef.current === openId && !guard.busy) {
           const latest = threadPayload.data.messages;
           const known = new Set(messages.map((message) => message.id));
@@ -455,24 +478,38 @@ export function InstagramInbox() {
   // struggling server busy every 8 seconds.
   useEffect(() => {
     let timer: number | undefined;
+    let dueAt = 0;
     let stopped = false;
     let failures = 0;
-    const schedule = () => {
+    // When the last check that actually asked the server started.
+    let lastAttemptAt = 0;
+    const schedule = (delay = liveRefreshDelay(failures)) => {
       window.clearTimeout(timer);
-      timer = window.setTimeout(() => void tick(), liveRefreshDelay(failures));
+      dueAt = Date.now() + delay;
+      timer = window.setTimeout(() => void tick(), delay);
     };
     const tick = async () => {
+      const startedAt = Date.now();
       const outcome = await refreshLive();
       if (stopped) return;
+      if (outcome !== "skipped") lastAttemptAt = startedAt;
       if (outcome === "failed") failures += 1;
       else if (outcome === "ok") failures = 0;
       schedule();
     };
-    // Coming back to the tab checks at once, unless checks are backing off.
+    // Coming back to the tab checks at once. While checks are backing off it
+    // still checks once, at once if the last attempt is 16 s old or more
+    // (otherwise as soon as it is), so a tab that sat out an outage does not
+    // wait up to two minutes for the next check.
     const onVisible = () => {
-      if (document.visibilityState !== "visible" || failures > 0) return;
-      window.clearTimeout(timer);
-      void tick();
+      if (document.visibilityState !== "visible") return;
+      const wait = failures > 0 ? Math.max(0, lastAttemptAt + INBOX_VISIBLE_RECHECK_MS - Date.now()) : 0;
+      if (wait === 0) {
+        window.clearTimeout(timer);
+        void tick();
+      } else if (dueAt - Date.now() > wait) {
+        schedule(wait);
+      }
     };
     schedule();
     document.addEventListener("visibilitychange", onVisible);
@@ -555,6 +592,7 @@ export function InstagramInbox() {
     rememberOpenSpeaker();
     conversationAbortRef.current?.abort();
     activeContactIdRef.current = null;
+    goneContactIdRef.current = null;
     setSelectedId(null);
     setThreadError("");
     setLiveAnnouncement("");
@@ -577,6 +615,7 @@ export function InstagramInbox() {
     const controller = new AbortController();
     conversationAbortRef.current = controller;
     activeContactIdRef.current = contact.id;
+    goneContactIdRef.current = null;
     setSelectedId(contact.id);
     setOptionsOpen(false);
     setConversationLoading(true);

@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { topicGuides, type SeoPage } from "@/src/content/seo";
 import { ButtonRoll } from "../../../button-roll";
 import { Icon, MockToggleRow } from "../../mock-ui";
@@ -31,7 +30,7 @@ export function NotesSplit({ page }: { page: SeoPage }) {
           </h2>
           <p className={styles.tipBody}>{tipBody}</p>
           <div className={shell.actions}>
-            <Link className={shell.inverseAction} href="/signup"><ButtonRoll label="Create your first reply" /></Link>
+            <a className={shell.inverseAction} href="/signup"><ButtonRoll label="Create your first reply" /></a>
           </div>
         </div>
       </div>

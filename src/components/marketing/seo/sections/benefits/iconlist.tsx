@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { Fragment } from "react";
 import type { SeoPage } from "@/src/content/seo";
 import { ButtonRoll } from "../../../button-roll";
@@ -125,7 +124,7 @@ export function BenefitsIconlist({ page }: { page: SeoPage }) {
             ))}
           </ul>
           <div className={shell.actions}>
-            <Link className={shell.primaryAction} href="/signup"><ButtonRoll label="Start for free" /></Link>
+            <a className={shell.primaryAction} href="/signup"><ButtonRoll label="Start for free" /></a>
           </div>
         </div>
       </div>

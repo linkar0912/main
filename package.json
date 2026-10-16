@@ -13,6 +13,7 @@
     "check:copy": "node scripts/check-customer-copy.mjs",
     "check:css-budget": "node scripts/check-css-budget.mjs",
     "check:deployment-hygiene": "node scripts/check-deployment-hygiene.mjs",
+    "check:regex-keywords": "tsx scripts/check-regex-keywords.ts",
     "css:public": "node scripts/build-public-css.mjs",
     "preflight:billing": "node scripts/verify-billing-config.mjs",
     "preflight:instagram-ownership": "node scripts/preflight-instagram-ownership.mjs",

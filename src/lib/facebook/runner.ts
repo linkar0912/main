@@ -13,7 +13,7 @@ import {
   releaseDailySendSlots,
   type SendLimitReservation,
 } from "../automation/send-limits";
-import { findMatchedKeyword, matchesTrigger, resolveReplyForMedia } from "../automation/match";
+import { evaluateTrigger, resolveReplyForMedia, type TriggerMatch } from "../automation/match";
 import { validateDefinitionForTarget } from "../automation/channels/registry";
 import type { DeliveryTimingObserver } from "../automation/delivery-timing";
 import { admitPublicReply } from "../automation/send-rate-limiter";
@@ -348,7 +348,8 @@ export async function processNormalizedFacebookEvent(
     }
     if (automation.definition.version !== 1) continue;
     const definition = automation.definition as FlowDefinitionV1;
-    if (!matchesFacebookTrigger(definition, event)) continue;
+    const triggerMatch = matchesFacebookTrigger(definition, event, automation.id);
+    if (!triggerMatch.matched) continue;
     if (winnerSelected) continue;
     winnerSelected = true;
 
@@ -498,7 +499,8 @@ export async function processNormalizedFacebookEvent(
         continue;
       }
       const vars = buildTemplateVars(event);
-      if (trigger?.match === "keyword") vars.keyword = findMatchedKeyword(event.text, trigger.keywords) ?? "";
+      // The keyword the trigger check matched, in the trigger's own mode.
+      if (trigger?.match === "keyword") vars.keyword = triggerMatch.keyword ?? "";
       const text = renderFacebookText(selectedReply, vars);
       const connection = pageConnection(mapping.page, options.tokenEncryptionKey);
       const delivery = await deliverPublicReply(repository, {
@@ -569,8 +571,9 @@ export async function processNormalizedFacebookEvent(
   return result;
 }
 
-function matchesFacebookTrigger(definition: FlowDefinitionV1, event: FacebookNormalizedEvent): boolean {
-  return matchesTrigger(definition, {
+/** The shared trigger check on a Facebook comment, with the keyword it matched for {keyword}. */
+function matchesFacebookTrigger(definition: FlowDefinitionV1, event: FacebookNormalizedEvent, automationId: string): TriggerMatch {
+  return evaluateTrigger(definition, {
     id: event.id,
     accountId: event.pageId,
     type: "comment.created",
@@ -579,7 +582,7 @@ function matchesFacebookTrigger(definition: FlowDefinitionV1, event: FacebookNor
     mediaId: event.postId,
     senderUsername: event.senderName,
     timestamp: event.timestamp,
-  });
+  }, { automationId });
 }
 
 async function reserveSlots(

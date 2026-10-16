@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { topicGuides, type SeoPage } from "@/src/content/seo";
 import { ButtonRoll } from "../../../button-roll";
 import { Icon } from "../../mock-ui";
@@ -44,7 +43,7 @@ export function NotesStatement({ page }: { page: SeoPage }) {
         <div className={styles.lead}>
           <p className={styles.tipBody}>{tipBody}</p>
           <div className={styles.leadAction}>
-            <Link className={shell.inkAction} href="/signup"><ButtonRoll label="Create your first reply" /></Link>
+            <a className={shell.inkAction} href="/signup"><ButtonRoll label="Create your first reply" /></a>
           </div>
         </div>
 

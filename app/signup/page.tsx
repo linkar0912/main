@@ -7,6 +7,7 @@ import { MarketingFooter } from "@/src/components/marketing/marketing-footer";
 import { OAuthButtons } from "@/src/components/auth/oauth-buttons";
 import { AuthLegalNotice } from "@/src/components/auth/legal-notice";
 import { SubmitButton } from "@/src/components/auth/submit-button";
+import { ClearOnboardingFlags } from "@/src/components/auth/clear-onboarding-flags";
 import { sanitizeInvite } from "@/src/lib/auth/auth-redirect";
 import { safeNextPath } from "@/src/lib/auth/session";
 import { describePlanIntent, parsePlanIntent, PLAN_INTENT_COOKIE, readPlanIntent } from "@/src/lib/billing/plan-intent";
@@ -46,6 +47,7 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
             : "";
         return (
             <div data-header-tone="light">
+                <ClearOnboardingFlags />
                 <MarketingHeader siteOrigin={publicSiteUrl} />
                 <main className="auth-page-section" data-auth-tone="editorial">
                     <div className="auth-page-frame">
@@ -99,6 +101,8 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
 
     return (
         <div data-header-tone="light">
+            {/* A new account on this tab must not inherit the last one's onboarding flags. */}
+            <ClearOnboardingFlags />
             <MarketingHeader siteOrigin={publicSiteUrl} />
             <main className="auth-page-section" data-auth-tone="editorial">
                 <div className="auth-page-frame">

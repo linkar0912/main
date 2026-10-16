@@ -2,10 +2,11 @@
 
 Date: 16 October 2026. Code reviewed at commit `e1d9184` (main, the version that is live). Meta's policy pages were read on 16 October 2026. No code was changed for this report.
 
-**Updated the same day, for two reasons.**
+**Updated the same day, for three reasons.**
 
 - Every claim was checked by independent verifiers, and the wrong or overstated ones were corrected. The appendix "Independent verification" lists every change.
 - Fixes for most of the gaps were written after the report, on branch `ban-risk-fixes` (commit `77e8262`). They are **not deployed yet**. Sections 3 and 4 say which gaps they close and what is still open. Until the next deploy, the "today" descriptions apply.
+- Checking those fixes found three more gaps, now fixed on branch `inspection-fixes` and also not deployed yet. See "Verification fixes" at the end of section 4.
 
 How to read this report:
 
@@ -335,6 +336,14 @@ Status of each change: **Fixed on the ban-risk-fixes branch, ships with the next
 14. **Per-workspace health monitoring in the admin panel.** Open. Track Meta block errors, window rejections and opt-out rates, so one bad workspace can be paused before it hurts the shared app. The new block pause records the data this needs.
 15. **Optional bot-disclosure line.** Open. [Known] Meta requires disclosure that a chat is automated where the law requires it, and recommends it as good practice.
 16. **Count manual inbox replies** against the account's DM budget. Open. This is the lowest priority.
+
+### Verification fixes
+
+Found while verifying the fixes above, and fixed on branch `inspection-fixes`. Not deployed yet.
+
+- **Pausing now stops parked comment DMs.** When the owner pauses an automation, or uses "pause all automations" in the owner console, a comment whose DM is waiting out an account cool-down, or is replayed, no longer gets its public reply or opening DM. The person's progress is left as it is and expires in the hourly sweep. Taps on the opt-in and "I followed" buttons after a pause still finish; whether they should stop too is waiting on an owner decision. Files: `src/lib/automation/campaign-runner.ts`, `src/lib/automation/runner.ts`.
+- **Instagram throttle codes are now retried on read calls.** 80002 and 80006 were recognised as throttling on sends, but a media lookup or follow check that got one failed the comment or the opt-in for good. The Instagram client now treats every code in `META_RATE_LIMIT_CODES` as retryable, so the two lists cannot drift apart, and a throttled read also counts toward the account's cool-down (F). Facebook Page calls do the same and keep 80001 retryable. Files: `src/lib/meta/client.ts`, `src/lib/facebook/client.ts`, `src/lib/automation/campaign-runner.ts`.
+- **The Redis fail-safe now covers a stalled Valkey.** The Redis connections for the account pause and the send limiter now give up on a command after a deadline. So the in-process fallback in H also runs when Valkey accepts connections but stops answering, not only when it is down. Files: `src/lib/automation/account-pause.ts`, `src/lib/automation/send-rate-limiter.ts`.
 
 ### Customer guidance (no code needed)
 

@@ -5,7 +5,8 @@ import { buildOnboardingPlan } from "@/src/lib/onboarding/build-plan";
 import type { OnboardingView } from "@/src/lib/onboarding/view";
 import { onboardingKnownNotRequired, readOnboardingDeferral } from "@/src/lib/onboarding/redirect";
 import type { OnboardingClient, OnboardingSave } from "./onboarding-client";
-import { createSaveQueue, OnboardingFlow, SAVE_MAX_ATTEMPTS } from "./onboarding-flow";
+import { createSaveQueue, OnboardingFlow, prefillName, SAVE_MAX_ATTEMPTS } from "./onboarding-flow";
+import { NAME_MAX } from "@/src/lib/onboarding/answers";
 
 function ownerView(patch: Partial<OnboardingView> = {}): OnboardingView {
   return {
@@ -306,6 +307,87 @@ describe("OnboardingFlow when a save fails", () => {
   });
 });
 
+describe("OnboardingFlow with a long name from the email", () => {
+  // 45 characters: more than the server's NAME_MAX (40).
+  const longName = "Priya".repeat(9);
+
+  beforeEach(() => window.sessionStorage.clear());
+  afterEach(() => window.sessionStorage.clear());
+
+  /** A client whose saves the server refuses, as PUT /api/onboarding does, when a name is too long. */
+  function strictClient(view: OnboardingView) {
+    return {
+      ...fakeClient(view),
+      save: vi.fn(async (body: OnboardingSave) => {
+        const name = (body.answers as { name?: string } | undefined)?.name;
+        if (name !== undefined && name.length > NAME_MAX) throw Object.assign(new Error("Invalid onboarding answers"), { status: 400 });
+        return view;
+      }),
+    } satisfies OnboardingClient;
+  }
+
+  it("prefills it cut to what the server accepts, so the step save and Skip both go through", async () => {
+    const view = ownerView({ suggestedName: longName });
+    const client = strictClient(view);
+    render(<OnboardingFlow view={view} client={client} />);
+    const name = screen.getByLabelText("What should we call you?") as HTMLInputElement;
+    expect(name.value).toHaveLength(NAME_MAX);
+
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByRole("heading", { level: 1, name: /What best describes you/ });
+    await waitFor(() => expect(client.save).toHaveBeenCalledWith({ step: 2, answers: { name: longName.slice(0, NAME_MAX) } }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Skip for now" }));
+    await waitFor(() => expect(client.navigate).toHaveBeenCalledWith("/dashboard"));
+    expect(client.save).toHaveBeenLastCalledWith({ action: "skip" });
+    await expect(client.save.mock.results.at(-1)?.value).resolves.toBe(view);
+    expect(onboardingKnownNotRequired()).toBe(true);
+    expect(readOnboardingDeferral()).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("lets an invited member finish", async () => {
+    const view: OnboardingView = { ...ownerView(), flow: "member", suggestedName: longName, canConnect: false };
+    const client = strictClient(view);
+    render(<OnboardingFlow view={view} client={client} />);
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(await screen.findByRole("button", { name: /Reply in the inbox/ }));
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Finish" })); });
+    expect(await screen.findByRole("heading", { level: 1, name: /You’re in/ })).toBeTruthy();
+    expect(client.save).toHaveBeenLastCalledWith({ answers: { focus: "inbox" }, action: "complete" });
+    for (const result of client.save.mock.results) await expect(result.value).resolves.toBe(view);
+    expect(onboardingKnownNotRequired()).toBe(true);
+  });
+
+  it("still skips after the server refused an answer, instead of sending it again with the skip", async () => {
+    const view = ownerView();
+    const client = fakeClient(view);
+    client.save.mockRejectedValueOnce(Object.assign(new Error("Invalid onboarding answers"), { status: 400 }));
+    render(<OnboardingFlow view={view} client={client} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    expect((await screen.findByRole("alert")).textContent).toContain("Your answers didn’t save.");
+    fireEvent.click(screen.getByRole("button", { name: "Skip for now" }));
+    await waitFor(() => expect(client.navigate).toHaveBeenCalledWith("/dashboard"));
+    expect(client.save).toHaveBeenCalledTimes(2);
+    expect(client.save).toHaveBeenLastCalledWith({ action: "skip" });
+    expect(onboardingKnownNotRequired()).toBe(true);
+    expect(readOnboardingDeferral()).toBeNull();
+  });
+
+  it("cuts names by what the server counts, after the same whitespace clean-up", () => {
+    expect(prefillName("Priya")).toBe("Priya");
+    expect(prefillName(longName)).toBe(longName.slice(0, NAME_MAX));
+    expect(prefillName(`  ${"a ".repeat(30)}`)).toHaveLength(NAME_MAX - 1);
+    // An emoji is never split in half.
+    const emoji = prefillName(`${"a".repeat(NAME_MAX - 1)}😀`);
+    expect(emoji).toBe("a".repeat(NAME_MAX - 1));
+    expect(prefillName("   ")).toBeUndefined();
+    expect(prefillName(null)).toBeUndefined();
+    expect(prefillName(undefined)).toBeUndefined();
+  });
+});
+
 describe("createSaveQueue", () => {
   function deferred() {
     let resolve!: (value: OnboardingView) => void;
@@ -370,6 +452,49 @@ describe("createSaveQueue", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("drops the answers of a refused save, so later saves, Skip and Finish are not refused with them", async () => {
+    const save = vi.fn<(body: OnboardingSave) => Promise<OnboardingView>>()
+      .mockRejectedValueOnce(Object.assign(new Error("Invalid onboarding answers"), { status: 400 }))
+      .mockResolvedValue(ownerView());
+    const onFailing = vi.fn();
+    const queue = createSaveQueue({ save, onSaved: () => undefined, onFailing, retryDelay: () => 0 });
+
+    await expect(queue.enqueue({ step: 2, answers: { name: "x".repeat(45) } }, { retry: true })).resolves.toBe(false);
+    expect(onFailing).toHaveBeenLastCalledWith(true);
+    await expect(queue.enqueue({ step: 3, answers: { accountType: "brand" } }, { retry: true })).resolves.toBe(true);
+    expect(save).toHaveBeenLastCalledWith({ step: 3, answers: { accountType: "brand" } });
+    await expect(queue.enqueue({ action: "skip" })).resolves.toBe(true);
+    expect(save).toHaveBeenLastCalledWith({ action: "skip" });
+    await expect(queue.enqueue({ action: "complete" })).resolves.toBe(true);
+    expect(save).toHaveBeenLastCalledWith({ action: "complete" });
+    expect(save).toHaveBeenCalledTimes(4);
+    expect(onFailing).toHaveBeenLastCalledWith(false);
+  });
+
+  it("keeps an answer changed while the refused save was out, and every answer after a sign-out", async () => {
+    let refuse!: (error: Error) => void;
+    const save = vi.fn<(body: OnboardingSave) => Promise<OnboardingView>>()
+      .mockImplementationOnce(() => new Promise<OnboardingView>((_resolve, reject) => { refuse = reject; }))
+      .mockResolvedValue(ownerView());
+    const queue = createSaveQueue({ save, onSaved: () => undefined, onFailing: () => undefined, retryDelay: () => 0 });
+    const first = queue.enqueue({ step: 2, answers: { name: "x".repeat(45) } });
+    await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    // They fixed the name before the refusal came back.
+    const second = queue.enqueue({ step: 2, answers: { name: "Priya" } });
+    refuse(Object.assign(new Error("Invalid onboarding answers"), { status: 400 }));
+    await expect(first).resolves.toBe(false);
+    await expect(second).resolves.toBe(true);
+    expect(save).toHaveBeenLastCalledWith({ step: 2, answers: { name: "Priya" } });
+
+    const signedOut = vi.fn<(body: OnboardingSave) => Promise<OnboardingView>>()
+      .mockRejectedValueOnce(Object.assign(new Error("Unauthorized"), { status: 401 }))
+      .mockResolvedValue(ownerView());
+    const afterSignOut = createSaveQueue({ save: signedOut, onSaved: () => undefined, onFailing: () => undefined });
+    await expect(afterSignOut.enqueue({ step: 2, answers: { name: "Priya" } })).resolves.toBe(false);
+    await expect(afterSignOut.enqueue({ action: "skip" })).resolves.toBe(true);
+    expect(signedOut).toHaveBeenLastCalledWith({ action: "skip", answers: { name: "Priya" } });
   });
 
   it("still resends after a timeout or a rate limit", async () => {

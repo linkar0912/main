@@ -123,6 +123,25 @@ export function onboardingKnownNotRequired(): boolean {
   }
 }
 
+/**
+ * Drops this tab's onboarding flags: the deferral, the "not required" flag
+ * and whose they were. For sign-out and the sign-in and sign-up pages, so
+ * the next account on this tab starts clean. Never call it just because no
+ * identity is recorded yet: that would undo a deferral the onboarding page
+ * set before the shell ever saw an email, and bring back the bounce.
+ */
+export function clearOnboardingTabFlags(): void {
+  try {
+    const storage = tabStorage();
+    if (!storage) return;
+    storage.removeItem(ONBOARDING_DEFERRED_KEY);
+    storage.removeItem(ONBOARDING_NOT_REQUIRED_KEY);
+    storage.removeItem(ONBOARDING_IDENTITY_KEY);
+  } catch {
+    // Storage blocked: there are no flags to clear.
+  }
+}
+
 /** FNV-1a: enough to tell two accounts apart without storing the email. */
 function identityHash(identity: string): string {
   let hash = 0x811c9dc5;

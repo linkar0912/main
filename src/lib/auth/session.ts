@@ -1,4 +1,9 @@
-import { createSupabaseServerClient } from "@/src/lib/supabase/server";
+import { cookies } from "next/headers";
+import { createServerClient, type SetAllCookies } from "@supabase/ssr";
+import { isAuthApiError, isAuthRetryableFetchError } from "@supabase/supabase-js";
+import { supabaseAuthCookieOptions } from "@/src/lib/auth/cookie-domain";
+import { getServerEnv } from "@/src/lib/env";
+import { SessionCheckDeadlineError, createSessionCheck } from "@/src/lib/supabase/session-check";
 import { getRepository } from "../repository-provider";
 import { cache } from "react";
 import type { AutomationRepository } from "../repository";
@@ -63,6 +68,75 @@ export async function assertApplicationAccess(
   return { workspaceId, email: memberEmail.toLowerCase() };
 }
 
+type SessionClaims = NonNullable<
+  Awaited<ReturnType<ReturnType<typeof createServerClient>["auth"]["getClaims"]>>["data"]
+>["claims"];
+
+type CookiesToSet = Parameters<SetAllCookies>[0];
+
+/** authUnavailable: Supabase Auth could not answer, so "no session" may be wrong. */
+type ClaimsCheck = { claims: SessionClaims; authUnavailable: false } | { claims: null; authUnavailable: boolean };
+
+/**
+ * The verified claims of the request's Supabase session, or null claims when
+ * there is no usable session. getClaims() could wait out auth-js's
+ * token-refresh retries (about 25 s) while Supabase Auth is failing, so the
+ * client uses the session check's fetch: the check gives up after two 5xx
+ * answers in a row to a refresh, or after 10 s, and either way aborts every
+ * later attempt, so a refresh cannot rotate the token after the route has
+ * answered. A check that cannot finish is treated like a retryable error from
+ * getClaims() always was: no session, so routes answer 401.
+ *
+ * Cookie writes wait until the check settles. Supabase's rate limit on token
+ * refreshes counts this server's address, which every signed-in user shares,
+ * so a 429 says nothing about this session; auth-js still removes the session
+ * on it, and its cookie deletions (empty values) are dropped so the person is
+ * not signed out. Cookies with a value, such as a rotated session, are kept.
+ */
+async function checkSessionClaims(): Promise<ClaimsCheck> {
+  const env = getServerEnv();
+  const cookieStore = await cookies();
+  const writeCookies = (cookiesToSet: CookiesToSet) => {
+    try {
+      for (const { name, value, options } of cookiesToSet) cookieStore.set(name, value, options);
+    } catch {
+      // Called during a Server Component render, where the cookie store is
+      // read-only; proxy.ts refreshes the session for that path instead.
+    }
+  };
+  const pending: CookiesToSet = [];
+  let settled = false;
+  const sessionCheck = createSessionCheck();
+  const supabase = createServerClient(env.supabaseUrl, env.supabasePublishableKey, {
+    cookieOptions: supabaseAuthCookieOptions(env),
+    global: { fetch: sessionCheck.fetch },
+    cookies: {
+      getAll: () => cookieStore.getAll(),
+      setAll: (cookiesToSet) => {
+        if (settled) writeCookies(cookiesToSet);
+        else pending.push(...cookiesToSet);
+      },
+    },
+  });
+
+  let check: ClaimsCheck;
+  let rateLimited = false;
+  try {
+    const { data, error } = await sessionCheck.run(supabase.auth.getClaims());
+    rateLimited = Boolean(error && isAuthApiError(error) && error.status === 429);
+    if (error && (rateLimited || isAuthRetryableFetchError(error))) check = { claims: null, authUnavailable: true };
+    else if (error || !data?.claims?.sub || !data.claims.email) check = { claims: null, authUnavailable: false };
+    else check = { claims: data.claims, authUnavailable: false };
+  } catch (error) {
+    if (!(error instanceof SessionCheckDeadlineError || isAuthRetryableFetchError(error))) throw error;
+    check = { claims: null, authUnavailable: true };
+  } finally {
+    settled = true;
+    writeCookies(rateLimited ? pending.filter((cookie) => cookie.value) : pending);
+  }
+  return check;
+}
+
 /**
  * Verifies the Supabase session cookie and resolves it to this app's
  * {userId, workspaceId} shape. getClaims() verifies the JWT locally against
@@ -76,31 +150,36 @@ export async function assertApplicationAccess(
  * are typed (`(request: Request, context) => …`) and so a future change to
  * pull additional context (IP-bound rate limiting, request-scoped caches,
  * etc.) doesn't need to update every call site. It is intentionally unused
- * today - cookie reads happen via createSupabaseServerClient() which calls
- * next/headers cookies() itself.
+ * today - cookie reads happen via next/headers cookies() in
+ * checkSessionClaims().
  */
 export async function getValidatedSession(
   _request: Request,
   options: GetValidatedSessionOptions = {},
 ): Promise<AppSession | null> {
-  const supabase = await createSupabaseServerClient();
-  const { data, error } = await supabase.auth.getClaims();
-  if (error || !data?.claims?.sub || !data.claims.email) return null;
+  const { claims } = await checkSessionClaims();
+  if (!claims) return null;
 
-  const userId = String(data.claims.sub);
-  const email = String(data.claims.email);
-  const issuedAt = typeof data.claims.iat === "number" ? data.claims.iat : null;
+  const userId = String(claims.sub);
+  const email = String(claims.email);
+  const issuedAt = typeof claims.iat === "number" ? claims.iat : null;
   const access = await assertApplicationAccess(userId, email, issuedAt);
   if (!access) return null;
 
   const session = { userId, email: access.email, workspaceId: access.workspaceId };
   const allowed = await (options.validateApplicationSession?.({
     ...session,
-    claims: data.claims as Record<string, unknown>,
+    claims: claims as Record<string, unknown>,
   }) ?? true);
 
   return allowed ? session : null;
 }
+
+export type RequestSessionCheck = {
+  session: AppSession | null;
+  /** Supabase Auth could not answer (a 5xx, a 429, no answer in time), so a null session may be wrong. */
+  authUnavailable: boolean;
+};
 
 /**
  * Request-scoped session resolution for Server Components (pages, layouts).
@@ -112,20 +191,29 @@ export async function getValidatedSession(
  * React render pass and offers no dedupe guarantees outside one, and the
  * options hook (validateApplicationSession) is a route-handler concern.
  */
-const resolveRequestSession = cache(async (): Promise<AppSession | null> => {
-  const supabase = await createSupabaseServerClient();
-  const { data, error } = await supabase.auth.getClaims();
-  if (error || !data?.claims?.sub || !data.claims.email) return null;
+const resolveRequestSession = cache(async (): Promise<RequestSessionCheck> => {
+  const { claims, authUnavailable } = await checkSessionClaims();
+  if (!claims) return { session: null, authUnavailable };
 
-  const userId = String(data.claims.sub);
-  const email = String(data.claims.email);
-  const issuedAt = typeof data.claims.iat === "number" ? data.claims.iat : null;
-  return assertApplicationAccess(userId, email, issuedAt).then((access) =>
-    access ? { userId, email: access.email, workspaceId: access.workspaceId } : null,
-  );
+  const userId = String(claims.sub);
+  const email = String(claims.email);
+  const issuedAt = typeof claims.iat === "number" ? claims.iat : null;
+  const access = await assertApplicationAccess(userId, email, issuedAt);
+  return {
+    session: access ? { userId, email: access.email, workspaceId: access.workspaceId } : null,
+    authUnavailable: false,
+  };
 });
 
-export function getRequestSession(): Promise<AppSession | null> {
+export async function getRequestSession(): Promise<AppSession | null> {
+  return (await resolveRequestSession()).session;
+}
+
+/**
+ * getRequestSession, plus whether Supabase Auth could not answer. For the
+ * sign-in page, which tells the person that signing in may not work yet.
+ */
+export function checkRequestSession(): Promise<RequestSessionCheck> {
   return resolveRequestSession();
 }
 

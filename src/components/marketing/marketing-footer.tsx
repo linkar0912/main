@@ -137,12 +137,15 @@ export function MarketingFooter({ compact = false, siteOrigin }: MarketingFooter
                 <ul>
                   {column.links.map(([label, href]) => (
                     <li key={label}>
-                      {/* App-bound links are cross-host from the marketing site,
-                          where the prefetch would follow a 307 to the app origin
-                          and trip CSP's connect-src 'self'. */}
-                      <Link href={marketingHref(href, siteOrigin)} prefetch={isMarketingPath(href) ? undefined : false}>
-                        {label}
-                      </Link>
+                      {/* App-bound links (/signup, /login) are cross-host from the
+                          marketing site, where a next/link prefetch or fetch would
+                          follow a 307 to the app origin and trip CSP's
+                          connect-src 'self', so they are plain links. */}
+                      {isMarketingPath(href) ? (
+                        <Link href={marketingHref(href, siteOrigin)}>{label}</Link>
+                      ) : (
+                        <a href={href}>{label}</a>
+                      )}
                     </li>
                   ))}
                 </ul>

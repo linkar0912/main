@@ -11,7 +11,7 @@ export function StepsActions({ page, className }: { page: SeoPage; className?: s
   const { recipeHref } = stepsHeader(page);
   return (
     <div className={[shell.actions, className].filter(Boolean).join(" ")}>
-      <Link className={shell.primaryAction} href="/signup"><ButtonRoll label="Create your first reply" /></Link>
+      <a className={shell.primaryAction} href="/signup"><ButtonRoll label="Create your first reply" /></a>
       {recipeHref ? (
         <a className={shell.outlineAction} href={recipeHref} download>
           <span className={styles.download}><Icon name="download" size={18} />Download this recipe</span>

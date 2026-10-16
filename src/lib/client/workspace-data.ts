@@ -171,17 +171,26 @@ function wrappedData<T>(url: string): (payload: unknown) => T {
   };
 }
 
+/**
+ * Sends one request for a cache entry. Only the entry's current request
+ * writes to it: once an invalidation has started a newer one (or reset the
+ * entry), an older answer arriving late, worked or failed, still settles for
+ * its own caller but never overwrites the newer value or clears the newer
+ * request.
+ */
 function startRequest<T>(cache: ClientCache<T>, url: string, select: (payload: unknown) => T): Promise<T> {
   cache.attemptedAt = Date.now();
-  const pending = requestJson(url, select)
+  const pending: Promise<T> = requestJson(url, select)
     .then((value) => {
-      cache.value = value;
-      cache.fetchedAt = Date.now();
-      cache.pending = undefined;
+      if (cache.pending === pending) {
+        cache.value = value;
+        cache.fetchedAt = Date.now();
+        cache.pending = undefined;
+      }
       return value;
     })
     .catch((error: unknown) => {
-      cache.pending = undefined;
+      if (cache.pending === pending) cache.pending = undefined;
       throw error;
     });
   cache.pending = pending;

@@ -1,7 +1,7 @@
-import { beforeEach, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
-const mocks = vi.hoisted(() => ({ workspace: vi.fn(), broadcast: vi.fn(), broadcastUpdate: vi.fn(), delivery: vi.fn(), deliveries: vi.fn(), deliveryUpdate: vi.fn(), webhook: vi.fn(), webhookUpdate: vi.fn(), broadcastQueue: vi.fn(), leadQueue: vi.fn(), webhookQueue: vi.fn(), automation: vi.fn(), automationFindFirst: vi.fn(), automationUpdate: vi.fn(), versionAggregate: vi.fn(), versionCreate: vi.fn(), deliveryReserve: vi.fn(), transaction: vi.fn() }));
-const client = { automation: { findUnique: mocks.automation, findFirst: mocks.automationFindFirst, updateMany: mocks.automationUpdate }, automationVersion: { aggregate: mocks.versionAggregate, create: mocks.versionCreate }, workspace: { findUnique: mocks.workspace }, broadcast: { findUnique: mocks.broadcast, updateMany: mocks.broadcastUpdate }, outboundDelivery: { findUnique: mocks.delivery, findMany: mocks.deliveries, updateMany: mocks.deliveryUpdate, updateManyAndReturn: mocks.deliveryReserve }, webhookEvent: { findUnique: mocks.webhook, updateMany: mocks.webhookUpdate } };
+const mocks = vi.hoisted(() => ({ workspace: vi.fn(), broadcast: vi.fn(), broadcastUpdate: vi.fn(), delivery: vi.fn(), deliveries: vi.fn(), deliveryUpdate: vi.fn(), webhook: vi.fn(), webhookUpdate: vi.fn(), broadcastQueue: vi.fn(), leadQueue: vi.fn(), webhookQueue: vi.fn(), automation: vi.fn(), automationFindFirst: vi.fn(), automationUpdate: vi.fn(), versionAggregate: vi.fn(), versionCreate: vi.fn(), versionFind: vi.fn(), deliveryReserve: vi.fn(), transaction: vi.fn() }));
+const client = { automation: { findUnique: mocks.automation, findFirst: mocks.automationFindFirst, updateMany: mocks.automationUpdate }, automationVersion: { aggregate: mocks.versionAggregate, create: mocks.versionCreate, findUnique: mocks.versionFind }, workspace: { findUnique: mocks.workspace }, broadcast: { findUnique: mocks.broadcast, updateMany: mocks.broadcastUpdate }, outboundDelivery: { findUnique: mocks.delivery, findMany: mocks.deliveries, updateMany: mocks.deliveryUpdate, updateManyAndReturn: mocks.deliveryReserve }, webhookEvent: { findUnique: mocks.webhook, updateMany: mocks.webhookUpdate } };
 vi.mock("@/src/lib/env", () => ({ getServerEnv: () => ({ platformOwnerUserIds: [] }) }));
 vi.mock("@/src/lib/prisma", () => ({ prisma: { ...client, $transaction: mocks.transaction } }));
 vi.mock("@/src/lib/queue", () => ({ enqueueBroadcastSends: mocks.broadcastQueue, enqueueLeadDelivery: mocks.leadQueue, enqueueWebhookEvents: mocks.webhookQueue, enqueueFacebookEvents: vi.fn() }));
@@ -119,4 +119,39 @@ it("still renames a paused automation holding a short link, and refuses a new de
   await expect(executeAdminOperation("automation", "a2", { action: "update", version: 5, input: { definition: shortLinkAutomation.definition } }, "owner"))
     .rejects.toMatchObject({ status: 422, code: "invalid_definition", publicMessage: expect.stringContaining("bit.ly") });
   expect(mocks.automationUpdate).not.toHaveBeenCalled();
+});
+
+describe("restoring a saved version from the owner console", () => {
+  const current = { ...shortLinkAutomation, id: "a3", version: 3, definition: { version: 1, trigger: { type: "comment", match: "keyword", keywords: ["hi"], mediaIds: [] }, conditions: [], actions: [{ type: "private_reply", text: "hello" }] } };
+  const snapshot = (definition: unknown) => ({ automationId: "a3", version: 2, provider: "INSTAGRAM", name: "Leads", definition, status: "ACTIVE", priority: 0, activatedAt: new Date(0), boundMediaId: null, instagramAccountId: "ig", facebookPageId: null });
+  const restore = () => executeAdminOperation("automation", "a3", { action: "restore_version", version: 3, input: { versionNumber: 2 } }, "owner");
+
+  beforeEach(() => {
+    mocks.automation.mockResolvedValue(current);
+    mocks.automationFindFirst.mockResolvedValue(current);
+    mocks.automationUpdate.mockResolvedValue({ count: 1 });
+    mocks.versionAggregate.mockResolvedValue({ _max: { version: 4 } });
+    mocks.versionCreate.mockResolvedValue({});
+  });
+
+  const refused: Array<[string, unknown, RegExp]> = [
+    ["a regex keyword with a lookbehind", { version: 1, trigger: { type: "comment", match: "keyword", mode: "regex", keywords: ["(?<!not )interested"], mediaIds: [] }, conditions: [], actions: [{ type: "private_reply", text: "hello" }] }, /^trigger keywords 1: This pattern uses a lookaround/],
+    ["a bit.ly button link", shortLinkAutomation.definition, /^actions 1 url: Short links from bit\.ly are not allowed/],
+  ];
+  it.each(refused)("refuses an ACTIVE snapshot holding %s with a 422 and writes nothing", async (_label, definition, message) => {
+    mocks.versionFind.mockResolvedValue(snapshot(definition));
+    const failure = await restore().catch((error: unknown) => error);
+    expect(failure).toMatchObject({ status: 422, code: "invalid_definition" });
+    expect((failure as { publicMessage?: string }).publicMessage).toMatch(message);
+    expect(mocks.transaction).not.toHaveBeenCalled();
+    expect(mocks.versionCreate).not.toHaveBeenCalled();
+    expect(mocks.automationUpdate).not.toHaveBeenCalled();
+  });
+
+  it("still restores a snapshot that passes today's checks", async () => {
+    const definition = { version: 1, trigger: { type: "comment", match: "keyword", mode: "regex", keywords: ["interested"], mediaIds: [] }, conditions: [], actions: [{ type: "private_reply", text: "hello" }] };
+    mocks.versionFind.mockResolvedValue(snapshot(definition));
+    await expect(restore()).resolves.toMatchObject({ version: 4 });
+    expect(mocks.automationUpdate.mock.calls[0][0].data).toMatchObject({ status: "ACTIVE", definition });
+  });
 });

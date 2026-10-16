@@ -148,6 +148,58 @@ function adoptEditUrl(id: string) {
   window.history.replaceState(window.history.state, "", `/automations/${encodeURIComponent(id)}/edit`);
 }
 
+function newCreateKey(): string {
+  return typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID()
+    : `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+}
+
+type SavedAutomation = { id?: string };
+
+/** A saved-snapshot value no form state serializes to (snapshots are JSON objects). */
+const SERVER_HOLDS_EARLIER_TRY = "";
+
+async function sendAutomation(
+  url: string,
+  method: "POST" | "PATCH",
+  body: string,
+  idempotencyKey?: string,
+): Promise<{ data: SavedAutomation; replayed: boolean }> {
+  const response = await fetch(url, {
+    method,
+    headers: {
+      "content-type": "application/json",
+      ...(idempotencyKey ? { "idempotency-key": idempotencyKey } : {}),
+    },
+    body,
+  });
+  const payload = (await response.json().catch(() => ({}))) as { data?: SavedAutomation; replayed?: boolean; error?: string };
+  if (!response.ok || !payload.data) throw new Error(payload.error ?? "Could not save this automation");
+  return { data: payload.data, replayed: payload.replayed === true };
+}
+
+/**
+ * One save from either builder. A known automation is PATCHed. A new one is
+ * POSTed under the builder's create key, so a retry after a failed or lost
+ * answer cannot make a second automation. When the server says an earlier
+ * try already made it, `adopt` takes its id and the current body is PATCHed
+ * onto it straight away: the form may have changed since that try, and the
+ * caller only marks the builder saved once the server holds this content.
+ */
+async function writeAutomation(
+  savedAutomationId: string | undefined,
+  createKey: () => string,
+  body: unknown,
+  adopt: (id: string) => void,
+): Promise<SavedAutomation> {
+  const json = JSON.stringify(body);
+  if (savedAutomationId) return (await sendAutomation(`/api/automations/${savedAutomationId}`, "PATCH", json)).data;
+  const created = await sendAutomation("/api/automations", "POST", json, createKey());
+  if (!created.replayed || !created.data.id) return created.data;
+  adopt(created.data.id);
+  return (await sendAutomation(`/api/automations/${created.data.id}`, "PATCH", json)).data;
+}
+
 const QUICK_REPLY_LABEL_MAX_LENGTH = 20;
 const MAX_PUBLIC_REPLIES = 5;
 
@@ -402,6 +454,9 @@ function AutomationBuilderV1({
   const [instagramAccountId, setInstagramAccountId] = useState(initialInstagramAccountId);
   // Every save after the first PATCHes this id; without it each click POSTed a duplicate.
   const [savedAutomationId, setSavedAutomationId] = useState(automationId);
+  // Sent with every create until the server returns an id, so a retried
+  // first save finds the automation an earlier try made.
+  const createKeyRef = useRef<string | null>(null);
   const [channel, setChannel] = useState<"INSTAGRAM" | "FACEBOOK">(
     initialFacebookPageId ? "FACEBOOK" : "INSTAGRAM",
   );
@@ -908,19 +963,24 @@ function AutomationBuilderV1({
         body.facebookPageId = null;
       }
       const snapshot = dirtySnapshot();
-      const response = await fetch(savedAutomationId ? `/api/automations/${savedAutomationId}` : "/api/automations", {
-        method: savedAutomationId ? "PATCH" : "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const payload = (await response.json().catch(() => ({}))) as { data?: { id?: string }; error?: string };
-      if (!response.ok || !payload.data) throw new Error(payload.error ?? "Could not save this automation");
-      if (payload.data.id) {
-        if (!savedAutomationId) adoptEditUrl(payload.data.id);
-        setSavedAutomationId(payload.data.id);
+      const saved = await writeAutomation(
+        savedAutomationId,
+        () => (createKeyRef.current ??= newCreateKey()),
+        body,
+        (id) => {
+          adoptEditUrl(id);
+          setSavedAutomationId(id);
+          // The server holds an earlier try's content until the PATCH lands:
+          // matches no snapshot, so the builder reads unsaved until then.
+          setSavedSnapshot(SERVER_HOLDS_EARLIER_TRY);
+        },
+      );
+      if (saved.id) {
+        if (!savedAutomationId) adoptEditUrl(saved.id);
+        setSavedAutomationId(saved.id);
       }
       setSavedSnapshot(snapshot);
-      onSaved?.(payload.data);
+      onSaved?.(saved);
       setSavedIntent(intent);
     } catch (caught) {
       errors.fail(toReadableApiError(caught instanceof Error ? caught.message : caught, "Could not save this automation"));
@@ -1795,6 +1855,8 @@ function AutomationBuilderV2({
   const [name, setName] = useState(initialName);
   const [instagramAccountId, setInstagramAccountId] = useState(initialInstagramAccountId);
   const [savedAutomationId, setSavedAutomationId] = useState(automationId);
+  // Sent with every create until the server returns an id (see the classic builder).
+  const createKeyRef = useRef<string | null>(null);
   const [source, setSource] = useState<MediaSource>(initialDefinition.trigger.source);
   const [mediaIds, setMediaIds] = useState<string[]>(
     [...new Set([...initialDefinition.trigger.mediaIds, ...initialMediaIds])],
@@ -2007,25 +2069,32 @@ function AutomationBuilderV2({
     try {
       const parsedPriority = Number.parseInt(priority, 10);
       const snapshot = dirtySnapshot();
-      const response = await fetch(savedAutomationId ? `/api/automations/${savedAutomationId}` : "/api/automations", {
-        method: savedAutomationId ? "PATCH" : "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
+      const saved = await writeAutomation(
+        savedAutomationId,
+        () => (createKeyRef.current ??= newCreateKey()),
+        {
           provider: "INSTAGRAM",
           name,
           status: intent === "activate" ? "ACTIVE" : "DRAFT",
           definition: buildDefinition(),
           priority: Number.isFinite(parsedPriority) ? parsedPriority : 0,
           instagramAccountId: selectedInstagramAccountId || null,
-        }),
-      });
-      const payload = (await response.json().catch(() => ({}))) as { data?: { id: string }; error?: string };
-      if (!response.ok || !payload.data) throw new Error(payload.error ?? "Could not save this automation");
-      if (!savedAutomationId) adoptEditUrl(payload.data.id);
-      setSavedAutomationId(payload.data.id);
+        },
+        (id) => {
+          adoptEditUrl(id);
+          setSavedAutomationId(id);
+          // The server holds an earlier try's content until the PATCH lands:
+          // matches no snapshot, so the builder reads unsaved until then.
+          setSavedSnapshot(SERVER_HOLDS_EARLIER_TRY);
+        },
+      );
+      if (saved.id) {
+        if (!savedAutomationId) adoptEditUrl(saved.id);
+        setSavedAutomationId(saved.id);
+      }
       setSavedSnapshot(snapshot);
 
-      onSaved?.(payload.data);
+      onSaved?.(saved);
       setSavedIntent(intent);
     } catch (caught) {
       errors.fail(toReadableApiError(caught instanceof Error ? caught.message : caught, "Could not save this automation"));

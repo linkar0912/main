@@ -78,11 +78,18 @@ type FacebookClientOptions = {
   appSecret?: string;
 };
 
-const TRANSIENT_FACEBOOK_CODES = new Set([1, 2, 4, 17, 32, 341, 613, PAGE_RATE_LIMIT_CODE]);
+/**
+ * Graph codes for a temporary failure, plus the Pages rate limit (80001).
+ * The shared throttling codes come from META_RATE_LIMIT_CODES through
+ * isMetaRateLimit, as in the Instagram client, so the lists cannot drift apart.
+ */
+const TRANSIENT_FACEBOOK_CODES = new Set([1, 2, 341, PAGE_RATE_LIMIT_CODE]);
 
 function isTransientFacebookError(error: Record<string, unknown>, status: number): boolean {
+  const code = typeof error.code === "number" ? error.code : undefined;
   return status === 429 || status >= 500 || error.is_transient === true ||
-    (typeof error.code === "number" && TRANSIENT_FACEBOOK_CODES.has(error.code));
+    (code !== undefined && TRANSIENT_FACEBOOK_CODES.has(code)) ||
+    isMetaRateLimit({ status, code });
 }
 
 /**

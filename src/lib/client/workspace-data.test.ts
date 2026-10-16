@@ -333,6 +333,89 @@ describe("workspace client data cache", () => {
     });
   });
 
+  describe("a superseded request answering late", () => {
+    /** Every bootstrap request waits until the test answers it, in any order. */
+    function stubAnswerable() {
+      const answers: Array<(plan: string | null) => void> = [];
+      const fetchMock = vi.fn(() => new Promise<Response>((resolve) => {
+        answers.push((plan) => resolve(plan === null
+          ? ({ ok: false, status: 502, json: async () => ({}) } as Response)
+          : ({ ok: true, json: async () => ({ data: { email: "owner@example.com", role: "OWNER", plan } }) } as Response)));
+      }));
+      vi.stubGlobal("fetch", fetchMock);
+      return { fetchMock, answer: (index: number, plan: string | null) => answers[index](plan) };
+    }
+
+    it("never overwrites the newer answer: the cache and peek keep pro when the older request answers free last", async () => {
+      const { fetchMock, answer } = stubAnswerable();
+      // R1: the shell's first read, still out when billing changes.
+      const first = getWorkspaceBootstrap();
+      // The upgrade invalidates the bootstrap and the shell refetches: R2.
+      const second = refreshWorkspaceBootstrap();
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+
+      answer(1, "pro");
+      expect((await second).plan).toBe("pro");
+      expect(peekWorkspaceBootstrap()?.plan).toBe("pro");
+
+      answer(0, "free");
+      // The old answer still settles for its own caller...
+      expect((await first).plan).toBe("free");
+      // ...but the cache, and whoever reads it next, keep the newer one.
+      expect(peekWorkspaceBootstrap()?.plan).toBe("pro");
+      expect((await getWorkspaceBootstrap()).plan).toBe("pro");
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    it("keeps sharing the newer request when the older one answers first", async () => {
+      const { fetchMock, answer } = stubAnswerable();
+      const first = getWorkspaceBootstrap();
+      const second = refreshWorkspaceBootstrap();
+
+      answer(0, "free");
+      expect((await first).plan).toBe("free");
+      // R2 is still the entry's request: nothing stale was cached meanwhile.
+      expect(peekWorkspaceBootstrap()).toBeUndefined();
+      const third = getWorkspaceBootstrap();
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+
+      answer(1, "pro");
+      expect((await second).plan).toBe("pro");
+      expect((await third).plan).toBe("pro");
+      expect(peekWorkspaceBootstrap()?.plan).toBe("pro");
+    });
+
+    it("does not clear the newer request when the older one fails late", async () => {
+      const { fetchMock, answer } = stubAnswerable();
+      const first = getWorkspaceBootstrap();
+      const second = refreshWorkspaceBootstrap();
+
+      answer(0, null);
+      await expect(first).rejects.toThrow();
+      // Still shared: a new reader waits on R2 instead of sending R3.
+      const third = getWorkspaceBootstrap();
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      answer(1, "pro");
+      expect((await third).plan).toBe("pro");
+      await second;
+    });
+
+    it("drops an answer to a request made before the cache was cleared", async () => {
+      const { fetchMock, answer } = stubAnswerable();
+      const first = getWorkspaceBootstrap();
+      clearWorkspaceDataCache();
+
+      answer(0, "free");
+      expect((await first).plan).toBe("free");
+      expect(peekWorkspaceBootstrap()).toBeUndefined();
+      // The next read asks again instead of serving the pre-clear answer.
+      const next = getWorkspaceBootstrap();
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      answer(1, "pro");
+      expect((await next).plan).toBe("pro");
+    });
+  });
+
   it("backs off by doubling with a little jitter, never past the cap", () => {
     const middle = () => 0.5;
     expect([1, 2, 3, 4, 5, 6].map((attempt) => backoffDelay(attempt, { baseMs: 2_000, capMs: 30_000, random: middle }))).toEqual([2_000, 4_000, 8_000, 16_000, 30_000, 30_000]);

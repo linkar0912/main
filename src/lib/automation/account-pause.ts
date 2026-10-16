@@ -98,9 +98,11 @@ function getPauseRedis(): Redis | undefined {
   const redisUrl = getServerEnv().redisUrl;
   if (!redisUrl) return undefined;
   if (!globalForAccountPause.linkarAccountPauseRedis) {
-    // Not a BullMQ worker connection: a command fails after one reconnect
-    // attempt instead of hanging the send while Redis is unreachable.
-    const redis = new Redis(redisUrl, { maxRetriesPerRequest: 1 });
+    // Not a BullMQ worker connection. A command fails after one reconnect
+    // attempt while Redis is unreachable, and after 1.5 s when Valkey accepts
+    // the connection but never answers (a stall), so the send falls back to
+    // this process's copy instead of hanging, the manual inbox reply included.
+    const redis = new Redis(redisUrl, { maxRetriesPerRequest: 1, connectTimeout: 3_000, commandTimeout: 1_500 });
     // Failures surface on each command and fall back to memory; the event is
     // handled so ioredis does not also print an unhandled-error warning.
     redis.on("error", () => undefined);

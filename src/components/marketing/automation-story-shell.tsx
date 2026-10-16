@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { StoryChapter } from "./marketing-content";
 import styles from "./automation-story.module.css";
@@ -149,7 +148,7 @@ export function AutomationStoryShell({ chapters, sceneSummaries, desktopScenes, 
               {mobileScenes[index]}
             </article>
           ))}
-          <Link className={styles.storyCta} href="/signup">Get started</Link>
+          <a className={styles.storyCta} href="/signup">Get started</a>
         </div>
 
         <div className={styles.stage} data-desktop-stage>

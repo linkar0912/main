@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { validateFlowDefinition } from "@/src/lib/automation/definition";
 import { getRepository } from "@/src/lib/repository-provider";
@@ -6,12 +7,36 @@ import { resolveInstagramAccountId } from "@/src/lib/automation/account-pin";
 import { resolveFacebookPageId } from "@/src/lib/automation/facebook-page-pin";
 import { isValidationError, toReadableValidationError } from "@/src/lib/validation-error";
 import { logger } from "@/src/lib/logger";
-import { getEntitlementService } from "@/src/lib/entitlements/service";
+import { EntitlementError, getEntitlementService } from "@/src/lib/entitlements/service";
 import { entitlementErrorResponse } from "@/src/lib/entitlements/http";
 import { parseAutomationTarget } from "@/src/lib/automation/channel-target";
 import { deriveAutomationSurface, validateDefinitionForTarget } from "@/src/lib/automation/channels/registry";
 
 export const runtime = "nodejs";
+
+// Same shape the inbox reply route accepts; a malformed key is ignored, as there.
+const IDEMPOTENCY_KEY_PATTERN = /^[a-zA-Z0-9_-]{1,100}$/;
+
+function readIdempotencyKey(request: Request): string | null {
+  const raw = request.headers.get("idempotency-key")?.trim();
+  return raw && IDEMPOTENCY_KEY_PATTERN.test(raw) ? raw : null;
+}
+
+/**
+ * The automation id a retried create resolves to: a UUID-shaped sha256 of
+ * the workspace and the builder's key, so a save whose answer was lost finds
+ * the automation it made instead of making a second one.
+ */
+function idempotentAutomationId(workspaceId: string, key: string): string {
+  const hex = createHash("sha256").update(`${workspaceId}:${key}`).digest("hex");
+  const variant = ((Number.parseInt(hex[16], 16) & 0x3) | 0x8).toString(16);
+  return `automation_${hex.slice(0, 8)}-${hex.slice(8, 12)}-8${hex.slice(13, 16)}-${variant}${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+}
+
+function isUniqueViolation(error: unknown): boolean {
+  const code = (error as { code?: unknown } | null)?.code;
+  return code === "P2002" || code === "23505";
+}
 
 export async function GET(request: Request) {
   const session = await getValidatedSession(request);
@@ -68,21 +93,50 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "That Facebook Page is not connected to this workspace" }, { status: 400 });
     }
     const repository = getRepository();
-    await getEntitlementService().assertEntitled(
-      session.workspaceId,
-      "automations",
-      (await repository.listAutomations(session.workspaceId)).length,
-    );
-    const automation = await repository.createAutomation(session.workspaceId, {
-      provider: target.provider,
-      name,
-      definition,
-      priority,
-      status,
-      ...(status === "ACTIVE" ? { activatedAt: new Date().toISOString() } : {}),
-      ...(instagramAccountId ? { instagramAccountId } : {}),
-      ...(facebookPageId ? { facebookPageId } : {}),
-    });
+    // Checked before the plan count: the first attempt's automation already
+    // counts, so a workspace at its limit would otherwise be refused its own retry.
+    const idempotencyKey = readIdempotencyKey(request);
+    const automationId = idempotencyKey ? idempotentAutomationId(session.workspaceId, idempotencyKey) : undefined;
+    if (automationId) {
+      const existing = await repository.getAutomation(session.workspaceId, automationId);
+      if (existing) return NextResponse.json({ data: existing, replayed: true }, { status: 200 });
+    }
+    try {
+      await getEntitlementService().assertEntitled(
+        session.workspaceId,
+        "automations",
+        (await repository.listAutomations(session.workspaceId)).length,
+      );
+    } catch (error) {
+      // A same-key attempt running alongside this one may have just filled
+      // the last slot with this very automation; that is a replay, not a limit.
+      if (automationId && error instanceof EntitlementError && error.code === "limit_reached") {
+        const existing = await repository.getAutomation(session.workspaceId, automationId);
+        if (existing) return NextResponse.json({ data: existing, replayed: true }, { status: 200 });
+      }
+      throw error;
+    }
+    let automation;
+    try {
+      automation = await repository.createAutomation(session.workspaceId, {
+        ...(automationId ? { id: automationId } : {}),
+        provider: target.provider,
+        name,
+        definition,
+        priority,
+        status,
+        ...(status === "ACTIVE" ? { activatedAt: new Date().toISOString() } : {}),
+        ...(instagramAccountId ? { instagramAccountId } : {}),
+        ...(facebookPageId ? { facebookPageId } : {}),
+      });
+    } catch (error) {
+      // Two attempts with the same key both got past the lookup; the other one won.
+      if (automationId && isUniqueViolation(error)) {
+        const existing = await repository.getAutomation(session.workspaceId, automationId);
+        if (existing) return NextResponse.json({ data: existing, replayed: true }, { status: 200 });
+      }
+      throw error;
+    }
     return NextResponse.json({ data: automation }, { status: 201 });
   } catch (error) {
     const entitlementResponse = entitlementErrorResponse(error);

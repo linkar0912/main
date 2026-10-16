@@ -1429,7 +1429,7 @@ async function processEvent(
     const storyReplyClaimed = automations.some((automation) =>
       automation.definition.version === 1
       && automation.definition.trigger.type === "story_reply"
-      && evaluateFlow(automation.definition, event, storyContext).status !== "skipped");
+      && evaluateFlow(automation.definition, event, { ...storyContext, automationId: automation.id }).status !== "skipped");
     evaluationContext = { ...evaluationContext, storyReplyClaimed };
   }
 
@@ -1479,11 +1479,13 @@ async function processEvent(
       if (participant) {
         // The comment's own time, so a retry still sees a comment that has
         // crossed Meta's 7-day private reply window since the first attempt.
+        // A replayed or parked comment whose campaign the owner has paused
+        // since sends nothing; the participant still consumes the comment.
         return processExistingCampaignParticipant(
           participant,
           mapping,
           repository,
-          { ...campaignOptions, sourceCommentTimestamp: event.timestamp },
+          { ...campaignOptions, sourceCommentTimestamp: event.timestamp, requireActiveAutomation: true },
         );
       }
     }
@@ -1528,7 +1530,9 @@ async function processEvent(
       if (automation.definition.version !== 1) continue;
 
       const dedupeKey = `${automation.id}:${event.id}`;
-      const evaluation = evaluateFlow(automation.definition, event, evaluationContext);
+      // The id lets the once-per-automation warning for a regex keyword that no
+      // longer compiles name the automation, as the Facebook runner's does.
+      const evaluation = evaluateFlow(automation.definition, event, { ...evaluationContext, automationId: automation.id });
       if (evaluation.status === "matched" && isDefaultReplyFlow(automation) && answeredByAnotherFlow) {
         skippedExecutions.push({
           workspaceId: mapping.workspaceId,

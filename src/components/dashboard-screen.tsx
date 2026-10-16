@@ -7,7 +7,7 @@ import type { CSSProperties, ReactNode } from "react";
 import { Check, ChevronDown, Link2, Plus, RefreshCw, Zap } from "lucide-react";
 import { FacebookGlyph } from "./facebook-glyph";
 import { InstagramGlyph } from "./instagram-glyph";
-import { useAccountIdentity } from "./app-shell";
+import { FOCUS_REFRESH_MIN_AGE_MS, useAccountIdentity } from "./app-shell";
 import { useAutomations } from "./automation-list";
 import { CreateAutomationButton } from "./create-automation-button";
 import { FailureList, fetchRecentFailures, type DeliveryFailure } from "./failure-panel";
@@ -598,10 +598,17 @@ export function DashboardScreen({ initialAutomations, initialInsights, initialHa
     let active = true;
     const refresh = () => loadConnections(() => active);
     refresh();
-    // Resource freshness prevents tab focus from producing a burst of repeat
-    // requests. Connection mutations invalidate their own entries, while
-    // older confirmed entries refresh after the shared freshness window.
+    let lastFocusRefreshAt = Date.now();
+    // Window focus re-checks the accounts and the numbers at most once a
+    // minute (as the shell does), and never for a hidden tab. Confirmed
+    // entries come from the shared cache while fresh, but a failed request
+    // caches nothing, so without this every focus during an outage would
+    // ask a struggling server again. Retry still asks at once.
     const onFocus = () => {
+      if (document.hidden) return;
+      const now = Date.now();
+      if (now - lastFocusRefreshAt < FOCUS_REFRESH_MIN_AGE_MS) return;
+      lastFocusRefreshAt = now;
       refresh();
       refreshInsightsOnFocus(() => active);
     };

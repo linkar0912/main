@@ -44,7 +44,13 @@ function createLoginAttemptLimiter(maxAttempts: number, windowMs: number, maxKey
       record(key, now);
     },
     consume(key, now = new Date()) {
-      return record(key, now) <= maxAttempts;
+      // Matches the Redis fixed window, which a refused attempt never extends:
+      // once the window holds maxAttempts, refuse without recording, so under
+      // steady traffic above the limit attempts are admitted again windowMs
+      // after the first counted one, instead of never.
+      if (active(key, now).length >= maxAttempts) return false;
+      record(key, now);
+      return true;
     },
     reset(key) {
       failures.delete(key);
@@ -70,7 +76,12 @@ export class LoginRateLimitStore {
     this.fallback = createLoginAttemptLimiter(maxAttempts, windowMs);
     // commandTimeout: a connected but silent Valkey must reject quickly so the
     // in-process fallback runs; otherwise sign-in waits on it forever.
-    this.redis = redisUrl ? new Redis(redisUrl, { maxRetriesPerRequest: 1, connectTimeout: 3_000, commandTimeout: 1_500 }) : undefined;
+    if (redisUrl) {
+      this.redis = new Redis(redisUrl, { maxRetriesPerRequest: 1, connectTimeout: 3_000, commandTimeout: 1_500 });
+      // Failures surface on each command and fall back in-process; the event
+      // is handled so ioredis does not also print an unhandled-error warning.
+      this.redis.on("error", () => undefined);
+    }
   }
 
   private redisKey(key: string): string {

@@ -22,23 +22,57 @@ endpoint and private worker health endpoint both report that baked commit, and
 the worker's Redis heartbeat (`linkar:worker:heartbeat`, 90-second TTL) carries
 its commit into the web health detail as `worker.release`.
 
-Both containers run the image's `HEALTHCHECK` (`scripts/container-healthcheck.mjs`):
-it probes the liveness route `/api/health/live` on the web port and falls back
-to the worker's private `/live` when nothing listens on the web port, so the
-same image is healthy in either role. Neither liveness endpoint does database
-or Redis I/O: the web one answers whenever the process can serve a request,
-and the worker's answers 200 while BullMQ reports it is consuming. A Valkey
-restart, a pooler blip or a slow database therefore never gets a container
-replaced, and a stopped worker never fails the web container's healthcheck.
+### Health checks
+
+The image's `HEALTHCHECK` runs `node scripts/container-healthcheck.mjs` every
+30 s (10 s timeout, 40 s start period, 3 retries). It probes the liveness route
+`/api/health/live` on the web port and falls back to the worker's private
+`/live` when nothing listens on the web port, so the same image is healthy in
+either role. The runtime image has no `curl` or `wget`, so any check must run
+`node`.
+
+A health check set on a Dokploy service (a Docker Swarm service) replaces the
+image's `HEALTHCHECK`; it does not run alongside it. Dokploy's check on
+`linkar-web` still reads `dependencies.database` and `dependencies.redis` from
+`/api/health`, so a database or Redis outage can replace the only web task.
+**Owner action, on both `linkar-web` and `linkar-worker`:** in the service's
+Swarm settings, either
+
+- clear the Dokploy health check, so the image's `HEALTHCHECK` applies; or
+- set the same check explicitly. Docker takes the durations in nanoseconds
+  (Interval 30 s, Timeout 10 s, StartPeriod 40 s):
+
+  ```json
+  {
+    "Test": ["CMD", "node", "scripts/container-healthcheck.mjs"],
+    "Interval": 30000000000,
+    "Timeout": 10000000000,
+    "StartPeriod": 40000000000,
+    "Retries": 3
+  }
+  ```
+
+What each liveness endpoint checks:
+
+- The web `/api/health/live` does no database or Redis I/O and answers
+  whenever the process can serve a request. A Valkey restart, a pooler blip or
+  a slow database never gets the web container replaced, and a stopped worker
+  never fails it.
+- The worker's `/live` sends no command either, but answers 200 only while
+  both BullMQ consumers are running on ready Redis connections, BullMQ's
+  dedicated blocking clients included (`consumersProcessing` in
+  `src/lib/worker-health.ts`). It fails while those connections are down, and
+  when a blocking client stays stuck reconnecting after Valkey is back (seen
+  with BullMQ 6.1.2 and ioredis 6.0.0: the worker stops taking jobs while its
+  main connection looks fine). With 3 retries 30 s apart, a Valkey outage
+  longer than about 1 to 1.5 minutes gets the worker replaced. That is
+  intended: a new worker connects afresh, and a stuck one never recovers. A
+  slow or unreachable database does not fail it.
 
 Dependency state is readiness and stays on `/api/health` (web) and the
 worker's `/health`, which the release script and monitoring read. Each probe
 there has its own deadline (5 s for the database, 2 s for Redis), and the HTTP
-status follows that container's own database and Redis. Dokploy's service
-healthcheck for `linkar-web` reads `dependencies.database` and
-`dependencies.redis` from `/api/health` until it is pointed at
-`/api/health/live` (and the worker's at `/live`); make that change in Dokploy
-so a dependency outage cannot replace the only web task.
+status follows that container's own database and Redis.
 
 ## Release flow
 
@@ -288,6 +322,18 @@ missing, when any checklist value is still a `replace-with-…`/`change-me`
 placeholder, or when `AUTH_SESSION_SECRET` or a configured channel's webhook
 verify token is shorter than 32 characters. `DEMO_MODE=1` is the only way to
 run a production build without infrastructure, and never on a public host.
+
+Also required in production, though not checked at boot:
+
+- `TRUSTED_PROXY_HOPS=1` on `linkar-web` (traffic arrives through the
+  Cloudflare Tunnel, so `cf-connecting-ip` identifies the visitor). With `0`,
+  or unset, the app ignores `cf-connecting-ip` and `X-Forwarded-For` and every
+  visitor is `unknown`: the per-network sign-in and sign-up caps are skipped,
+  everyone trying one email shares its lockout, and tracked-link clicks cannot
+  tell visitors apart, so `/r/<slug>` counts them without the per-visitor cap.
+  The app still starts; `/r/<slug>` logs a warning once per process instead.
+- `DIRECT_URL` on both `linkar-web` (migrations) and `linkar-worker` (its
+  runtime connection unless `WORKER_DATABASE_URL` is set).
 
 ### Google Analytics (public website)
 

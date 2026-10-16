@@ -19,7 +19,7 @@ export function CtaHeadline({ classes }: { classes: { title: string; line: strin
 export function CtaActions({ className, primaryClassName, secondaryClassName }: { className: string; primaryClassName: string; secondaryClassName: string }) {
   return (
     <div className={className}>
-      <Link className={primaryClassName} href={ctaPrimary.href}><ButtonRoll label={ctaPrimary.label} /></Link>
+      <a className={primaryClassName} href={ctaPrimary.href}><ButtonRoll label={ctaPrimary.label} /></a>
       <Link className={secondaryClassName} href={ctaSecondary.href}>{ctaSecondary.label}</Link>
     </div>
   );

@@ -1,10 +1,12 @@
 import { randomBytes } from "node:crypto";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FlowDefinition, FlowDefinitionV2, NormalizedEvent } from "./types";
 import { createMemoryRepository } from "../memory-repository";
 import { sealSecret } from "../security/secrets";
 import { processNormalizedEvent, type AutomationRunnerClient } from "./runner";
-import { MetaApiError } from "../meta/client";
+import { MetaApiError, MetaClient } from "../meta/client";
+import { resetAccountPauseStateForTests } from "./account-pause";
+import { logger } from "../logger";
 
 const flow: FlowDefinition = {
   version: 1,
@@ -49,6 +51,20 @@ const campaignDefinition: FlowDefinitionV2 = {
   followGate: { required: true, notFollowingMessage: "Follow first", recheckButtonLabel: "I've followed" },
   delivery: { text: "Here is the guide", url: "https://example.com/protected" },
 };
+
+/** What the real Meta client throws when Graph throttles the account with this code on HTTP 400. */
+async function metaThrottleError(code: number): Promise<MetaApiError> {
+  const client = new MetaClient({
+    apiVersion: "v25.0",
+    fetcher: async () => new Response(JSON.stringify({
+      error: { message: "There have been too many calls to this Instagram account. Wait a bit and try again.", code },
+    }), { status: 400 }),
+  });
+  const error = await client.sendDirectMessage({ igUserId: "ig_1", accessToken: "token" }, "person_1", { type: "text", text: "x" })
+    .catch((thrown: unknown) => thrown);
+  if (!(error instanceof MetaApiError)) throw new Error("expected a MetaApiError");
+  return error;
+}
 
 function createRunnerClient(overrides: Partial<AutomationRunnerClient> = {}): AutomationRunnerClient {
   return {
@@ -447,6 +463,102 @@ describe("automation runner", () => {
     await expect(processNormalizedEvent(event, repository, { client, tokenEncryptionKey: key, finalAttempt: true })).resolves.toEqual({ matched: 0, sent: 0, skipped: 0, failed: 0 });
   });
 
+  describe.each([80002, 80006])("when Meta throttles a send with code %i", (code) => {
+    // Each throttle counts toward the account's cool-down, kept in this
+    // process's memory without Redis; start and end every case with none.
+    beforeEach(() => resetAccountPauseStateForTests());
+    afterEach(() => resetAccountPauseStateForTests());
+
+    it("retries the classic action it stopped on, without sending an earlier action twice", async () => {
+      const key = randomBytes(32).toString("hex");
+      const throttle = await metaThrottleError(code);
+      expect(throttle).toMatchObject({ status: 400, code, retryable: true });
+      const repository = createMemoryRepository([{
+        id: "automation_throttled",
+        workspaceId: "workspace_a",
+        name: "Throttled",
+        status: "ACTIVE",
+        version: 1, priority: 0,
+        definition: {
+          version: 1,
+          trigger: { type: "message", match: "any", keywords: [] },
+          conditions: [],
+          actions: [{ type: "send_text", text: "first" }, { type: "send_text", text: "second" }],
+        },
+        createdAt: new Date(1).toISOString(),
+        updatedAt: new Date(1).toISOString(),
+      }]);
+      await repository.upsertConnection({ workspaceId: "workspace_a", igUserId: "ig_1", username: "creator", accessTokenEncrypted: sealSecret("access-token", key), status: "CONNECTED" });
+      const sendDirectMessage = vi.fn()
+        .mockResolvedValueOnce({ message_id: "one" })
+        .mockRejectedValueOnce(throttle)
+        .mockResolvedValueOnce({ message_id: "two" });
+      const client = createRunnerClient({ sendDirectMessage });
+      const message: NormalizedEvent = {
+        id: `message_throttled_${code}`,
+        accountId: "ig_1",
+        type: "message.received",
+        text: "hello",
+        recipientId: "person_1",
+        timestamp: RECENT_COMMENT_AT,
+      };
+
+      await expect(processNormalizedEvent(message, repository, { client, tokenEncryptionKey: key }))
+        .rejects.toMatchObject({ retryable: true });
+      await expect(processNormalizedEvent(message, repository, { client, tokenEncryptionKey: key }))
+        .resolves.toEqual({ matched: 1, sent: 1, skipped: 0, failed: 0 });
+
+      // The delivery ledger keys each action, so the retry only repeats the one Meta refused.
+      expect(sendDirectMessage.mock.calls.map((call) => (call[2] as { text: string }).text))
+        .toEqual(["first", "second", "second"]);
+    });
+
+    it("retries an email capture confirmation once, without failing the reply", async () => {
+      const key = randomBytes(32).toString("hex");
+      const throttle = await metaThrottleError(code);
+      const repository = createMemoryRepository([{
+        id: "automation_capture",
+        workspaceId: "workspace_a",
+        name: "Capture",
+        status: "ACTIVE",
+        version: 1, priority: 0,
+        definition: {
+          version: 1,
+          trigger: { type: "message", match: "keyword", keywords: ["guide"] },
+          conditions: [],
+          actions: [{ type: "send_text", text: "Here comes the guide!" }],
+          emailCapture: { promptText: "What is your email?", confirmationText: "You are in!" },
+        },
+        createdAt: new Date(1).toISOString(),
+        updatedAt: new Date(1).toISOString(),
+      }]);
+      await repository.upsertConnection({ workspaceId: "workspace_a", igUserId: "ig_1", username: "creator", accessTokenEncrypted: sealSecret("access-token", key), status: "CONNECTED" });
+      let refused = false;
+      const sendDirectMessage = vi.fn(async (_connection: unknown, _recipient: string, outgoing: { text?: string }) => {
+        if (outgoing.text === "You are in!" && !refused) {
+          refused = true;
+          throw throttle;
+        }
+        return { recipient_id: "person_1", message_id: `direct_${sendDirectMessage.mock.calls.length}` };
+      });
+      const client = createRunnerClient({ sendDirectMessage: sendDirectMessage as AutomationRunnerClient["sendDirectMessage"] });
+      const base = { accountId: "ig_1", type: "message.received" as const, recipientId: "person_1", timestamp: RECENT_COMMENT_AT };
+      await processNormalizedEvent({ ...base, id: `capture_start_${code}`, text: "guide" }, repository, { client, tokenEncryptionKey: key });
+      const reply: NormalizedEvent = { ...base, id: `capture_reply_${code}`, text: "it is jane@example.com" };
+
+      await expect(processNormalizedEvent(reply, repository, { client, tokenEncryptionKey: key }))
+        .rejects.toMatchObject({ retryable: true });
+      await expect(processNormalizedEvent(reply, repository, { client, tokenEncryptionKey: key }))
+        .resolves.toEqual({ matched: 1, sent: 1, skipped: 0, failed: 0 });
+
+      const confirmations = sendDirectMessage.mock.calls.filter((call) => call[2].text === "You are in!");
+      expect(confirmations).toHaveLength(2);
+      const executions = await repository.listAutomationExecutions("workspace_a", "automation_capture", 20);
+      expect(executions.filter((execution) => execution.reason === "email_captured")).toHaveLength(1);
+      expect(executions.some((execution) => execution.status === "FAILED")).toBe(false);
+    });
+  });
+
   it("runs only the newest matching version 2 campaign and consumes the comment before version 1", async () => {
     const key = randomBytes(32).toString("hex");
     const olderCampaign = {
@@ -546,7 +658,7 @@ describe("automation runner", () => {
     expect(await repository.listParticipants("workspace_a", newer.id, 10)).toHaveLength(0);
   });
 
-  it("recovers an existing source winner before V1 after its V2 campaign is paused and edited", async () => {
+  async function sourceWinnerAfterEdit(status: "ACTIVE" | "PAUSED") {
     const key = randomBytes(32).toString("hex");
     const editedDefinition: FlowDefinitionV2 = {
       ...campaignDefinition,
@@ -558,10 +670,10 @@ describe("automation runner", () => {
       openingMessage: { ...campaignDefinition.openingMessage, text: "Recovered source winner" },
     };
     const original = {
-      id: "campaign_paused_source",
+      id: "campaign_edited_source",
       workspaceId: "workspace_a",
-      name: "Paused original",
-      status: "PAUSED" as const,
+      name: "Edited original",
+      status,
       version: 2, priority: 0,
       definition: editedDefinition,
       createdAt: new Date(1).toISOString(),
@@ -597,6 +709,12 @@ describe("automation runner", () => {
       interactionSecret: "app-secret",
       campaignsEnabled: true,
     });
+    const [participant] = await repository.listParticipants("workspace_a", original.id, 10);
+    return { client, repository, result, participant };
+  }
+
+  it("recovers an existing source winner before V1 after its V2 campaign is edited", async () => {
+    const { client, repository, result } = await sourceWinnerAfterEdit("ACTIVE");
 
     expect(result).toMatchObject({ handled: true, sent: 1 });
     expect(client.sendPrivateReply).toHaveBeenCalledTimes(1);
@@ -605,6 +723,17 @@ describe("automation runner", () => {
       "comment_1",
       expect.objectContaining({ text: "Recovered source winner" }),
     );
+    expect(await repository.hasExecution("workspace_a", "legacy_source_replay:comment_1")).toBe(false);
+  });
+
+  it("sends nothing for an existing source winner whose V2 campaign was paused, and still keeps V1 off the comment", async () => {
+    const { client, repository, result, participant } = await sourceWinnerAfterEdit("PAUSED");
+
+    expect(result).toMatchObject({ handled: true, sent: 0, skipped: 1, failed: 0 });
+    expect(client.sendPrivateReply).not.toHaveBeenCalled();
+    expect(client.replyToComment).not.toHaveBeenCalled();
+    // Left as it was, for the hourly sweep to expire.
+    expect(participant).toMatchObject({ state: "COMMENT_MATCHED", openingStatus: "PENDING" });
     expect(await repository.hasExecution("workspace_a", "legacy_source_replay:comment_1")).toBe(false);
   });
 
@@ -923,6 +1052,71 @@ describe("automation runner", () => {
     }, repository, { client, tokenEncryptionKey: key });
 
     expect(client.sendPrivateReply).toHaveBeenCalledTimes(1);
+  });
+
+  it("names the automation when a saved regex keyword no longer compiles, in the story-reply pre-pass and the main loop", async () => {
+    const key = randomBytes(32).toString("hex");
+    const regexAutomation = (id: string, definition: FlowDefinition) => ({
+      id,
+      workspaceId: "workspace_a",
+      name: id,
+      status: "ACTIVE" as const,
+      version: 1,
+      priority: 0,
+      definition,
+      createdAt: new Date(1).toISOString(),
+      updatedAt: new Date(1).toISOString(),
+    });
+    // Lookbehinds were saved before the matcher's rules and can no longer run.
+    const repository = createMemoryRepository([
+      regexAutomation("automation_story_regex_legacy", {
+        version: 1,
+        trigger: { type: "story_reply", match: "keyword", mode: "regex", keywords: ["(?<!not )runner-story-legacy"] },
+        conditions: [],
+        actions: [{ type: "send_text", text: "Story reply" }],
+      }),
+      regexAutomation("automation_dm_regex_legacy", {
+        version: 1,
+        trigger: { type: "message", match: "keyword", mode: "regex", keywords: ["(?<!not )runner-dm-legacy"] },
+        conditions: [],
+        actions: [{ type: "send_text", text: "DM reply" }],
+      }),
+    ]);
+    await repository.upsertConnection({
+      workspaceId: "workspace_a",
+      igUserId: "ig_1",
+      username: "creator",
+      accessTokenEncrypted: sealSecret("access-token", key),
+      status: "CONNECTED",
+    });
+    const client = createRunnerClient();
+    const warn = vi.spyOn(logger, "warn").mockImplementation(() => undefined);
+    try {
+      await processNormalizedEvent({
+        id: "story_reply_regex_legacy",
+        accountId: "ig_1",
+        type: "message.received",
+        text: "loved this story",
+        recipientId: "person_regex",
+        storyId: "story_1",
+        timestamp: RECENT_COMMENT_AT,
+      }, repository, { client, tokenEncryptionKey: key });
+
+      const unsupported = warn.mock.calls.filter(([message]) => String(message).startsWith("A regex automation has a keyword"));
+      // The story-reply flow warns from the pre-pass (once, not again in the
+      // main loop); the message flow warns from the main loop.
+      expect(unsupported.map(([, context]) => context?.automationId)).toEqual([
+        "automation_story_regex_legacy",
+        "automation_dm_regex_legacy",
+      ]);
+      expect(unsupported[0][1]).toMatchObject({ accountId: "ig_1", triggerType: "story_reply", keywordIndexes: [0] });
+      expect(unsupported[1][1]).toMatchObject({ accountId: "ig_1", triggerType: "message", keywordIndexes: [0] });
+      // The pattern text itself never reaches the log.
+      expect(JSON.stringify(unsupported)).not.toMatch(/runner-(story|dm)-legacy/);
+      expect(client.sendDirectMessage).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
   });
 });
 

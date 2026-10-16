@@ -1,11 +1,19 @@
 // @vitest-environment jsdom
 import { cleanup, render, screen, within } from "@testing-library/react";
+import type { ComponentProps } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { getSeoPages, seoPagePath } from "@/src/content/seo";
 import { MarketingFooter } from "./marketing-footer";
 
 const pathname = { current: "/" as string | null };
 vi.mock("next/navigation", () => ({ usePathname: () => pathname.current }));
+// The real next/link still renders every link; this only marks its anchors so
+// a test can tell them from plain <a> elements.
+vi.mock("next/link", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("next/link")>();
+  const RealLink = actual.default;
+  return { ...actual, default: (props: ComponentProps<typeof RealLink>) => <RealLink {...props} data-next-link="" /> };
+});
 
 afterEach(() => {
   cleanup();
@@ -70,6 +78,24 @@ describe("MarketingFooter", () => {
       const href = link.getAttribute("href") ?? "";
       return href.startsWith("/") || href.startsWith("#");
     })).toBe(true);
+  });
+
+  it("loads the app-host account pages with plain links and keeps client navigation for marketing pages", () => {
+    vi.stubGlobal("IntersectionObserver", undefined);
+    render(<MarketingFooter />);
+
+    // A next/link to /signup or /login would prefetch or fetch it from the
+    // marketing host, follow the 307 to app.linkar.in and trip connect-src.
+    const navigation = within(screen.getByRole("navigation", { name: "Footer" }));
+    for (const [name, href] of [["Get started", "/signup"], ["Sign in", "/login"]]) {
+      const link = navigation.getByRole("link", { name });
+      expect(link.getAttribute("href")).toBe(href);
+      expect(link.hasAttribute("data-next-link"), name).toBe(false);
+      expect(link.hasAttribute("prefetch")).toBe(false);
+    }
+    for (const name of ["Pricing", "How it works", "Terms"]) {
+      expect(navigation.getByRole("link", { name }).hasAttribute("data-next-link"), name).toBe(true);
+    }
   });
 
   it("keeps legal copy and the visual wordmark truthful and non-duplicative", () => {

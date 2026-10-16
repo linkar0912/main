@@ -91,7 +91,7 @@ export function HeroActions({ secondaryHref, secondaryLabel, className }: { seco
   return (
     <>
       <div className={cx(shell.actions, styles.actions, className)}>
-        <Link className={shell.inverseAction} href="/signup"><ButtonRoll label="Create your first reply" /></Link>
+        <a className={shell.inverseAction} href="/signup"><ButtonRoll label="Create your first reply" /></a>
         {secondaryHref.startsWith("#")
           ? <HashLink className={shell.textAction} href={secondaryHref as `#${string}`}>{secondaryLabel}<Icon name="arrow-right" size={18} /></HashLink>
           : <a className={shell.textAction} href={secondaryHref}>{secondaryLabel}<Icon name="arrow-right" size={18} /></a>}

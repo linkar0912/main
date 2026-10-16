@@ -1,11 +1,19 @@
-import { evaluateTrigger } from "./match";
-import type { EvaluationContext, EvaluationResult, ExecutionAction, FlowDefinitionV1, NormalizedEvent } from "./types";
+import { evaluateTrigger, type TriggerEvaluationContext } from "./match";
+import type { EvaluationResult, ExecutionAction, FlowDefinitionV1, NormalizedEvent } from "./types";
 import { withinSchedule } from "./types";
+
+/**
+ * Skip reason for a regex automation saved before the matcher's rules whose
+ * keywords include a pattern that cannot compile: it keeps running but never
+ * matches until the pattern is fixed, which reads differently in the activity
+ * log from an ordinary comment that did not match.
+ */
+export const UNSUPPORTED_REGEX_REASON = "regex pattern not supported";
 
 export function evaluateFlow(
   flow: FlowDefinitionV1,
   event: NormalizedEvent,
-  context: EvaluationContext = {},
+  context: TriggerEvaluationContext = {},
 ): EvaluationResult {
   if (!withinSchedule(flow.schedule, new Date(event.timestamp))) {
     return { status: "skipped", reason: "outside scheduled window", actions: [] };
@@ -13,7 +21,8 @@ export function evaluateFlow(
 
   const triggerMatch = evaluateTrigger(flow, event, context);
   if (!triggerMatch.matched) {
-    return { status: "skipped", reason: "trigger did not match", actions: [] };
+    const reason = triggerMatch.unsupportedPattern ? UNSUPPORTED_REGEX_REASON : "trigger did not match";
+    return { status: "skipped", reason, actions: [] };
   }
 
   if (flow.trigger.type === "comment" && flow.actions.some((action) => action.type !== "private_reply")) {

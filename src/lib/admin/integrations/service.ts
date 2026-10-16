@@ -10,8 +10,17 @@ import { sealSecret, unsealSecret } from "@/src/lib/security/secrets";
 import { AdminWorkspaceError } from "../workspace-service";
 import { expiryBucket } from "./repository";
 import type { AdminIntegrationDetail, AdminIntegrationProvider } from "./types";
+import type { ParticipantState } from "@/src/lib/repository";
 
 const EXPECTED = { instagram: ["comments", "messages"], facebook: ["feed"] } as const;
+/**
+ * Campaign participants still mid-flow, the same list expireStaleParticipants
+ * sweeps. A disconnect expires only these; finished LINK_SENT and FAILED
+ * history keeps its state, so the campaign's funnel counts stay right.
+ */
+const OPEN_PARTICIPANT_STATES: ParticipantState[] = ["COMMENT_MATCHED", "OPENING_SENT", "OPTED_IN", "FOLLOW_REQUIRED", "FOLLOW_VERIFIED"];
+/** A large account can have many participant rows; give the disconnect room, but never wait long for a connection. */
+const DISCONNECT_TRANSACTION_OPTIONS = { maxWait: 5_000, timeout: 60_000 } as const;
 export const IntegrationActionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.enum(["refresh_token", "mark_expired", "repair_subscription", "prepare_disconnect"]), version: z.number().int().positive() }).strict(),
   z.object({ action: z.literal("disconnect"), version: z.number().int().positive(), challengeToken: z.string().min(16), confirmation: z.string().min(1).max(300) }).strict(),
@@ -73,7 +82,7 @@ export async function executeAdminIntegration(provider: AdminIntegrationProvider
     return { id, provider, action, repairedFields: missing, version: version + 1 };
   }
   try { if (provider === "instagram") await new MetaClient({ apiVersion: env.metaApiVersion }).unsubscribeFromWebhooks({ igUserId: record.accountId, accessToken: token }); else await unsubscribeFacebookPageFromWebhooks(record.accountId, token, env.facebookApiVersion, undefined, env.facebookAppSecret); } catch { throw providerError(); }
-  if (provider === "instagram") await prisma.$transaction(async (tx) => { const removed = await tx.instagramConnection.deleteMany({ where: { id, version } }); if (removed.count !== 1) throw new AdminWorkspaceError(409, "stale_version"); await tx.automation.updateMany({ where: { workspaceId: record.workspace.id, instagramAccountId: record.accountId }, data: { instagramAccountId: null, status: "PAUSED", version: { increment: 1 } } }); await tx.automationParticipant.updateMany({ where: { workspaceId: record.workspace.id, instagramAccountId: record.accountId }, data: { state: "EXPIRED" } }); });
-  else await prisma.$transaction(async (tx) => { const removed = await tx.facebookPageConnection.deleteMany({ where: { id, version } }); if (removed.count !== 1) throw new AdminWorkspaceError(409, "stale_version"); await tx.automation.updateMany({ where: { workspaceId: record.workspace.id, facebookPageId: record.accountId }, data: { facebookPageId: null, status: "PAUSED", version: { increment: 1 } } }); });
+  if (provider === "instagram") await prisma.$transaction(async (tx) => { const removed = await tx.instagramConnection.deleteMany({ where: { id, version } }); if (removed.count !== 1) throw new AdminWorkspaceError(409, "stale_version"); await tx.automation.updateMany({ where: { workspaceId: record.workspace.id, instagramAccountId: record.accountId }, data: { instagramAccountId: null, status: "PAUSED", version: { increment: 1 } } }); await tx.automationParticipant.updateMany({ where: { workspaceId: record.workspace.id, instagramAccountId: record.accountId, state: { in: OPEN_PARTICIPANT_STATES } }, data: { state: "EXPIRED" } }); }, DISCONNECT_TRANSACTION_OPTIONS);
+  else await prisma.$transaction(async (tx) => { const removed = await tx.facebookPageConnection.deleteMany({ where: { id, version } }); if (removed.count !== 1) throw new AdminWorkspaceError(409, "stale_version"); await tx.automation.updateMany({ where: { workspaceId: record.workspace.id, facebookPageId: record.accountId }, data: { facebookPageId: null, status: "PAUSED", version: { increment: 1 } } }); }, DISCONNECT_TRANSACTION_OPTIONS);
   return { id, provider, action, disconnected: true };
 }

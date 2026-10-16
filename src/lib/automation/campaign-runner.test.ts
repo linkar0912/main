@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createMemoryRepository } from "../memory-repository";
-import { MetaApiError } from "../meta/client";
+import { MetaApiError, MetaClient } from "../meta/client";
 import type {
   AutomationParticipantRecord,
   AutomationRecord,
@@ -107,6 +107,20 @@ const commentEvent: NormalizedEvent = {
   recipientId: "commenter_1",
   timestamp: NOW,
 };
+
+/** What the real Meta client throws when Graph throttles the account with this code on HTTP 400. */
+async function metaThrottleError(code: number): Promise<MetaApiError> {
+  const client = new MetaClient({
+    apiVersion: "v25.0",
+    fetcher: async () => new Response(JSON.stringify({
+      error: { message: "There have been too many calls to this Instagram account. Wait a bit and try again.", code },
+    }), { status: 400 }),
+  });
+  const error = await client.getMedia({ igUserId: "ig_business_1", accessToken: "token" }, "media_1")
+    .catch((thrown: unknown) => thrown);
+  if (!(error instanceof MetaApiError)) throw new Error("expected a MetaApiError");
+  return error;
+}
 
 function createClient(overrides: Partial<CampaignRunnerClient> = {}): CampaignRunnerClient {
   return {
@@ -1838,6 +1852,112 @@ describe("campaign sends while Meta limits the account", () => {
     });
   });
 
+  it("sends nothing for a comment parked by a throttle pause after the owner pauses the campaign", async () => {
+    const { client, repository, mapping, options } = await createHarness();
+    for (let index = 0; index < 3; index += 1) await recordAccountThrottle(ACCOUNT, { now: NOW });
+    const held = await processCampaignEvent(commentEvent, automation, mapping, repository, options)
+      .catch((thrown: unknown) => thrown);
+    expect(findSendDeferral(held)).toBeTruthy();
+    const parked = await readParticipant(repository);
+    expect(parked).toMatchObject({ state: "COMMENT_MATCHED", openingStatus: "PENDING" });
+
+    await repository.updateAutomation(automation.workspaceId, automation.id, { status: "PAUSED" });
+    vi.setSystemTime(NOW + 16 * 60_000);
+    const retried = await processCampaignEvent(commentEvent, automation, mapping, repository, options);
+
+    expect(retried).toMatchObject({ handled: true, participantId: parked.id, sent: 0, skipped: 1, failed: 0 });
+    expect(client.sendPrivateReply).not.toHaveBeenCalled();
+    expect(client.replyToComment).not.toHaveBeenCalled();
+    // Not moved on: the hourly sweep expires it.
+    expect(await readParticipant(repository)).toMatchObject({ state: "COMMENT_MATCHED", openingStatus: "PENDING" });
+  });
+
+  it("counts a throttled media lookup toward the account's cool-down, and retries the comment", async () => {
+    const noSnapshot: AutomationRecord = {
+      ...automation,
+      definition: { ...definition, trigger: { ...definition.trigger, mediaSnapshots: [] } },
+    };
+    const { client, repository, mapping, options } = await harnessFor(noSnapshot);
+    vi.mocked(client.getMedia).mockRejectedValueOnce(await metaThrottleError(80002));
+    for (let index = 0; index < 2; index += 1) await recordAccountThrottle(ACCOUNT);
+
+    await expect(processCampaignEvent(commentEvent, noSnapshot, mapping, repository, options))
+      .rejects.toMatchObject({ status: 400, code: 80002, retryable: true });
+
+    await expect(checkAccountSendGate(ACCOUNT)).resolves.toMatchObject({ status: "throttled" });
+    expect(await repository.listParticipants(automation.workspaceId, automation.id, 10)).toHaveLength(0);
+    expect(client.sendPrivateReply).not.toHaveBeenCalled();
+  });
+
+  it("counts a throttled next-post media lookup toward the account's cool-down, and retries the comment", async () => {
+    const nextPost: AutomationRecord = {
+      ...automation,
+      definition: {
+        ...definition,
+        trigger: { type: "comment", source: "next_media", mediaIds: [], mediaSnapshots: [], match: "any", keywords: [] },
+      },
+    };
+    const { client, repository, mapping, options } = await harnessFor(nextPost);
+    vi.mocked(client.getMedia).mockRejectedValueOnce(await metaThrottleError(80006));
+    for (let index = 0; index < 2; index += 1) await recordAccountThrottle(ACCOUNT);
+
+    await expect(processCampaignEvent(commentEvent, nextPost, mapping, repository, options))
+      .rejects.toMatchObject({ status: 400, code: 80006, retryable: true });
+
+    await expect(checkAccountSendGate(ACCOUNT)).resolves.toMatchObject({ status: "throttled" });
+    expect((await repository.getAutomation(automation.workspaceId, automation.id))?.boundMediaId).toBeUndefined();
+  });
+
+  it("retries an opt-in whose follow check Meta throttles (80002), and sends the link on the retry", async () => {
+    const harness = await openParticipant();
+    const throttledMeta = new MetaClient({
+      apiVersion: "v25.0",
+      fetcher: async () => new Response(JSON.stringify({
+        error: { message: "There have been too many calls to this Instagram account. Wait a bit and try again.", code: 80002 },
+      }), { status: 400 }),
+    });
+    vi.mocked(harness.client.getUserFollowStatus)
+      .mockImplementationOnce((connection, scopedUserId) => throttledMeta.getUserFollowStatus(connection, scopedUserId))
+      .mockResolvedValueOnce({ isUserFollowingBusiness: true });
+    const tap = interactionEvent(harness.optInPayload, NOW + 1_000);
+    vi.setSystemTime(tap.timestamp);
+
+    const thrown = await processPendingCampaignInteraction(tap, harness.mapping, harness.repository, harness.options)
+      .catch((error: unknown) => error);
+
+    expect(thrown).toBeInstanceOf(MetaApiError);
+    expect(thrown).toMatchObject({ status: 400, code: 80002, retryable: true });
+    const afterThrottle = await readParticipant(harness.repository);
+    expect(afterThrottle).toMatchObject({ state: "OPTED_IN" });
+    expect(afterThrottle.followCheckError).toBeUndefined();
+    expect(harness.client.sendDirectMessage).not.toHaveBeenCalled();
+    // One throttle is a strike, not a pause, so the retry is not held.
+    await expect(checkAccountSendGate(ACCOUNT)).resolves.toEqual({ status: "open" });
+
+    const retried = await processPendingCampaignInteraction(tap, harness.mapping, harness.repository, harness.options);
+
+    expect(retried).toMatchObject({ handled: true, result: { sent: 1 } });
+    expect(await readParticipant(harness.repository)).toMatchObject({ state: "LINK_SENT", finalDeliveryStatus: "SENT" });
+    expect(harness.client.getUserFollowStatus).toHaveBeenCalledTimes(2);
+    expect(harness.client.sendDirectMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it("counts a throttled follow check toward the account's cool-down", async () => {
+    const harness = await openParticipant();
+    vi.mocked(harness.client.getUserFollowStatus).mockRejectedValueOnce(await metaThrottleError(80002));
+    for (let index = 0; index < 2; index += 1) await recordAccountThrottle(ACCOUNT);
+    await expect(checkAccountSendGate(ACCOUNT)).resolves.toEqual({ status: "open" });
+
+    await expect(processPendingCampaignInteraction(
+      interactionEvent(harness.optInPayload, NOW + 1_000),
+      harness.mapping,
+      harness.repository,
+      harness.options,
+    )).rejects.toMatchObject({ code: 80002 });
+
+    await expect(checkAccountSendGate(ACCOUNT)).resolves.toMatchObject({ status: "throttled" });
+  });
+
   it("skips a public reply Meta throttles, so it never waits on a DM that has already failed for good", async () => {
     const { client, repository, mapping, options } = await createHarness(createClient({
       replyToComment: vi.fn().mockRejectedValue(new MetaApiError("Application request limit reached", 400, true, true, 4)),
@@ -2020,5 +2140,73 @@ describe("campaign sends while Meta limits the account", () => {
 
     await expect(checkAccountSendGate(ACCOUNT)).resolves.toMatchObject({ status: "throttled" });
     expect(await noticeExecution(harness, tooSoon)).toMatchObject({ status: "FAILED", reason: "Meta cooldown notice failed" });
+  });
+});
+
+describe("campaign kill switch on the comment paths", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    resetSendRateLimitFallback();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  async function pendingParticipant(harness: Awaited<ReturnType<typeof createHarness>>) {
+    const created = await harness.repository.createParticipant({
+      workspaceId: automation.workspaceId,
+      automationId: automation.id,
+      instagramAccountId: commentEvent.accountId,
+      sourceCommentId: commentEvent.commentId!,
+      sourceMediaId: commentEvent.mediaId!,
+      sourceMediaSnapshot: sourceSnapshot,
+    });
+    return created.record;
+  }
+
+  it("skips a replayed comment whose campaign is paused, before any public reply or DM", async () => {
+    const harness = await createHarness();
+    await pendingParticipant(harness);
+    await harness.repository.updateAutomation(automation.workspaceId, automation.id, { status: "PAUSED" });
+
+    const result = await processCampaignEvent(commentEvent, automation, harness.mapping, harness.repository, harness.options);
+
+    expect(result).toMatchObject({ handled: true, sent: 0, skipped: 1, failed: 0 });
+    expect(harness.client.replyToComment).not.toHaveBeenCalled();
+    expect(harness.client.sendPrivateReply).not.toHaveBeenCalled();
+    expect(await readParticipant(harness.repository)).toMatchObject({
+      state: "COMMENT_MATCHED",
+      openingStatus: "PENDING",
+      publicReplyStatus: "PENDING",
+    });
+  });
+
+  it("skips an archived campaign's participant when the comment path asks for a live campaign", async () => {
+    const harness = await createHarness();
+    const participant = await pendingParticipant(harness);
+    const archived = { ...automation, archivedAt: "2026-08-21T09:45:00.000Z" } as AutomationRecord;
+
+    const result = await processExistingCampaignParticipant(
+      participant,
+      harness.mapping,
+      harness.repository,
+      { ...harness.options, requireActiveAutomation: true },
+      archived,
+    );
+
+    expect(result).toMatchObject({ handled: true, skipped: 1 });
+    expect(harness.client.sendPrivateReply).not.toHaveBeenCalled();
+  });
+
+  it("still sends a live campaign's parked comment on the comment path", async () => {
+    const harness = await createHarness();
+    await pendingParticipant(harness);
+
+    const result = await processCampaignEvent(commentEvent, automation, harness.mapping, harness.repository, harness.options);
+
+    expect(result).toMatchObject({ handled: true, sent: 1 });
+    expect(harness.client.sendPrivateReply).toHaveBeenCalledTimes(1);
   });
 });

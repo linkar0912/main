@@ -1,3 +1,4 @@
+import { createServer, type AddressInfo, type Socket } from "node:net";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /** Shared by every FakeRedis instance, like one Redis server seen by the web container and the worker. */
@@ -7,6 +8,7 @@ const redisServer = vi.hoisted(() => ({
 }));
 const notify = vi.hoisted(() => vi.fn(async () => true));
 const warn = vi.hoisted(() => vi.fn());
+const constructed = vi.hoisted(() => [] as Array<{ url: string; options: Record<string, unknown> }>);
 
 const FakeRedis = vi.hoisted(() => {
   return class FakeRedis {
@@ -70,7 +72,18 @@ const FakeRedis = vi.hoisted(() => {
   };
 });
 
-vi.mock("ioredis", () => ({ default: FakeRedis }));
+// A URL on 127.0.0.1 gets the real ioredis client, for the stalled-Valkey test.
+vi.mock("ioredis", async () => {
+  const actual = await vi.importActual<typeof import("ioredis")>("ioredis");
+  return {
+    default: class RedisSwitch {
+      constructor(url: string, options: Record<string, unknown>) {
+        constructed.push({ url, options });
+        return url.startsWith("redis://127.0.0.1:") ? new actual.default(url, options) : new FakeRedis();
+      }
+    },
+  };
+});
 vi.mock("../notifications", () => ({ notifyWorkspaceManagers: notify }));
 vi.mock("../logger", () => ({ logger: { warn, info: vi.fn(), error: vi.fn(), debug: vi.fn() } }));
 
@@ -195,6 +208,50 @@ describe("account block pause", () => {
     delete process.env.REDIS_URL;
     await expect(recordAccountBlock(ACCOUNT)).resolves.toMatchObject({ created: true });
     await expect(checkAccountSendGate(ACCOUNT)).resolves.toMatchObject({ status: "blocked" });
+  });
+});
+
+describe("pause store connection", () => {
+  it("gives up on a command quickly instead of waiting on Valkey", async () => {
+    await checkAccountSendGate(ACCOUNT);
+    expect(constructed.at(-1)).toEqual({
+      url: "redis://localhost:6379",
+      options: { maxRetriesPerRequest: 1, connectTimeout: 3_000, commandTimeout: 1_500 },
+    });
+  });
+
+  it("settles the gate within about 2 s from this process's copy when Valkey accepts the connection but never answers", async () => {
+    // This process saw the block before Valkey stalled.
+    delete process.env.REDIS_URL;
+    await recordAccountBlock(ACCOUNT);
+
+    // A stalled Valkey: the TCP connection opens, nothing ever comes back.
+    const sockets = new Set<Socket>();
+    const server = createServer((socket) => {
+      sockets.add(socket);
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    process.env.REDIS_URL = `redis://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    try {
+      // Each read is cut off by the 1.5 s command timeout, never left pending.
+      const timed = async (target: SendPauseTarget) => {
+        const started = performance.now();
+        const gate = await checkAccountSendGate(target);
+        return { gate, elapsed: performance.now() - started };
+      };
+      const blocked = await timed(ACCOUNT);
+      expect(blocked.gate).toEqual({ status: "blocked", until: START + 24 * HOUR });
+      expect(blocked.elapsed).toBeGreaterThanOrEqual(1_400);
+      expect(blocked.elapsed).toBeLessThan(2_500);
+      const open = await timed(OTHER);
+      expect(open.gate).toEqual({ status: "open" });
+      expect(open.elapsed).toBeLessThan(2_500);
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining("Account pause store unavailable"), expect.anything());
+    } finally {
+      (globalThis as { linkarAccountPauseRedis?: { disconnect(): void } }).linkarAccountPauseRedis?.disconnect();
+      for (const socket of sockets) socket.destroy();
+      await new Promise((resolve) => server.close(resolve));
+    }
   });
 });
 

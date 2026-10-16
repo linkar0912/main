@@ -2,11 +2,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   adoptOnboardingIdentity,
   clearOnboardingDeferral,
+  clearOnboardingTabFlags,
   deferOnboarding,
   mayRedirectToOnboarding,
   ONBOARDING_DEFER_MS,
   ONBOARDING_DEFERRED_KEY,
   ONBOARDING_IDENTITY_KEY,
+  ONBOARDING_NOT_REQUIRED_KEY,
   onboardingKnownNotRequired,
   readOnboardingDeferral,
   rememberOnboardingNotRequired,
@@ -122,8 +124,29 @@ describe("onboarding deferral", () => {
       expect(readOnboardingDeferral()).toBe(now);
     });
 
+    it("clears every onboarding flag for this tab on sign-out or a sign-in page, leaving other keys alone", () => {
+      const values = stubStorage();
+      values.set("linkar:home-range", "30");
+      adoptOnboardingIdentity("first@example.com");
+      deferOnboarding(now);
+      rememberOnboardingNotRequired(true);
+      expect([...values.keys()].sort()).toEqual([ONBOARDING_DEFERRED_KEY, ONBOARDING_IDENTITY_KEY, ONBOARDING_NOT_REQUIRED_KEY, "linkar:home-range"].sort());
+
+      clearOnboardingTabFlags();
+      expect([...values.keys()]).toEqual(["linkar:home-range"]);
+      expect(readOnboardingDeferral()).toBeNull();
+      expect(onboardingKnownNotRequired()).toBe(false);
+
+      // The next account on this tab starts clean: nothing of the last one carries over.
+      adoptOnboardingIdentity("second@example.com");
+      expect(readOnboardingDeferral()).toBeNull();
+      // Clearing again with nothing stored is harmless.
+      expect(() => clearOnboardingTabFlags()).not.toThrow();
+    });
+
     it("never throws when the browser blocks storage", () => {
       stubStorage(true);
+      expect(() => clearOnboardingTabFlags()).not.toThrow();
       expect(() => adoptOnboardingIdentity("first@example.com")).not.toThrow();
       expect(() => deferOnboarding(now)).not.toThrow();
       expect(() => clearOnboardingDeferral()).not.toThrow();

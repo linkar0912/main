@@ -34,12 +34,15 @@ const nextConfig: NextConfig = {
     imageSizes: [64, 128, 256, 384],
   },
   experimental: {
-    // One libvips thread per encode instead of half the cores each. Encodes
-    // still run in parallel, one per libuv pool slot (UV_THREADPOOL_SIZE=8 in
-    // the Dockerfile), so a burst peaks at 8 encode threads and can still
-    // keep a small host's cores busy. The hard bound is the Cloudflare cache
-    // and rate rule on /_next/image (docs/ops/app-admin-inspection-2026-10-15.md,
-    // section 9).
+    // Next applies this only when sharp.concurrency() is above 1, giving one
+    // libvips thread per encode instead of half of sharp's count. On the
+    // production image (node:24-bookworm-slim: glibc, no jemalloc, no
+    // MALLOC_ARENA_MAX) sharp already sets itself to 1, so this has no effect
+    // there. Encodes still run in parallel, one per libuv pool slot, so up to
+    // 8 at once with UV_THREADPOOL_SIZE=8 in the Dockerfile (4 without it).
+    // The hard bound is the Cloudflare cache and rate rule on /_next/image,
+    // which must be in place before deploy
+    // (docs/ops/app-admin-inspection-2026-10-15.md, section 9).
     imgOptConcurrency: 1,
     // The proxy (proxy.ts matches /api/:path*) buffers each request body
     // before any route runs, 10 MB by default. No route takes more than 1 MB:

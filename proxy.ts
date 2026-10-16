@@ -1,11 +1,11 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
-import { isAuthRetryableFetchError } from "@supabase/supabase-js";
+import { isAuthApiError, isAuthRetryableFetchError } from "@supabase/supabase-js";
 import { assertApplicationAccess, safeNextPath } from "@/src/lib/auth/session";
 import { getServerEnv } from "@/src/lib/env";
 import { logger } from "@/src/lib/logger";
-import { supabaseFetchWithTimeout } from "@/src/lib/supabase/server";
+import { SessionCheckDeadlineError, createSessionCheck } from "@/src/lib/supabase/session-check";
 import { ADMIN_HOST, isAdminRoutePath, isProtectedAppPath, resolveHostRedirect, resolveRequestHostname } from "@/src/lib/site-routing";
 import { supabaseAuthCookieOptions } from "@/src/lib/auth/cookie-domain";
 import { isCrossSiteRequest } from "@/src/lib/security/same-origin";
@@ -29,37 +29,7 @@ function isProviderCallbackPath(pathname: string): boolean {
   return PROVIDER_CALLBACK_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`));
 }
 
-// Each Supabase call already gives up after 8 s, but auth-js retries a failed
-// token refresh for up to 30 s, so the whole session check gets its own cap.
-const SESSION_CHECK_DEADLINE_MS = 10_000;
 const SESSION_CHECK_RETRY_AFTER_SECONDS = "5";
-
-class SessionCheckDeadlineError extends Error {
-  constructor() {
-    super(`Session check took longer than ${SESSION_CHECK_DEADLINE_MS} ms`);
-    this.name = "SessionCheckDeadlineError";
-  }
-}
-
-/**
- * Settles with `work`, or rejects with SessionCheckDeadlineError once
- * SESSION_CHECK_DEADLINE_MS passes. `onDeadline` cancels the abandoned work so
- * auth-js stops sending refresh attempts nobody is waiting for.
- */
-async function withSessionCheckDeadline<T>(work: Promise<T>, onDeadline: () => void): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const deadline = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => {
-      onDeadline();
-      reject(new SessionCheckDeadlineError());
-    }, SESSION_CHECK_DEADLINE_MS);
-  });
-  try {
-    return await Promise.race([work, deadline]);
-  } finally {
-    clearTimeout(timer);
-  }
-}
 
 function errorDetails(error: unknown): Record<string, unknown> {
   const code = typeof error === "object" && error !== null && "code" in error && typeof error.code === "string" ? error.code : undefined;
@@ -178,10 +148,12 @@ export async function proxy(request: NextRequest) {
 
   const response = NextResponse.next();
   const isAdminRoute = isAdminRoutePath(request.nextUrl.pathname);
-  const sessionCheck = new AbortController();
+  // Caps the check at 10 s and gives up after two 5xx answers in a row to a
+  // token refresh, instead of waiting out auth-js's retries (session-check.ts).
+  const sessionCheck = createSessionCheck();
   const supabase = createServerClient(env.supabaseUrl, env.supabasePublishableKey, {
     cookieOptions: supabaseAuthCookieOptions(env),
-    global: { fetch: supabaseFetchWithTimeout(undefined, sessionCheck.signal) },
+    global: { fetch: sessionCheck.fetch },
     cookies: {
       getAll: () => request.cookies.getAll(),
       setAll: (cookiesToSet) => {
@@ -195,7 +167,7 @@ export async function proxy(request: NextRequest) {
 
   let claims: Awaited<ReturnType<typeof supabase.auth.getClaims>>;
   try {
-    claims = await withSessionCheckDeadline(supabase.auth.getClaims(), () => sessionCheck.abort());
+    claims = await sessionCheck.run(supabase.auth.getClaims());
   } catch (error) {
     if (error instanceof SessionCheckDeadlineError || isAuthRetryableFetchError(error)) {
       return sessionCheckUnavailable(request, response, "claims", error);
@@ -206,6 +178,16 @@ export async function proxy(request: NextRequest) {
   // A network failure or a 5xx from Supabase Auth says nothing about the
   // session. Only a definite answer (no session, a bad token) means sign in.
   if (error && isAuthRetryableFetchError(error)) return sessionCheckUnavailable(request, response, "claims", error);
+  // Supabase's rate limit on token refreshes counts this server's address,
+  // which every signed-in user shares, so a 429 says nothing about this
+  // session either. auth-js has already queued deletion of the session
+  // cookies (empty values) on `response`, so start from a fresh response and
+  // pass on only cookies it set: the person stays signed in.
+  if (error && isAuthApiError(error) && error.status === 429) {
+    const kept = NextResponse.next();
+    for (const cookie of response.cookies.getAll()) if (cookie.value) kept.cookies.set(cookie);
+    return sessionCheckUnavailable(request, kept, "claims", error);
+  }
   if (!error && data?.claims?.sub && data.claims.email) {
     // Admin authorization is intentionally separate from workspace access:
     // the platform owner may have no workspace membership at all. Let the

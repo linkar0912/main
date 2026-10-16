@@ -3,6 +3,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 class FakeRedis {
   private readonly store = new Map<string, { count: number; expiresAt: number | null }>();
 
+  constructor(url: string, options: Record<string, unknown>) {
+    clients.constructed.push({ url, options });
+  }
+
+  on(event: string) {
+    clients.listeners.push(event);
+    return this;
+  }
+
   async incr(key: string): Promise<number> {
     const entry = this.store.get(key);
     if (entry && (entry.expiresAt === null || entry.expiresAt > Date.now())) {
@@ -40,6 +49,10 @@ class FakeRedis {
 }
 
 const failNextEval = vi.hoisted(() => ({ value: false }));
+const clients = vi.hoisted(() => ({
+  constructed: [] as Array<{ url: string; options: Record<string, unknown> }>,
+  listeners: [] as string[],
+}));
 const logged = vi.hoisted(() => ({ warn: vi.fn() }));
 
 vi.mock("ioredis", () => ({ default: FakeRedis }));
@@ -71,6 +84,20 @@ describe("checkSendRateLimit", () => {
     else process.env.DIRECT_MESSAGE_RATE_LIMIT_PER_HOUR = originalDmLimit;
     if (originalCommentLimit === undefined) delete process.env.COMMENT_REPLY_RATE_LIMIT_PER_HOUR;
     else process.env.COMMENT_REPLY_RATE_LIMIT_PER_HOUR = originalCommentLimit;
+  });
+
+  it("opens a client that gives up on a stalled Valkey, so the fallback runs", async () => {
+    process.env.PRIVATE_REPLY_RATE_LIMIT_PER_HOUR = "5";
+    clients.constructed.length = 0;
+    clients.listeners.length = 0;
+    const { checkSendRateLimit } = await import("./send-rate-limiter");
+    await checkSendRateLimit("ig_account_1", "private_reply");
+    expect(clients.constructed).toEqual([{
+      url: "redis://localhost:6379",
+      options: { maxRetriesPerRequest: 1, connectTimeout: 3_000, commandTimeout: 1_500 },
+    }]);
+    // Handled, so ioredis does not print an unhandled-error warning per reconnect.
+    expect(clients.listeners).toContain("error");
   });
 
   it("allows every call when Redis is not configured", async () => {

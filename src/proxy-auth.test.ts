@@ -1,6 +1,8 @@
+import http from "node:http";
+import type { AddressInfo, Socket } from "node:net";
 import { NextRequest } from "next/server";
-import { AuthRetryableFetchError, AuthSessionMissingError } from "@supabase/supabase-js";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { AuthApiError, AuthRetryableFetchError, AuthSessionMissingError } from "@supabase/supabase-js";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   getClaims: vi.fn(),
@@ -238,5 +240,132 @@ describe("proxy session gate when a dependency fails", () => {
     expect(noAccess.status).toBe(307);
     expect(noAccess.headers.get("location")).toBe("https://app.linkar.in/login?next=%2Fsettings");
     expect(mocks.logError).not.toHaveBeenCalled();
+  });
+
+  it("answers a 429 on the token refresh with 503 and does not pass on auth-js's cookie deletion", async () => {
+    const rateLimited = new AuthApiError("Request rate limit reached", 429, "over_request_rate_limit");
+    mocks.getClaims.mockImplementation(async () => {
+      // On a 429 auth-js removes the stored session, which empties its cookies.
+      mocks.createServerClient.mock.calls[0][2].cookies.setAll([{ name: "sb-example-auth-token", value: "", options: { path: "/", maxAge: 0 } }]);
+      return { data: null, error: rateLimited };
+    });
+
+    const result = await proxy(documentRequest("https://app.linkar.in/dashboard"));
+
+    expect(result.status).toBe(503);
+    expect(result.headers.get("location")).toBeNull();
+    expect(result.headers.get("retry-after")).toBe("5");
+    expect(result.headers.getSetCookie()).toEqual([]);
+    expect(mocks.logError).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ stage: "claims", code: "over_request_rate_limit" }));
+  });
+
+  it("keeps cookies a refresh set before a 429 later in the check", async () => {
+    mocks.getClaims.mockImplementation(async () => {
+      mocks.createServerClient.mock.calls[0][2].cookies.setAll([{ name: "sb-example-auth-token", value: "rotated", options: { path: "/", httpOnly: true } }]);
+      return { data: null, error: new AuthApiError("Request rate limit reached", 429, "over_request_rate_limit") };
+    });
+
+    const result = await proxy(routerRequest("https://app.linkar.in/contacts"));
+
+    expect(result.status).toBe(503);
+    expect(result.cookies.get("sb-example-auth-token")?.value).toBe("rotated");
+  });
+});
+
+// The real @supabase/ssr client and auth-js inside the real proxy, against a
+// local stand-in for Supabase Auth that counts requests. Nothing here reaches
+// a real Supabase project.
+type TokenAnswer = { status: number; body?: unknown };
+
+async function startFakeAuth() {
+  let answer: TokenAnswer = { status: 503 };
+  const hits: { method: string; path: string }[] = [];
+  const sockets = new Set<Socket>();
+  const server = http.createServer((req, res) => {
+    hits.push({ method: req.method ?? "", path: req.url ?? "" });
+    req.resume();
+    const status = req.url?.startsWith("/auth/v1/token") ? answer.status : 404;
+    res.writeHead(status, { "content-type": "application/json" });
+    res.end(JSON.stringify(req.url?.startsWith("/auth/v1/token") ? answer.body ?? { message: "upstream unavailable" } : {}));
+  });
+  server.on("connection", (socket) => {
+    sockets.add(socket);
+    socket.on("close", () => sockets.delete(socket));
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  return {
+    url: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
+    hits,
+    answerRefreshesWith(next: TokenAnswer) {
+      answer = next;
+    },
+    refreshPosts: () => hits.filter((hit) => hit.method === "POST" && hit.path.includes("grant_type=refresh_token")).length,
+    close: () => new Promise<void>((resolve) => {
+      for (const socket of sockets) socket.destroy();
+      server.close(() => resolve());
+    }),
+  };
+}
+
+/** A document request carrying an @supabase/ssr session cookie whose access token has expired. */
+function expiredSessionRequest(supabaseUrl: string): NextRequest {
+  const b64url = (value: string) => Buffer.from(value).toString("base64url");
+  const exp = Math.floor(Date.now() / 1000) - 60;
+  const token = `${b64url(JSON.stringify({ alg: "HS256", typ: "JWT" }))}.${b64url(JSON.stringify({ sub: "user-1", email: "person@example.com", exp }))}.c2ln`;
+  const session = { access_token: token, token_type: "bearer", expires_in: 3600, expires_at: exp, refresh_token: "rt-original", user: { id: "user-1", email: "person@example.com", aud: "authenticated" } };
+  const cookieName = `sb-${new URL(supabaseUrl).hostname.split(".")[0]}-auth-token`;
+  return new NextRequest("https://app.linkar.in/dashboard", {
+    headers: { "sec-fetch-dest": "document", "sec-fetch-mode": "navigate", accept: "text/html", cookie: `${cookieName}=base64-${b64url(JSON.stringify(session))}` },
+  });
+}
+
+describe("proxy session gate against a failing Supabase Auth", () => {
+  let fake: Awaited<ReturnType<typeof startFakeAuth>>;
+
+  beforeAll(async () => {
+    fake = await startFakeAuth();
+  });
+  afterAll(async () => {
+    await fake.close();
+  });
+  beforeEach(async () => {
+    fake.hits.length = 0;
+    const actual = await vi.importActual<typeof import("@supabase/ssr")>("@supabase/ssr");
+    mocks.createServerClient.mockReset().mockImplementation(actual.createServerClient);
+    mocks.assertApplicationAccess.mockReset().mockResolvedValue({ workspaceId: "workspace-1", email: "person@example.com" });
+    mocks.logError.mockReset();
+    mocks.getServerEnv.mockReset().mockReturnValue({
+      adminUrl: "https://admin.linkar.in",
+      appUrl: "https://app.linkar.in",
+      publicSiteUrl: "https://linkar.in",
+      supabaseUrl: fake.url,
+      supabasePublishableKey: "sb_publishable_test",
+    });
+  });
+
+  it("answers 503 in under 2 s after at most two refresh attempts when every refresh gets a fast 503", async () => {
+    fake.answerRefreshesWith({ status: 503 });
+    const started = Date.now();
+
+    const result = await proxy(expiredSessionRequest(fake.url));
+
+    expect(Date.now() - started).toBeLessThan(2_000);
+    expect(result.status).toBe(503);
+    expect(result.headers.get("location")).toBeNull();
+    expect(result.headers.get("retry-after")).toBe("5");
+    expect(fake.refreshPosts()).toBeLessThanOrEqual(2);
+    expect(mocks.assertApplicationAccess).not.toHaveBeenCalled();
+  });
+
+  it("answers a 429 on the refresh with 503 and keeps the session cookie", async () => {
+    fake.answerRefreshesWith({ status: 429, body: { code: 429, error_code: "over_request_rate_limit", msg: "Request rate limit reached" } });
+
+    const result = await proxy(expiredSessionRequest(fake.url));
+
+    expect(result.status).toBe(503);
+    expect(result.headers.get("location")).toBeNull();
+    expect(fake.refreshPosts()).toBe(1);
+    // No Set-Cookie clears sb-*-auth-token, so the person is not signed out.
+    expect(result.headers.getSetCookie().filter((cookie) => /^sb-[^=]*-auth-token[^=]*=/.test(cookie))).toEqual([]);
   });
 });

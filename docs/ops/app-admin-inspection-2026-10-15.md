@@ -1119,7 +1119,7 @@ From `git status` and `git diff --stat`: 96 tracked files changed (6,005 inserti
   - `localPatterns` limited to `/marketing/**` with no query string;
   - `deviceSizes` [640, 828, 1080, 1200, 1536] and `imageSizes` [64, 128, 256, 384];
   - `imgOptConcurrency: 1` and `proxyClientMaxBodySize: "1mb"`.
-- `Dockerfile`: `UV_THREADPOOL_SIZE=8`, not 16 as planned. The pool size also caps parallel sharp encodes, and 8 keeps the peak no higher than before on a host with 4 or more cores.
+- `Dockerfile`: `UV_THREADPOOL_SIZE=8`, not 16 as planned. The pool size also caps parallel sharp encodes, so 8 raises the most at once from 4 to 8. On the production base image (`node:24-bookworm-slim`: glibc, no jemalloc, no `MALLOC_ARENA_MAX`) sharp already sets its own concurrency to 1, so `imgOptConcurrency: 1` has no effect there; Next applies it only when `sharp.concurrency()` is above 1. The Cloudflare cache and rate rule on `/_next/image` must be in place before deploy. The pool size is an owner decision (see the follow-up at the end of this section).
 - Proof rail portraits are now 68 x 68 with no `sizes`, so they emit only the 128 and 256 widths.
 - Tracked-link clicks without a client address share one `<link>:anon` limiter bucket instead of skipping the limiter.
 
@@ -1206,7 +1206,7 @@ Before shipping:
 
 Right after deploying:
 
-4. **Point Dokploy's service healthcheck at `/api/health/live`** for linkar-web, and at `/live` for the worker. Until then, Dokploy's own check still reads the dependencies from `/api/health`, so a database or Redis outage can still replace the only web task.
+4. **Fix Dokploy's service health checks** on linkar-web and linkar-worker: clear them so the image's `HEALTHCHECK` applies, or set them to `node scripts/container-healthcheck.mjs` with the image's timings ("Health checks" in `ops/DOKPLOY_DEPLOYMENT.md`). A Dokploy check replaces the image's rather than running beside it, and the image has no `curl` or `wget`. Until then, Dokploy's own check still reads the dependencies from `/api/health`, so a database or Redis outage can still replace the only web task.
 5. **Run the signed-in checks in section 9:**
    - the console check for cross-host prefetch errors;
    - admin sign-out and sign-in, in Chrome and Safari;
@@ -1234,7 +1234,71 @@ Not done in this round (sections 6, 8 and 9):
 
 Small things noticed during the final checks, left as they are:
 
-- The Redis clients in `src/lib` have no `error` listener. While Valkey is down, ioredis prints `[ioredis] Unhandled error event` on every reconnect attempt (seen from the health client in the Group 2 check). It is log noise, not a crash; a no-op listener would quiet it.
+- The Redis clients in `src/lib` have no `error` listener. While Valkey is down, ioredis prints `[ioredis] Unhandled error event` on every reconnect attempt (seen from the health client in the Group 2 check). It is log noise, not a crash; a no-op listener would quiet it. The follow-up below adds one.
 - The full vitest run prints jsdom's "Not implemented: navigation" to stderr once. Every test passes.
 - esbuild flags `dist/worker.js` at 2.0 MB. It is a size warning only.
 - A scratch Redis server from the inspection still listens on port 16697 (pid 16168, started from the session scratchpad). It holds no repo data and can be stopped.
+
+### Follow-up: Valkey stalls, worker liveness and click counting
+
+Applied on 16 October 2026 on the `inspection-fixes` branch, after verifiers re-tested the groups above. Uncommitted.
+
+- **Stalled Valkey.** The account-pause and send-limiter Redis clients get `connectTimeout: 3_000` and `commandTimeout: 1_500`. A Valkey that accepts connections and never answers no longer hangs a send: `checkAccountSendGate` settles from the process's own copy in about 1.5 s, which also unblocks the manual inbox reply, and the send limiter's in-process fallback runs instead of the send waiting. The send limiter also gets an `error` listener.
+- **Producer queues.** `PRODUCER_REDIS_OPTIONS` gets the same two timeouts. Each Queue logs connection errors once a minute, and is dropped from the cache if its first connection fails (BullMQ runs its start-up check once and keeps the result, so a timed-out check broke that Queue for good). Every producer, scan and owner-console call waits at most 3 s for the Queue to be ready, then fails with `queue_unavailable` instead of waiting with no deadline while Valkey is down. `enqueueBroadcastSends` then returns every contact as not queued instead of throwing, and the queue counts on the overview report `error`.
+- **Log noise.** `error` listeners on the sign-in limiter, the replay guard, the owner challenge store and the health client.
+- **In-process sign-in limiter.** A refused attempt no longer extends the window, matching the Redis fixed window, so steady traffic above the limit is admitted again a window after the first counted attempt. `recordFailure()` is unchanged.
+- **Worker liveness.** `/live` also requires BullMQ's dedicated blocking clients to be ready (`consumersProcessing` in `src/lib/worker-health.ts`). Checked against a throwaway Valkey: after a 6 s outage the worker stopped taking jobs with its main connections ready and its blocking clients stuck in `reconnecting`; the container healthcheck now exits 1 there, where it exited 0 before.
+- **Tracked-link clicks.** The shared `<link>:anon` bucket applies only when `TRUSTED_PROXY_HOPS` is above 0. With 0 every visitor is `anon`, so those clicks are counted without the cap, and the route logs a warning once per process in production.
+- **Docs.** The health check section of `ops/DOKPLOY_DEPLOYMENT.md`, `TRUSTED_PROXY_HOPS=1` (linkar-web) and `DIRECT_URL` (both services) as required variables, the pool-wait sentence in `.env.production.example` and `src/lib/worker-database-url.ts`, and the encode comments in `Dockerfile` and `next.config.ts`.
+
+Owner decision, left unchanged in code: `UV_THREADPOOL_SIZE=8` and `imgOptConcurrency: 1`. On the production image, 8 raises the most parallel image encodes from 4 to 8, and `imgOptConcurrency` has no effect. Keep 8 for the DNS margin only once the Cloudflare cache and rate rule on `/_next/image` is live, or set it to 4 (the libuv default) to keep encodes where they were and give up that margin.
+
+## 12. Verification pass (16 Oct)
+
+Run on 16 October 2026 on the whole tree of the `inspection-fixes` branch: `e1d9184`, then `77e8262` and `d2e79ed` (account-restriction fixes, merged in `fde6dbd`) and `1de3687` (this report's fixes), plus the uncommitted changes on top (104 tracked files changed, 5 new files). Nothing is committed or pushed.
+
+### What was verified
+
+| Check | Result |
+|---|---|
+| `next typegen`, then `tsc --noEmit -p .` | Pass. Also passes with `--incremental false`, so the result does not rest on the cached build info |
+| `eslint .` | Pass, no warnings |
+| `pnpm check:deployment-hygiene` | Pass |
+| `pnpm check:branding` | Pass |
+| `pnpm check:copy` | Pass |
+| `vitest run --testTimeout=60000` | 424 files and 4,814 tests pass on the first run; no reruns needed |
+| `pnpm build` | Pass: 219 static pages, plus the worker bundle |
+| `pnpm check:css-budget` | Pass: `/` 34.6 of 45.0 KB, `/pricing` 24.2 of 34.0 KB |
+| Dev server at `http://localhost:3000/` | 200 before the build and 200 after it (0.18 s) |
+
+The build ran with `DATABASE_URL`, `DIRECT_URL`, `SUPABASE_DATABASE_URL` and `SUPABASE_DIRECT_URL` pointed at a closed local port, so no build step could reach the production database. It still passed, so the build does not need a database connection. `.env.local` has no Redis URL, so nothing reached production Redis either.
+
+### What was fixed
+
+Nothing. Every check passed on the first run, so this pass changed no code. The only edit is this section.
+
+### What was deferred, and why
+
+- **Behaviour checks against a production build.** The `next start` checks in section 11 (health endpoints, image refusals, Valkey stops and stalls, the Playwright image sweep) were not repeated. This pass covers types, lint, the repo checks, unit tests and the build; the behaviour was checked by the earlier verifiers on the same code.
+- **Owner items.** Everything under "What remains for the owner" in section 11 is unchanged: the read-only regex keyword check before deploy, the Dokploy health check settings, the signed-in checks, the Cloudflare rules and the `UV_THREADPOOL_SIZE` decision. Each needs production access or an owner decision.
+- **Log noise and warnings.** jsdom printed "Not implemented: navigation" once during the vitest run, and every test passed. esbuild flags `dist/worker.js` at 2.1 MB (2.0 MB in section 11). Both are warnings only, and trimming the worker bundle is not a local fix.
+- **Stale wording in section 11.** Section 11 still says the work sits uncommitted on `main`. It now lives on `inspection-fixes`, partly committed. The text was left as written, as a record of that round.
+- **Scratch Redis.** The scratch Redis server from the inspection still listens on port 16697 (pid 16168). It holds no repo data. It was left running because this pass did not start it.
+
+### Closing pass (16 Oct, after the verification fixes)
+
+Rerun on the same tree with the later uncommitted verification fixes on top (106 tracked files changed, 5 new files). `next typegen` and `tsc --noEmit -p .` (also with `--incremental false`), `eslint .`, `pnpm check:deployment-hygiene`, `pnpm check:branding` and `pnpm check:copy` all pass. `vitest run --testTimeout=60000` passes 424 files and 4,825 tests on the first run, with the same single jsdom "Not implemented: navigation" line.
+`pnpm build` passes (219 static pages, worker bundle 2.1 MB, same esbuild size warning) with all four database URLs pointed at a closed local port and no Redis URL set. `pnpm check:css-budget` passes (`/` 34.6 of 45.0 KB, `/pricing` 24.2 of 34.0 KB), and the dev server at `http://localhost:3000/` answered 200 before and after the build. The build left the tracked tree unchanged.
+Nothing needed fixing, so this pass changed no code; the only edit is this note.
+
+### Broadcast retry review (16 Oct, last)
+
+Three more rounds of independent review on the broadcast idempotency work found that a retry after a lost answer could still drop an edited message or send the same message twice. The broadcasts screen now ties the retry key to what the server holds rather than to edits:
+- Edits keep the key.
+- A new key starts only after a confirmed send, a `queued: 0` answer, a replay that reached nobody, or a change to the message itself.
+- A replay with a changed message, or with the same message under another name, audience or start time, keeps the form and says plainly what was and was not sent.
+- A success answer that cannot be read counts as unconfirmed.
+- The fields lock while a send is in flight.
+- The confirm step warns when the list already holds the same message from the last 24 hours.
+
+The route brings broadcast counts up to date after closing a broadcast nobody was queued for, but only when the close worked. Every scenario the reviewer reproduced is now a screen or route test. The last full run passed: `eslint .`, the three repo checks, 424 files and 4,839 tests, `pnpm build` and `pnpm check:css-budget`.

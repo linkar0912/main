@@ -63,7 +63,7 @@ export function ExtraChecklist({ page }: { page: SeoPage }) {
               : "Four things and no developer. With these ready, you can build this workflow and test it from another account."}
           </p>
           <div className={shell.actions}>
-            <Link className={shell.primaryAction} href="/signup"><ButtonRoll label="Create your first reply" /></Link>
+            <a className={shell.primaryAction} href="/signup"><ButtonRoll label="Create your first reply" /></a>
             <Link className={shell.outlineAction} href="/pricing"><ButtonRoll label="See plans" /></Link>
           </div>
         </div>

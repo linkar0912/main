@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import { redirect, unstable_rethrow } from "next/navigation";
 import { LoginScreen } from "@/src/components/auth/login-screen";
 import { sanitizeInvite } from "@/src/lib/auth/auth-redirect";
-import { getRequestSession, safeNextPath } from "@/src/lib/auth/session";
+import { checkRequestSession, safeNextPath } from "@/src/lib/auth/session";
 import { PRODUCT_NAME } from "@/src/lib/branding";
 import { describePlanIntent, parsePlanIntent } from "@/src/lib/billing/plan-intent";
 import { ADMIN_HOST, resolveRequestHostname } from "@/src/lib/site-routing";
@@ -39,7 +39,12 @@ const ERRORS: Record<string, string> = {
   unconfirmed: "Confirm your email address before signing in. Open the link we sent, or send a new one below.",
   "resend-email": "Enter a valid email address to resend the confirmation link.",
   "resend-locked": "Too many confirmation emails requested. Try again in an hour.",
+  unavailable: "We could not reach the sign-in service, so your password was not checked. Try again in a minute.",
 };
+
+// Shown on a page load, when nothing was submitted: Supabase Auth could not
+// answer, or the database failed, while checking for an existing session.
+const SESSION_CHECK_UNAVAILABLE = "We could not check your sign-in just now, so signing in may not work yet. Try again in a minute.";
 
 function isOwnerConsolePath(path: string): boolean {
   const pathname = path.split(/[?#]/, 1)[0];
@@ -70,14 +75,24 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   const invite = sanitizeInvite(params.invite);
 
   // Already signed in (with a workspace): there is nothing to do here. A
-  // session check that fails (auth provider unreachable) just shows the form.
-  const session = await getRequestSession().catch(() => null);
-  if (session) redirect(nextPath);
+  // session check that could not finish (Supabase Auth not answering, or the
+  // database failing) still shows the form, with a notice that sign-in may
+  // not work yet.
+  const sessionCheck = await checkRequestSession().then(
+    ({ session, authUnavailable }) => ({ session, failed: authUnavailable }),
+    (sessionError: unknown) => {
+      unstable_rethrow(sessionError);
+      return { session: null, failed: true };
+    },
+  );
+  if (sessionCheck.session) redirect(nextPath);
 
   const verifyInvalid = params.verify === "invalid";
-  const error = verifyInvalid
+  const requestedError = verifyInvalid
     ? "That confirmation link is invalid or has expired. Send yourself a new one below."
     : ERRORS[params.error ?? ""] ?? "";
+  // An error from the last attempt (a lockout, say) says more than the notice.
+  const error = requestedError || (sessionCheck.failed ? SESSION_CHECK_UNAVAILABLE : "");
   // A paid plan picked on /pricing (remembered by the proxy): checkout opens
   // right after signing in. Invitations never carry one.
   const planIntent = invite ? null : parsePlanIntent(params.plan, params.interval);

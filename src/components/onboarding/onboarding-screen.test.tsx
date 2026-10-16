@@ -2,12 +2,13 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { OnboardingView } from "@/src/lib/onboarding/view";
+import type { OnboardingSave } from "./onboarding-client";
 
 const router = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => router }));
 
-const { OnboardingScreen } = await import("./onboarding-screen");
-const { ONBOARDING_DEFERRED_KEY, readOnboardingDeferral } = await import("@/src/lib/onboarding/redirect");
+const { ONBOARDING_REQUEST_TIMEOUT_MS, OnboardingScreen } = await import("./onboarding-screen");
+const { ONBOARDING_DEFERRED_KEY, onboardingKnownNotRequired, readOnboardingDeferral } = await import("@/src/lib/onboarding/redirect");
 
 function view(patch: Partial<OnboardingView> = {}): OnboardingView {
   return {
@@ -167,5 +168,94 @@ describe("OnboardingScreen when setup cannot load", () => {
     // Disabled buttons cannot fire again while cooling down.
     fireEvent.click(third);
     expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe("OnboardingScreen when the server stops answering", () => {
+  beforeEach(() => {
+    router.push.mockReset();
+    router.replace.mockReset();
+    window.sessionStorage.clear();
+    vi.spyOn(Math, "random").mockReturnValue(0.5);
+  });
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+    window.sessionStorage.clear();
+  });
+
+  /** AbortSignal.timeout on the fake clock: the real one ignores vi.useFakeTimers. */
+  function timeoutsOnFakeClock() {
+    return vi.spyOn(AbortSignal, "timeout").mockImplementation((ms: number) => {
+      const controller = new AbortController();
+      setTimeout(() => controller.abort(new DOMException("The operation timed out.", "TimeoutError")), ms);
+      return controller.signal;
+    });
+  }
+
+  /** A request to a server that never answers: it only ends when aborted. */
+  function hang(init?: RequestInit): Promise<Response> {
+    return new Promise((_resolve, reject) => {
+      init?.signal?.addEventListener("abort", () => reject(init.signal?.reason), { once: true });
+    });
+  }
+
+  const answer = (data: OnboardingView) => ({ ok: true, status: 200, json: async () => ({ data }) }) as unknown as Response;
+
+  it("gives up on a step save that never answers, so Skip gets through in about 15 s", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const timeouts = timeoutsOnFakeClock();
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method !== "PUT") return answer(view({ step: 1, answers: {} }));
+      const body = JSON.parse(String(init.body)) as OnboardingSave;
+      if (body.action === "skip") return answer(view({ skippedAt: "2026-10-16T10:00:00.000Z" }));
+      return hang(init);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const puts = () => fetchMock.mock.calls.filter(([, init]) => init?.method === "PUT").map(([, init]) => JSON.parse(String(init?.body)) as OnboardingSave);
+
+    render(<OnboardingScreen />);
+    fireEvent.click(await screen.findByRole("button", { name: "Continue" }));
+    await screen.findByRole("heading", { level: 1, name: /What best describes you/ });
+    expect(puts()).toEqual([{ step: 2, answers: { name: "Priya" } }]);
+
+    // Skip waits its turn behind the hung save, but only until that save times out.
+    fireEvent.click(screen.getByRole("button", { name: "Skip for now" }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(ONBOARDING_REQUEST_TIMEOUT_MS - 2_000); });
+    expect(router.push).not.toHaveBeenCalled();
+    await act(async () => { await vi.advanceTimersByTimeAsync(3_000); });
+    await waitFor(() => expect(router.push).toHaveBeenCalledWith("/dashboard"));
+    expect(puts().at(-1)).toEqual({ action: "skip", answers: { name: "Priya" } });
+    expect(onboardingKnownNotRequired()).toBe(true);
+    // Every request had the 15 s limit: the load, the step save and the skip.
+    expect(timeouts.mock.calls.map(([ms]) => ms)).toEqual([ONBOARDING_REQUEST_TIMEOUT_MS, ONBOARDING_REQUEST_TIMEOUT_MS, ONBOARDING_REQUEST_TIMEOUT_MS]);
+  });
+
+  it("falls back to the deferral in bounded time when the skip never answers either", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    timeoutsOnFakeClock();
+    vi.stubGlobal("fetch", vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => init?.method === "PUT" ? hang(init) : answer(view({ step: 3 }))));
+
+    render(<OnboardingScreen />);
+    fireEvent.click(await screen.findByRole("button", { name: "Skip for now" }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(ONBOARDING_REQUEST_TIMEOUT_MS + 500); });
+    await waitFor(() => expect(router.push).toHaveBeenCalledWith("/dashboard"));
+    expect(readOnboardingDeferral()).not.toBeNull();
+    expect(onboardingKnownNotRequired()).toBe(false);
+  });
+
+  it("shows the load as failed, and holds the Home redirect off, when setup never answers", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    timeoutsOnFakeClock();
+    vi.stubGlobal("fetch", vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => hang(init)));
+
+    render(<OnboardingScreen />);
+    expect(screen.queryByRole("alert")).toBeNull();
+    await act(async () => { await vi.advanceTimersByTimeAsync(ONBOARDING_REQUEST_TIMEOUT_MS + 500); });
+    expect((await screen.findByRole("alert")).textContent).toContain("Your setup couldn’t load just now.");
+    expect(readOnboardingDeferral()).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Go to Home" })).toBeTruthy();
   });
 });

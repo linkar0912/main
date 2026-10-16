@@ -10,6 +10,9 @@ const constructed = vi.hoisted(() => [] as Array<{ url: string; options: Record<
 vi.mock("ioredis", async () => {
   const actual = await vi.importActual<typeof import("ioredis")>("ioredis");
   class FakeRedis {
+    on() {
+      return this;
+    }
     async get(key: string) {
       await new Promise((resolve) => setTimeout(resolve, 0));
       return store.has(key) ? String(store.get(key)) : null;
@@ -70,6 +73,33 @@ describe("LoginRateLimitStore.consume", () => {
     expect([...store.keys()].sort()).toEqual(["linkar:forgot-password:visitor", "linkar:login:visitor"]);
   });
 
+  it("admits the limit again a window after the first counted attempt, under steady traffic (fallback)", async () => {
+    // One attempt a second for 130 s against 3 a minute. Refused attempts must
+    // not push the window out, or the visitor would stay locked out for good.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      const start = Date.parse("2026-10-16T10:00:00.000Z");
+      const limiter = new LoginRateLimitStore(undefined, 3, 60_000);
+      const admittedAt: number[] = [];
+      for (let second = 0; second < 130; second += 1) {
+        vi.setSystemTime(start + second * 1_000);
+        if (await limiter.consume("steady")) admittedAt.push(second);
+      }
+      expect(admittedAt).toEqual([0, 1, 2, 60, 61, 62, 120, 121, 122]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("still locks out on recorded failures with the fallback", async () => {
+    // recordFailure() keeps counting every failure, as the login lockout needs.
+    const limiter = new LoginRateLimitStore(undefined, 2, 60_000);
+    await limiter.recordFailure("signin");
+    expect(await limiter.isAllowed("signin")).toBe(true);
+    await limiter.recordFailure("signin");
+    expect(await limiter.isAllowed("signin")).toBe(false);
+  });
+
   it("admits exactly the limit with the in-process fallback", async () => {
     const limiter = new LoginRateLimitStore(undefined, 3);
     const results = await Promise.all(Array.from({ length: 10 }, () => limiter.consume("someone")));
@@ -91,6 +121,8 @@ describe("LoginRateLimitStore when Redis stalls", () => {
     const limiter = new LoginRateLimitStore(url, 1);
     try {
       expect(constructed).toContainEqual({ url, options: expect.objectContaining({ connectTimeout: 3_000, commandTimeout: 1_500 }) });
+      // The error event is handled, so a reconnect loop does not print "[ioredis] Unhandled error event".
+      expect((limiter as unknown as { redis: Redis }).redis.listenerCount("error")).toBeGreaterThan(0);
 
       const started = performance.now();
       expect(await limiter.consume("visitor")).toBe(true);

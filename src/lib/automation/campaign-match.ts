@@ -30,8 +30,11 @@ export function matchCampaign(definition: FlowDefinitionV2, event: NormalizedEve
     return { matched: true };
   }
 
-  // One pass over the keywords with the event text normalized once and cached matchers.
-  const keyword = findMatchedKeyword(event.text, definition.trigger.keywords, "any");
+  // One pass over the keywords with the event text normalized once and cached
+  // matchers. The event id shares the event's keyword budget and results with
+  // the classic automations checked after it. Campaigns match in "any" mode,
+  // so a regex pattern the matcher cannot run never applies here.
+  const keyword = findMatchedKeyword(event.text, definition.trigger.keywords, "any", event.id);
   if (!keyword) {
     return { matched: false, reason: "keyword did not match" };
   }

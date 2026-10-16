@@ -1,4 +1,3 @@
-import Link from "next/link";
 import type { CSSProperties } from "react";
 import type { SeoPage } from "@/src/content/seo";
 import { ButtonRoll } from "../../../button-roll";
@@ -32,7 +31,7 @@ export function BenefitsSticky({ page }: { page: SeoPage }) {
             ))}
           </ol>
           <div className={shell.actions}>
-            <Link className={shell.primaryAction} href="/signup"><ButtonRoll label="Start for free" /></Link>
+            <a className={shell.primaryAction} href="/signup"><ButtonRoll label="Start for free" /></a>
           </div>
         </header>
         <ol className={styles.stack}>

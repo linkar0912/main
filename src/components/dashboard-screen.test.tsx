@@ -152,6 +152,49 @@ describe("DashboardScreen", () => {
     expect(fetchMock.mock.calls.filter(([url]) => String(url).includes("/api/meta/connection"))).toHaveLength(1);
   });
 
+  it("re-checks on window focus at most once a minute while every request answers 502, and Retry still asks at once", async () => {
+    automationState.automations = [automation()];
+    let now = Date.parse("2026-10-16T10:00:00.000Z");
+    const clock = vi.spyOn(Date, "now").mockImplementation(() => now);
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL) => ({ ok: false, status: 502, json: async () => { throw new SyntaxError("Unexpected token <"); } }) as unknown as Response);
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      render(<DashboardScreen />);
+      expect(await screen.findByText("Could not check your accounts.")).toBeTruthy();
+      const panel = await screen.findByRole("region", { name: "Performance over time" });
+      await within(panel).findByRole("button", { name: "Try again" });
+      await act(async () => { await Promise.resolve(); });
+      const afterLoad = fetchMock.mock.calls.length;
+
+      // Ten window switches 3 s apart, starting 45 s after the first load.
+      now += 45_000;
+      for (let index = 0; index < 10; index += 1) {
+        await act(async () => { window.dispatchEvent(new Event("focus")); });
+        now += 3_000;
+      }
+      await act(async () => { await Promise.resolve(); });
+      const fromFocus = fetchMock.mock.calls.slice(afterLoad).map(([url]) => String(url));
+      expect(fromFocus.length).toBeLessThanOrEqual(3);
+      // The switch a minute after the first load did check again, once.
+      expect([...fromFocus].sort()).toEqual(["/api/facebook/connection", "/api/insights?include=overview", "/api/meta/connection"]);
+
+      // A hidden tab never checks on focus.
+      now += 120_000;
+      const hidden = vi.spyOn(document, "hidden", "get").mockReturnValue(true);
+      await act(async () => { window.dispatchEvent(new Event("focus")); });
+      hidden.mockRestore();
+      expect(fetchMock.mock.calls.length).toBe(afterLoad + fromFocus.length);
+
+      // Retry asks again straight away, throttle or not.
+      fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+      await waitFor(() => expect(fetchMock.mock.calls.length).toBe(afterLoad + fromFocus.length + 2));
+      fireEvent.click(within(panel).getByRole("button", { name: "Try again" }));
+      await waitFor(() => expect(fetchMock.mock.calls.length).toBe(afterLoad + fromFocus.length + 3));
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
   it("says where Linkar is replying from, counting a Facebook Page as a channel", async () => {
     automationState.automations = [automation(), automation({ id: "automation_2", name: "Draft", status: "DRAFT" })];
     stubDashboardFetch({ instagram: [], facebook: [{ id: "fb_1", pageId: "page_1", pageName: "Linkar Page", status: "CONNECTED", connectedAt: "2026-08-30T00:00:00.000Z" }] });

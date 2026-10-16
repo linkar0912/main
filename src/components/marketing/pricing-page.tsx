@@ -275,9 +275,9 @@ function PricingCta() {
       <h2 id="pricing-cta-title">Start on Free. Move up when the DMs do.</h2>
       <p>A thousand deliveries a month, no card, and the same automation builder every plan gets.</p>
       <div className={styles.ctaActions}>
-        <Link className={styles.ctaPrimary} href="/signup" prefetch={false}>
+        <a className={styles.ctaPrimary} href="/signup">
           <ButtonRoll label="Start free" />
-        </Link>
+        </a>
         <Link className={styles.ctaSecondary} href="/#how-it-works" prefetch={false}>
           See how it works
           <ArrowUpRight size={16} aria-hidden="true" />
@@ -319,10 +319,10 @@ export function PricingPage() {
                 {/* Phones only (see the CSS): the first plan button sits
                     below a phone's first screen, so the intro carries a
                     compact way into signup. */}
-                <Link className={styles.introStart} href="/signup" prefetch={false}>
+                <a className={styles.introStart} href="/signup">
                   <span>Start free, no card needed</span>
                   <span aria-hidden="true">&#8594;</span>
-                </Link>
+                </a>
                 <BillingPeriod name="public-billing-period" />
               </header>
 

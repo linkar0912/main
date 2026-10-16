@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createMemoryRepository } from "@/src/lib/memory-repository";
+import { logger } from "@/src/lib/logger";
 
 let repository = createMemoryRepository();
 
@@ -110,27 +111,71 @@ describe("GET /r/[slug]", () => {
     }
   });
 
-  // A request with no client address (a direct hit on the origin, or an
-  // internal one such as the image optimizer used to make) hashes to "anon".
-  it("limits visitors without a known address under one shared bucket per link, still redirecting", async () => {
+  // With no trusted proxy every visitor resolves to "anon", so one shared cap
+  // would drop real clicks on any busy link.
+  it("counts every click without the cap when no trusted proxy is configured", async () => {
     await repository.createTrackedLink("workspace_1", {
-      slug: "anon-flood",
+      slug: "anon-open",
       destination: "https://example.com/",
       conversionUrl: "https://hooks.example.com/conversion",
     });
     const recordClick = vi.spyOn(repository, "recordTrackedLinkClick");
-    // No trusted proxy, so each forged X-Forwarded-For still resolves to "anon".
+    // No trusted proxy, so each X-Forwarded-For (forgeable) still resolves to "anon".
     const click = (i: number) => GET(
-      new Request("http://localhost/r/anon-flood", { headers: { "x-forwarded-for": `198.51.100.${i}` } }),
-      context("anon-flood"),
+      new Request("http://localhost/r/anon-open", { headers: { "x-forwarded-for": `198.51.100.${i}` } }),
+      context("anon-open"),
     );
 
     for (let i = 0; i < 31; i++) expect((await click(i)).status).toBe(302);
     await new Promise((resolve) => setTimeout(resolve, 10));
 
-    expect(recordClick).toHaveBeenCalledTimes(30);
+    expect(recordClick).toHaveBeenCalledTimes(31);
     expect(recordClick.mock.calls.every(([, input]) => input.ipHash === "anon")).toBe(true);
-    expect(mocks.postJson).toHaveBeenCalledTimes(30);
+    expect(mocks.postJson).toHaveBeenCalledTimes(31);
+  });
+
+  // Behind a trusted proxy, a request with no client address is a direct hit
+  // on the origin or an internal one, and hashes to "anon".
+  it("caps clicks without a known address at 30 a minute per link behind a trusted proxy, still redirecting", async () => {
+    vi.stubEnv("TRUSTED_PROXY_HOPS", "1");
+    try {
+      await repository.createTrackedLink("workspace_1", {
+        slug: "anon-flood",
+        destination: "https://example.com/",
+        conversionUrl: "https://hooks.example.com/conversion",
+      });
+      const recordClick = vi.spyOn(repository, "recordTrackedLinkClick");
+      const click = () => GET(new Request("http://localhost/r/anon-flood"), context("anon-flood"));
+
+      for (let i = 0; i < 31; i++) expect((await click()).status).toBe(302);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      expect(recordClick).toHaveBeenCalledTimes(30);
+      expect(recordClick.mock.calls.every(([, input]) => input.ipHash === "anon")).toBe(true);
+      expect(mocks.postJson).toHaveBeenCalledTimes(30);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("counts every click from distinct visitors behind a trusted proxy", async () => {
+    vi.stubEnv("TRUSTED_PROXY_HOPS", "1");
+    try {
+      await repository.createTrackedLink("workspace_1", { slug: "busy", destination: "https://example.com/" });
+      const recordClick = vi.spyOn(repository, "recordTrackedLinkClick");
+      const click = (i: number) => GET(
+        new Request("http://localhost/r/busy", { headers: { "cf-connecting-ip": `198.51.100.${i}` } }),
+        context("busy"),
+      );
+
+      for (let i = 0; i < 40; i++) expect((await click(i)).status).toBe(302);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      expect(recordClick).toHaveBeenCalledTimes(40);
+      expect(new Set(recordClick.mock.calls.map(([, input]) => input.ipHash)).size).toBe(40);
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it("keeps a visitor with a known address out of the exhausted anonymous bucket", async () => {
@@ -153,17 +198,44 @@ describe("GET /r/[slug]", () => {
   });
 
   it("keeps each link's anonymous bucket separate", async () => {
-    await repository.createTrackedLink("workspace_1", { slug: "first", destination: "https://example.com/" });
-    await repository.createTrackedLink("workspace_1", { slug: "second", destination: "https://example.com/" });
-    const recordClick = vi.spyOn(repository, "recordTrackedLinkClick");
+    vi.stubEnv("TRUSTED_PROXY_HOPS", "1");
+    try {
+      await repository.createTrackedLink("workspace_1", { slug: "first", destination: "https://example.com/" });
+      await repository.createTrackedLink("workspace_1", { slug: "second", destination: "https://example.com/" });
+      const recordClick = vi.spyOn(repository, "recordTrackedLinkClick");
 
-    for (let i = 0; i < 31; i++) await GET(new Request("http://localhost/r/first"), context("first"));
-    await GET(new Request("http://localhost/r/second"), context("second"));
-    await new Promise((resolve) => setTimeout(resolve, 10));
+      for (let i = 0; i < 31; i++) await GET(new Request("http://localhost/r/first"), context("first"));
+      await GET(new Request("http://localhost/r/second"), context("second"));
+      await new Promise((resolve) => setTimeout(resolve, 10));
 
-    expect(recordClick).toHaveBeenCalledTimes(31);
-    const second = await repository.getTrackedLinkBySlugPublic("second");
-    expect(recordClick.mock.calls.at(-1)?.[0]).toBe(second?.id);
+      expect(recordClick).toHaveBeenCalledTimes(31);
+      const second = await repository.getTrackedLinkBySlugPublic("second");
+      expect(recordClick.mock.calls.at(-1)?.[0]).toBe(second?.id);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("warns once per process in production when no trusted proxy is configured", async () => {
+    const warn = vi.spyOn(logger, "warn").mockImplementation(() => undefined);
+    vi.stubEnv("NODE_ENV", "development");
+    try {
+      await repository.createTrackedLink("workspace_1", { slug: "warned", destination: "https://example.com/" });
+      await GET(new Request("http://localhost/r/warned"), context("warned"));
+      expect(warn).not.toHaveBeenCalledWith(expect.stringContaining("TRUSTED_PROXY_HOPS"));
+
+      vi.stubEnv("NODE_ENV", "production");
+      // Production config checks need these; neither changes what the route does here.
+      vi.stubEnv("DEMO_MODE", "1");
+      vi.stubEnv("AUTH_SESSION_SECRET", "route-test-session-secret-0123456789abcdef");
+      vi.stubEnv("PLATFORM_OWNER_USER_IDS", "00000000-0000-4000-8000-000000000001");
+      for (let i = 0; i < 3; i++) await GET(new Request("http://localhost/r/warned"), context("warned"));
+      const proxyWarnings = warn.mock.calls.filter(([message]) => String(message).includes("TRUSTED_PROXY_HOPS is 0"));
+      expect(proxyWarnings).toHaveLength(1);
+    } finally {
+      vi.unstubAllEnvs();
+      warn.mockRestore();
+    }
   });
 
   it("410s an expired link before touching the destination", async () => {

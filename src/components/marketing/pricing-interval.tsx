@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { createContext, useContext, useState, type ReactNode } from "react";
 
 import type { BillingInterval, BillingPlanKey } from "@/src/lib/billing/types";
@@ -122,9 +121,9 @@ export function PlanSignupLink({
 }) {
   const interval = usePricingInterval();
   return (
-    <Link className={className} data-featured={featured || undefined} href={signupHref(plan, interval)} prefetch={false}>
+    <a className={className} data-featured={featured || undefined} href={signupHref(plan, interval)}>
       {children}
-    </Link>
+    </a>
   );
 }
 

@@ -2,7 +2,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { InboxContact } from "./types";
-import { INBOX_LIVE_REFRESH_MAX_MS, INBOX_LIVE_REFRESH_MS, InstagramInbox, liveRefreshDelay, mergeLiveContacts, mergeLiveMessages } from "./instagram-inbox";
+import { INBOX_LIVE_REFRESH_MAX_MS, INBOX_LIVE_REFRESH_MS, INBOX_LIVE_TIMEOUT_MS, InstagramInbox, liveRefreshDelay, mergeLiveContacts, mergeLiveMessages } from "./instagram-inbox";
 
 const aanya = {
   id: "contact_1", username: "aanya", avatarUrl: "/api/contacts/contact_1/avatar", preview: "Need the guide",
@@ -165,6 +165,193 @@ describe("InstagramInbox", () => {
       random.mockRestore();
       vi.useRealTimers();
     }
+  });
+
+  describe("live checks against a server that hangs or refuses", () => {
+    /** AbortSignal.timeout on the fake clock: the real one ignores vi.useFakeTimers. */
+    function timeoutsOnFakeClock() {
+      return vi.spyOn(AbortSignal, "timeout").mockImplementation((ms: number) => {
+        const controller = new AbortController();
+        setTimeout(() => controller.abort(new DOMException("The operation timed out.", "TimeoutError")), ms);
+        return controller.signal;
+      });
+    }
+
+    /** A request that only ends when it is aborted. */
+    function hang(init?: RequestInit): Promise<Response> {
+      return new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(init.signal?.reason), { once: true });
+      });
+    }
+
+    const listOk = () => new Response(JSON.stringify({ data: { contacts: [{ ...aanya, unread: false }], members: [] } }), { status: 200 });
+    const advance = (ms: number) => act(async () => { await vi.advanceTimersByTimeAsync(ms); });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+      vi.useRealTimers();
+    });
+
+    it("gives up on a hung list request after 15 s and backs off, instead of stalling every later check", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      vi.spyOn(Math, "random").mockReturnValue(0.5);
+      const timeouts = timeoutsOnFakeClock();
+      let hanging = false;
+      const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (String(input) === "/api/inbox" && !init?.method) return hanging ? hang(init) : listOk();
+        return new Response(JSON.stringify({ data: {} }), { status: 200 });
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      const listCalls = () => fetchMock.mock.calls.filter(([url, init]) => String(url) === "/api/inbox" && !init?.method).length;
+
+      render(<InstagramInbox />);
+      await screen.findByRole("button", { name: /open conversation with @aanya/i });
+      const lists = listCalls();
+      hanging = true;
+
+      // The check goes out and hangs.
+      await advance(INBOX_LIVE_REFRESH_MS);
+      expect(listCalls()).toBe(lists + 1);
+      expect(timeouts).toHaveBeenLastCalledWith(INBOX_LIVE_TIMEOUT_MS);
+      // It gives up after 15 s; the next check waits out the 16 s backoff, then goes out.
+      await advance(INBOX_LIVE_TIMEOUT_MS + 14_000);
+      expect(listCalls()).toBe(lists + 1);
+      hanging = false;
+      await advance(3_000);
+      expect(listCalls()).toBe(lists + 2);
+      // That one answered, so the pace is back to 8 s.
+      await advance(INBOX_LIVE_REFRESH_MS + 500);
+      expect(listCalls()).toBe(lists + 3);
+    });
+
+    it("keeps the 8 s pace when the open thread answers 404, marks the conversation and stops asking for it", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      const timeouts = timeoutsOnFakeClock();
+      let gone = false;
+      const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url === "/api/inbox" && !init?.method) return listOk();
+        if (url === "/api/inbox/contact_1" && !init?.method) {
+          return gone
+            ? new Response(JSON.stringify({ error: "Contact not found" }), { status: 404 })
+            : new Response(JSON.stringify({ data: { messages: [] } }), { status: 200 });
+        }
+        return new Response(JSON.stringify({ data: {} }), { status: 200 });
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      const listCalls = () => fetchMock.mock.calls.filter(([url, init]) => String(url) === "/api/inbox" && !init?.method).length;
+      const threadCalls = () => fetchMock.mock.calls.filter(([url, init]) => String(url) === "/api/inbox/contact_1" && !init?.method).length;
+
+      render(<InstagramInbox />);
+      fireEvent.click(await screen.findByRole("button", { name: /open conversation with @aanya/i }));
+      await screen.findByText("No messages with this contact yet.");
+      await advance(INBOX_LIVE_REFRESH_MS);
+      gone = true;
+      const lists = listCalls();
+      const threads = threadCalls();
+
+      await advance(INBOX_LIVE_REFRESH_MS);
+      expect(listCalls()).toBe(lists + 1);
+      expect(threadCalls()).toBe(threads + 1);
+      expect((await screen.findByRole("alert")).textContent).toContain("This conversation is no longer available.");
+
+      // Not a failure: the list keeps its 8 s pace, and the missing thread is not asked for again.
+      await advance(INBOX_LIVE_REFRESH_MS);
+      expect(listCalls()).toBe(lists + 2);
+      await advance(INBOX_LIVE_REFRESH_MS);
+      expect(listCalls()).toBe(lists + 3);
+      expect(threadCalls()).toBe(threads + 1);
+      // Every live request, list and thread, had the 15 s limit (the first load and the open do not).
+      expect(timeouts).toHaveBeenCalledTimes((listCalls() - 1) + (threadCalls() - 1));
+      expect(new Set(timeouts.mock.calls.map(([ms]) => ms))).toEqual(new Set([INBOX_LIVE_TIMEOUT_MS]));
+    });
+
+    it("checks again within about 16 s when the tab comes back after an outage, not after the 2 minute backoff", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      vi.spyOn(Math, "random").mockReturnValue(0.5);
+      timeoutsOnFakeClock();
+      let visibility: DocumentVisibilityState = "visible";
+      vi.spyOn(document, "visibilityState", "get").mockImplementation(() => visibility);
+      let failing = false;
+      const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (String(input) === "/api/inbox" && !init?.method) return failing ? new Response("<html>Bad gateway</html>", { status: 502 }) : listOk();
+        return new Response(JSON.stringify({ data: {} }), { status: 200 });
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      const listCalls = () => fetchMock.mock.calls.filter(([url, init]) => String(url) === "/api/inbox" && !init?.method).length;
+      const show = (state: DocumentVisibilityState) => act(async () => {
+        visibility = state;
+        document.dispatchEvent(new Event("visibilitychange"));
+      });
+
+      render(<InstagramInbox />);
+      await screen.findByRole("button", { name: /open conversation with @aanya/i });
+      const lists = listCalls();
+      failing = true;
+      // Four failed checks (at 8, 24, 56 and 120 s): the next one is 2 minutes off.
+      await advance(INBOX_LIVE_REFRESH_MS + 16_000 + 32_000 + 64_000);
+      expect(listCalls()).toBe(lists + 4);
+
+      // They leave the tab; the outage ends meanwhile.
+      await show("hidden");
+      failing = false;
+      // Back 5 s after that last attempt: the check comes 16 s after it, not 2 minutes after.
+      await advance(5_000);
+      await show("visible");
+      expect(listCalls()).toBe(lists + 4);
+      await advance(9_000);
+      expect(listCalls()).toBe(lists + 4);
+      await advance(3_000);
+      expect(listCalls()).toBe(lists + 5);
+      // It worked, so the pace is back to 8 s.
+      await advance(INBOX_LIVE_REFRESH_MS + 500);
+      expect(listCalls()).toBe(lists + 6);
+    });
+
+    it("checks at once when the tab comes back long after the last failed attempt", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      vi.spyOn(Math, "random").mockReturnValue(0.5);
+      timeoutsOnFakeClock();
+      let visibility: DocumentVisibilityState = "visible";
+      vi.spyOn(document, "visibilityState", "get").mockImplementation(() => visibility);
+      let failing = false;
+      const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (String(input) === "/api/inbox" && !init?.method) return failing ? new Response("<html>Bad gateway</html>", { status: 502 }) : listOk();
+        return new Response(JSON.stringify({ data: {} }), { status: 200 });
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      const listCalls = () => fetchMock.mock.calls.filter(([url, init]) => String(url) === "/api/inbox" && !init?.method).length;
+      const show = (state: DocumentVisibilityState) => act(async () => {
+        visibility = state;
+        document.dispatchEvent(new Event("visibilitychange"));
+      });
+
+      render(<InstagramInbox />);
+      await screen.findByRole("button", { name: /open conversation with @aanya/i });
+      const lists = listCalls();
+      failing = true;
+      await advance(INBOX_LIVE_REFRESH_MS + 16_000 + 32_000 + 64_000);
+      expect(listCalls()).toBe(lists + 4);
+
+      await show("hidden");
+      await advance(40_000);
+      expect(listCalls()).toBe(lists + 4);
+      await show("visible");
+      await waitFor(() => expect(listCalls()).toBe(lists + 5));
+
+      // Still failing: flipping back and forth right after does not send a burst...
+      await show("hidden");
+      await show("visible");
+      await show("hidden");
+      await show("visible");
+      expect(listCalls()).toBe(lists + 5);
+      // ...only one more check, 16 s after that attempt.
+      failing = false;
+      await advance(14_000);
+      expect(listCalls()).toBe(lists + 5);
+      await advance(3_000);
+      expect(listCalls()).toBe(lists + 6);
+    });
   });
 
   it("spaces failed live checks 16 s, 32 s, 64 s, then every 2 minutes", () => {

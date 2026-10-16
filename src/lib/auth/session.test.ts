@@ -1,16 +1,34 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import http from "node:http";
+import type { AddressInfo, Socket } from "node:net";
+import { AuthApiError, AuthRetryableFetchError } from "@supabase/supabase-js";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { SESSION_CHECK_DEADLINE_MS } from "@/src/lib/supabase/session-check";
 
 const mocks = vi.hoisted(() => ({
   getClaims: vi.fn(),
+  createServerClient: vi.fn(),
+  requestCookies: [] as { name: string; value: string }[],
+  setCookie: vi.fn(),
+  env: {
+    supabaseUrl: "https://example.supabase.co",
+    supabasePublishableKey: "publishable-key",
+    appUrl: "http://localhost:3000",
+    adminUrl: "http://localhost:3000",
+    publicSiteUrl: "http://localhost:3000",
+  },
   findWorkspaceIdByMemberEmail: vi.fn(),
   getSessionAccessSnapshot: vi.fn(),
   bindMemberUserId: vi.fn(),
   getApplicationAccessState: vi.fn(),
 }));
 
-vi.mock("@/src/lib/supabase/server", () => ({
-  createSupabaseServerClient: async () => ({ auth: { getClaims: mocks.getClaims } }),
+vi.mock("@supabase/ssr", () => ({ createServerClient: mocks.createServerClient }));
+
+vi.mock("next/headers", () => ({
+  cookies: async () => ({ getAll: () => mocks.requestCookies, set: mocks.setCookie }),
 }));
+
+vi.mock("@/src/lib/env", () => ({ getServerEnv: () => mocks.env }));
 
 vi.mock("@/src/lib/repository-provider", () => ({
   getRepository: () => ({
@@ -21,7 +39,29 @@ vi.mock("@/src/lib/repository-provider", () => ({
   }),
 }));
 
-const { getValidatedSession, safeNextPath } = await import("./session");
+const { checkRequestSession, getRequestSession, getValidatedSession, safeNextPath } = await import("./session");
+
+/** The options session.ts gave the Supabase server client. */
+function clientOptions() {
+  return mocks.createServerClient.mock.calls[0][2] as {
+    global: { fetch: typeof fetch };
+    cookies: { setAll: (cookies: { name: string; value: string; options: Record<string, unknown> }[]) => void };
+  };
+}
+
+const ACTIVE_MEMBER = {
+  workspaceId: "workspace_1",
+  email: "member@example.com",
+  userStatus: "ACTIVE",
+  workspaceStatus: "ACTIVE",
+  sessionInvalidBefore: null,
+};
+
+beforeEach(() => {
+  mocks.createServerClient.mockReset().mockReturnValue({ auth: { getClaims: mocks.getClaims } });
+  mocks.requestCookies = [];
+  mocks.setCookie.mockReset();
+});
 
 describe("getValidatedSession", () => {
   beforeEach(() => {
@@ -146,6 +186,241 @@ describe("getValidatedSession", () => {
 
     expect(await getValidatedSession(new Request("http://localhost"))).toMatchObject({ workspaceId: "workspace_1" });
     expect(mocks.bindMemberUserId).toHaveBeenCalledWith("workspace_1", "member@example.com", "user_1");
+  });
+});
+
+describe("session checks while Supabase Auth is failing", () => {
+  beforeEach(() => {
+    mocks.getClaims.mockReset();
+    mocks.getSessionAccessSnapshot.mockReset().mockResolvedValue(ACTIVE_MEMBER);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("gives the Supabase client the session check's fetch, with the app's cookie settings", async () => {
+    mocks.getClaims.mockResolvedValue({ data: { claims: { sub: "user_1", email: "member@example.com" } }, error: null });
+
+    await getValidatedSession(new Request("http://localhost"));
+
+    expect(mocks.createServerClient).toHaveBeenCalledWith(
+      "https://example.supabase.co",
+      "publishable-key",
+      expect.objectContaining({
+        cookieOptions: expect.objectContaining({ path: "/", httpOnly: true, sameSite: "lax", secure: false }),
+        global: { fetch: expect.any(Function) },
+      }),
+    );
+  });
+
+  // A check that hangs (no answer at all) still ends at the deadline, and the
+  // deadline cancels auth-js's later attempts, so none can rotate the refresh
+  // token after the route has answered.
+  it.each([
+    ["getValidatedSession", () => getValidatedSession(new Request("http://localhost"))],
+    ["getRequestSession", () => getRequestSession()],
+  ])("%s answers no session at the 10 s deadline and cancels the client's requests", async (_name, check) => {
+    vi.useFakeTimers();
+    mocks.getClaims.mockReturnValue(new Promise(() => undefined));
+
+    let settled = false;
+    const pending = check().finally(() => { settled = true; });
+    await vi.advanceTimersByTimeAsync(SESSION_CHECK_DEADLINE_MS - 1);
+    expect(settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+
+    expect(await pending).toBeNull();
+    expect(mocks.getSessionAccessSnapshot).not.toHaveBeenCalled();
+    await expect(clientOptions().global.fetch("https://example.supabase.co/auth/v1/token?grant_type=refresh_token", { method: "POST" }))
+      .rejects.toMatchObject({ name: "AbortError" });
+  });
+
+  it("answers no session when the check gives up on a failing Auth service", async () => {
+    mocks.getClaims.mockRejectedValue(new AuthRetryableFetchError("Supabase Auth answered 503 to a token refresh", 503));
+    expect(await getValidatedSession(new Request("http://localhost"))).toBeNull();
+
+    mocks.getClaims.mockResolvedValue({ data: null, error: new AuthRetryableFetchError("Service Unavailable", 503) });
+    expect(await getValidatedSession(new Request("http://localhost"))).toBeNull();
+    expect(mocks.getSessionAccessSnapshot).not.toHaveBeenCalled();
+  });
+
+  it("still passes on an unexpected error from the check", async () => {
+    mocks.getClaims.mockRejectedValue(new TypeError("not a session error"));
+    await expect(getValidatedSession(new Request("http://localhost"))).rejects.toThrow("not a session error");
+  });
+
+  it("tells the sign-in page when Supabase Auth could not answer, and only then", async () => {
+    mocks.getClaims.mockResolvedValue({ data: null, error: new AuthRetryableFetchError("Service Unavailable", 503) });
+    expect(await checkRequestSession()).toEqual({ session: null, authUnavailable: true });
+
+    mocks.getClaims.mockResolvedValue({ data: null, error: new AuthApiError("Request rate limit reached", 429, "over_request_rate_limit") });
+    expect(await checkRequestSession()).toEqual({ session: null, authUnavailable: true });
+
+    mocks.getClaims.mockRejectedValue(new AuthRetryableFetchError("Supabase Auth answered 503 to a token refresh", 503));
+    expect(await checkRequestSession()).toEqual({ session: null, authUnavailable: true });
+
+    mocks.getClaims.mockResolvedValue({ data: null, error: null });
+    expect(await checkRequestSession()).toEqual({ session: null, authUnavailable: false });
+
+    mocks.getClaims.mockResolvedValue({ data: null, error: new AuthApiError("Invalid Refresh Token: Refresh Token Not Found", 400, "refresh_token_not_found") });
+    expect(await checkRequestSession()).toEqual({ session: null, authUnavailable: false });
+
+    mocks.getClaims.mockResolvedValue({ data: { claims: { sub: "user_1", email: "member@example.com" } }, error: null });
+    expect(await checkRequestSession()).toEqual({
+      session: { userId: "user_1", email: "member@example.com", workspaceId: "workspace_1" },
+      authUnavailable: false,
+    });
+  });
+
+  it("still resolves the session in a Server Component render, where cookies cannot be written", async () => {
+    mocks.setCookie.mockImplementation(() => {
+      throw new Error("Cookies can only be modified in a Server Action or Route Handler.");
+    });
+    mocks.getClaims.mockImplementation(async () => {
+      clientOptions().cookies.setAll([{ name: "sb-example-auth-token", value: "rotated", options: { path: "/" } }]);
+      return { data: { claims: { sub: "user_1", email: "member@example.com" } }, error: null };
+    });
+
+    expect(await getRequestSession()).toEqual({ userId: "user_1", email: "member@example.com", workspaceId: "workspace_1" });
+    expect(mocks.setCookie).toHaveBeenCalledWith("sb-example-auth-token", "rotated", { path: "/" });
+  });
+});
+
+// The real @supabase/ssr client and auth-js inside the real session check,
+// against a local stand-in for Supabase Auth that counts requests. Nothing
+// here reaches a real Supabase project.
+type TokenAnswer = { status: number; body?: unknown };
+
+const USER = { id: "user-1", email: "member@example.com", aud: "authenticated", role: "authenticated", app_metadata: {}, user_metadata: {}, created_at: "2026-01-01T00:00:00Z" };
+const b64url = (value: string) => Buffer.from(value).toString("base64url");
+const nowSeconds = () => Math.floor(Date.now() / 1000);
+
+function accessToken(exp: number): string {
+  const claims = { sub: USER.id, email: USER.email, exp, iat: exp - 3600, aud: "authenticated", role: "authenticated" };
+  return `${b64url(JSON.stringify({ alg: "HS256", typ: "JWT" }))}.${b64url(JSON.stringify(claims))}.${b64url("not-a-real-signature")}`;
+}
+
+function refreshedSession() {
+  const exp = nowSeconds() + 3600;
+  return { access_token: accessToken(exp), token_type: "bearer", expires_in: 3600, expires_at: exp, refresh_token: "rt-rotated", user: USER };
+}
+
+async function startFakeAuth() {
+  let answer: TokenAnswer = { status: 503 };
+  const hits: { method: string; path: string }[] = [];
+  const sockets = new Set<Socket>();
+  const server = http.createServer((req, res) => {
+    hits.push({ method: req.method ?? "", path: req.url ?? "" });
+    req.resume();
+    const reply = (status: number, body: unknown) => {
+      res.writeHead(status, { "content-type": "application/json" });
+      res.end(JSON.stringify(body));
+    };
+    if (req.url?.startsWith("/auth/v1/token")) return reply(answer.status, answer.body ?? { message: "upstream unavailable" });
+    // auth-js checks an HS256 token by asking for the user.
+    if (req.url?.startsWith("/auth/v1/user")) return reply(200, USER);
+    reply(404, {});
+  });
+  server.on("connection", (socket) => {
+    sockets.add(socket);
+    socket.on("close", () => sockets.delete(socket));
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  return {
+    url: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
+    hits,
+    answerRefreshesWith(next: TokenAnswer) {
+      answer = next;
+    },
+    refreshPosts: () => hits.filter((hit) => hit.method === "POST" && hit.path.includes("grant_type=refresh_token")).length,
+    close: () => new Promise<void>((resolve) => {
+      for (const socket of sockets) socket.destroy();
+      server.close(() => resolve());
+    }),
+  };
+}
+
+describe("session checks against a failing Supabase Auth", () => {
+  let fake: Awaited<ReturnType<typeof startFakeAuth>>;
+  const defaultSupabaseUrl = mocks.env.supabaseUrl;
+  const sessionCookieName = "sb-127-auth-token";
+  const clearedSessionCookies = () => mocks.setCookie.mock.calls.filter(([name, value]) => String(name).startsWith(sessionCookieName) && value === "");
+  const storedSessionCookies = () => mocks.setCookie.mock.calls.filter(([name, value]) => String(name).startsWith(sessionCookieName) && value !== "");
+
+  beforeAll(async () => {
+    fake = await startFakeAuth();
+    mocks.env.supabaseUrl = fake.url;
+  });
+  afterAll(async () => {
+    mocks.env.supabaseUrl = defaultSupabaseUrl;
+    await fake.close();
+  });
+  beforeEach(async () => {
+    fake.hits.length = 0;
+    const actual = await vi.importActual<typeof import("@supabase/ssr")>("@supabase/ssr");
+    mocks.createServerClient.mockReset().mockImplementation(actual.createServerClient);
+    mocks.getSessionAccessSnapshot.mockReset().mockResolvedValue({ ...ACTIVE_MEMBER, email: USER.email });
+    // The request carries a session whose access token has expired, so
+    // getClaims() must refresh it first.
+    const exp = nowSeconds() - 60;
+    const session = { access_token: accessToken(exp), token_type: "bearer", expires_in: 3600, expires_at: exp, refresh_token: "rt-original", user: USER };
+    mocks.requestCookies = [{ name: sessionCookieName, value: `base64-${b64url(JSON.stringify(session))}` }];
+  });
+
+  it.each([
+    ["getValidatedSession", () => getValidatedSession(new Request("http://localhost/api/automations"))],
+    ["getRequestSession", () => getRequestSession()],
+  ])("%s answers no session in under 2 s after at most two refreshes get a fast 503, and sends no more", async (_name, check) => {
+    fake.answerRefreshesWith({ status: 503 });
+    const started = Date.now();
+
+    const session = await check();
+
+    expect(session).toBeNull();
+    expect(Date.now() - started).toBeLessThan(2_000);
+    expect(fake.refreshPosts()).toBeLessThanOrEqual(2);
+    expect(mocks.getSessionAccessSnapshot).not.toHaveBeenCalled();
+
+    // Supabase Auth recovers just after the route answered. auth-js's retry
+    // loop runs on, but its attempts are aborted before they reach Supabase,
+    // so none rotates the refresh token into a cookie nobody receives.
+    fake.answerRefreshesWith({ status: 200, body: refreshedSession() });
+    await new Promise((resolve) => setTimeout(resolve, 2_000));
+    expect(fake.refreshPosts()).toBeLessThanOrEqual(2);
+    expect(mocks.setCookie).not.toHaveBeenCalled();
+  });
+
+  it("answers no session on a 429 to the refresh, without signing the person out", async () => {
+    fake.answerRefreshesWith({ status: 429, body: { code: 429, error_code: "over_request_rate_limit", msg: "Request rate limit reached" } });
+
+    expect(await getValidatedSession(new Request("http://localhost/api/automations"))).toBeNull();
+    expect(fake.refreshPosts()).toBe(1);
+    // auth-js removed the session, but its cookie deletions were dropped.
+    expect(clearedSessionCookies()).toEqual([]);
+
+    expect(await checkRequestSession()).toEqual({ session: null, authUnavailable: true });
+    expect(clearedSessionCookies()).toEqual([]);
+  });
+
+  it("still signs the person out when Supabase rejects the refresh token", async () => {
+    fake.answerRefreshesWith({ status: 400, body: { code: 400, error_code: "refresh_token_not_found", msg: "Invalid Refresh Token: Refresh Token Not Found" } });
+
+    expect(await checkRequestSession()).toEqual({ session: null, authUnavailable: false });
+    expect(clearedSessionCookies().length).toBeGreaterThan(0);
+  });
+
+  it("leaves a healthy refresh unchanged and stores the rotated session", async () => {
+    fake.answerRefreshesWith({ status: 200, body: refreshedSession() });
+
+    expect(await getValidatedSession(new Request("http://localhost/api/automations"))).toEqual({
+      userId: USER.id,
+      email: USER.email,
+      workspaceId: "workspace_1",
+    });
+    expect(fake.refreshPosts()).toBe(1);
+    expect(storedSessionCookies().length).toBeGreaterThan(0);
+    expect(clearedSessionCookies()).toEqual([]);
   });
 });
 

@@ -2,12 +2,16 @@ import { z } from "zod";
 import type { FlowDefinition, FlowDefinitionV1, FlowDefinitionV2, FlowSchedule } from "./types";
 import { findPublicUrlShortenerLinks, isSafeOutboundUrl, publicUrlShortenerMessage } from "../security/outbound-url";
 import { validateDefinitionForTarget, type ChannelDescriptor, type ChannelValidationIssue } from "./channels/registry";
-import { compileRegexKeyword, MAX_REGEX_KEYWORD_LENGTH } from "./match";
+import { describeRegexKeyword, MAX_REGEX_KEYWORD_LENGTH, type RegexRefusalReason } from "./match";
 
 // Save-time bounds. They keep one automation from costing the shared worker
 // seconds of CPU per event. Stored definitions are never re-parsed on the
 // worker or dashboard read paths, so automations saved before these bounds
-// keep running; they only have to fit when they are next saved or switched on.
+// keep running and only have to fit when they are next saved or switched on.
+// The exception is a regex keyword the matcher cannot compile: such an
+// automation keeps running but never matches until the pattern is fixed (its
+// skips read "regex pattern not supported", and
+// scripts/check-regex-keywords.ts lists the ones still switched on).
 export const MAX_KEYWORD_LENGTH = 100;
 export const MAX_KEYWORDS = 50;
 export const MAX_MEDIA_IDS = 100;
@@ -22,10 +26,27 @@ const keywordList = z.array(keyword).max(MAX_KEYWORDS, `Use ${MAX_KEYWORDS} keyw
 const mediaIdList = <T extends z.ZodType>(item: T) =>
   z.array(item).max(MAX_MEDIA_IDS, `Choose ${MAX_MEDIA_IDS} posts or fewer`);
 const keywordMode = z.enum(["any", "all", "exact", "regex", "contains"]).optional();
+
+/** What to tell the customer about a regex keyword the matcher cannot run, by reason. */
+const REGEX_REFUSAL_MESSAGES: Record<RegexRefusalReason, string> = {
+  too_long: `Keep each pattern to ${MAX_REGEX_KEYWORD_LENGTH} characters or fewer`,
+  too_large: "This pattern is too big once its repeats are counted. Use smaller repeat numbers, such as {0,20} instead of {0,150}, or fewer alternatives",
+  lookaround: "This pattern uses a lookaround, such as (?=...) or (?<!...), which the matcher does not support",
+  backreference: "This pattern uses a backreference, such as \\1, which the matcher does not support",
+  inline_flags: "This pattern uses inline flags, such as (?i), which the matcher does not support. Matching already ignores case",
+  unsupported_escape: "This pattern uses an escape the matcher does not support, such as \\p{...}",
+  duplicate_name: "Two groups in this pattern share a name. Give each named group its own name",
+  syntax: "This pattern is not a valid regular expression. Check its brackets, parentheses and repeats",
+};
+
+// Zod runs a refine even after .url() fails, so each refine checks the value
+// parses first: new URL() on a bad link would throw a TypeError (a 500)
+// instead of reporting the field.
 const link = z
   .string()
   .url()
   .refine((value) => {
+    if (!URL.canParse(value)) return false;
     const protocol = new URL(value).protocol;
     return protocol === "http:" || protocol === "https:";
   }, "Links must use http or https");
@@ -248,11 +269,13 @@ const flowV1Schema = z
     ) {
       flow.trigger.keywords.forEach((pattern, index) => {
         // Over-long patterns already fail the keyword length check above.
-        if (pattern.length > MAX_REGEX_KEYWORD_LENGTH || compileRegexKeyword(pattern)) return;
+        if (pattern.length > MAX_REGEX_KEYWORD_LENGTH) return;
+        const reason = describeRegexKeyword(pattern);
+        if (!reason) return;
         context.addIssue({
           code: "custom",
           path: ["trigger", "keywords", index],
-          message: "This pattern is not valid or uses something the matcher does not support, such as lookarounds or backreferences",
+          message: REGEX_REFUSAL_MESSAGES[reason],
         });
       });
     }
@@ -329,6 +352,7 @@ const deliveryUrl = z
   .string()
   .url()
   .refine((value) => {
+    if (!URL.canParse(value)) return false;
     const protocol = new URL(value).protocol;
     return process.env.NODE_ENV === "development" ? protocol === "http:" || protocol === "https:" : protocol === "https:";
   }, "Delivery URLs must use HTTPS outside development");

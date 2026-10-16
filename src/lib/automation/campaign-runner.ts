@@ -33,6 +33,7 @@ import {
 import { MESSAGING_WINDOW_MS } from "../messaging-window";
 import { ACCOUNT_RECOVERING_REASON } from "../meta/errors";
 import { findSendDeferral, SendDeferredError } from "./send-deferral";
+import { logger } from "../logger";
 import type { DeliveryTimingObserver } from "./delivery-timing";
 
 const RECHECK_COOLDOWN_MS = 10_000;
@@ -120,6 +121,12 @@ export type CampaignRunnerOptions = {
    * is never earlier than the comment itself.
    */
   sourceCommentTimestamp?: number;
+  /**
+   * Set by the comment paths only. A participant whose campaign has since been
+   * paused or archived gets no public reply and no opening DM; it is left as
+   * it is for the hourly sweep to expire. Opt-in and recheck taps do not set it.
+   */
+  requireActiveAutomation?: boolean;
 };
 
 type FollowStatusRead =
@@ -133,6 +140,16 @@ async function loadParticipantAutomation(
 ): Promise<AutomationRecord | null> {
   return options.activeAutomations?.find((automation) => automation.id === participant.automationId)
     ?? await repository.getAutomation(participant.workspaceId, participant.automationId);
+}
+
+/**
+ * Whether the owner still has this campaign switched on. Archiving also sets
+ * PAUSED; archivedAt is read as well because the database row carries it even
+ * though AutomationRecord does not declare it.
+ */
+function automationIsLive(automation: AutomationRecord): boolean {
+  const archivedAt = (automation as AutomationRecord & { archivedAt?: unknown }).archivedAt;
+  return automation.status === "ACTIVE" && (archivedAt === undefined || archivedAt === null);
 }
 
 export type CampaignMapping = {
@@ -495,6 +512,8 @@ async function resolveNextMedia(
   try {
     media = await options.client.getMedia(connection, mediaId);
   } catch (error) {
+    // A throttled read counts toward the account's cool-down like a send does.
+    await recordAccountSignal(repository, { channel: "instagram", accountId: event.accountId }, error);
     if (error instanceof MetaApiError && error.retryable && !options.finalAttempt) throw error;
     return recordCampaignConfigurationResult(
       event,
@@ -1111,9 +1130,10 @@ const COOLDOWN_NOTICE_TEXT = "Give it a few more seconds, then tap the button be
 
 /**
  * For the one campaign send that does not go through executeOutboundDelivery,
- * what that does with Meta's refusal of any other send: a block pauses the
- * whole account (its plain reason is returned, to store on this send) and a
- * throttle counts toward the account's cool-down. Null for any other refusal.
+ * and for the reads a campaign makes (media and follow status), what that does
+ * with Meta's refusal of any other send: a block pauses the whole account (its
+ * plain reason is returned, to store on this send) and a throttle counts
+ * toward the account's cool-down. Null for any other refusal. Never throws.
  */
 async function recordAccountSignal(
   repository: AutomationRepository,
@@ -1367,6 +1387,16 @@ export async function processExistingCampaignParticipant(
     });
     return handledResult(participant.id, { failed: 1 });
   }
+  // The owner's pause is a kill switch: a comment parked by an account
+  // cool-down, or replayed, must not send after it. The participant is left
+  // untouched (the hourly sweep expires it) so resuming changes nothing else.
+  if (options.requireActiveAutomation && !automationIsLive(automation)) {
+    logger.info("Campaign comment skipped: automation paused", {
+      automationId: automation.id,
+      participantId: participant.id,
+    });
+    return handledResult(participant.id, { skipped: 1 });
+  }
   if (!options.client) {
     return handledResult(participant.id, { skipped: 1 });
   }
@@ -1440,7 +1470,7 @@ export async function processCampaignEvent(
         existing,
         mapping,
         repository,
-        { ...options, sourceCommentTimestamp: event.timestamp },
+        { ...options, sourceCommentTimestamp: event.timestamp, requireActiveAutomation: true },
       );
     }
   }
@@ -1523,6 +1553,7 @@ export async function processCampaignEvent(
       }
       snapshot = mediaSnapshot(media);
     } catch (error) {
+      await recordAccountSignal(repository, { channel: "instagram", accountId: event.accountId }, error);
       if (error instanceof MetaApiError && error.retryable && !options.finalAttempt) throw error;
       return recordCampaignConfigurationResult(
         event,
@@ -1547,7 +1578,7 @@ export async function processCampaignEvent(
     created.record,
     mapping,
     repository,
-    { ...options, sourceCommentTimestamp: event.timestamp },
+    { ...options, sourceCommentTimestamp: event.timestamp, requireActiveAutomation: true },
     campaign,
   );
 }
@@ -1822,6 +1853,13 @@ export async function processPendingCampaignInteraction(
     }
     follows = response.isUserFollowingBusiness;
   } catch (error) {
+    // A throttled follow check counts toward the account's cool-down, and a
+    // block pauses the account, as a refused send would.
+    await recordAccountSignal(
+      repository,
+      { channel: "instagram", accountId: participant.instagramAccountId },
+      error,
+    );
     if (isKnownNotSentRetryable(error) && !options.finalAttempt) {
       await releaseAction(participant, repository, followCheckAction);
       throw error;

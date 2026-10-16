@@ -113,9 +113,12 @@ function challengeStore(): AdminChallengeStore {
   if (!redisUrl) throw new AdminChallengeError(503, "challenge_unavailable");
   // commandTimeout: a connected but silent Valkey must reject quickly instead
   // of holding the owner's request open.
-  defaultStore = new RedisAdminChallengeStore(
-    new Redis(redisUrl, { maxRetriesPerRequest: 1, connectTimeout: 3_000, commandTimeout: 1_500 }),
-  );
+  const redis = new Redis(redisUrl, { maxRetriesPerRequest: 1, connectTimeout: 3_000, commandTimeout: 1_500 });
+  // Failures surface on each command; the event is handled so ioredis does
+  // not also print an unhandled-error warning on every reconnect. (Optional
+  // call only because the ioredis double in challenges.test.ts has no on().)
+  redis.on?.("error", () => undefined);
+  defaultStore = new RedisAdminChallengeStore(redis);
   return defaultStore;
 }
 

@@ -1,5 +1,5 @@
 import type { MetaConnection, MetaMedia, MetaMediaPage, MetaMessage, MetaPrivateReply, MetaSendResult } from "./types";
-import { describeMetaError, parseMetaUsageHeaders, type MetaUsage } from "./errors";
+import { describeMetaError, isMetaRateLimit, parseMetaUsageHeaders, type MetaUsage } from "./errors";
 import { logger } from "../logger";
 
 type MetaClientOptions = {
@@ -459,7 +459,13 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
   return typeof value === "object" && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
 }
 
-const TRANSIENT_META_CODES = new Set([1, 2, 4, 17, 32, 341, 613]);
+/**
+ * Graph codes Meta uses for a temporary failure that is not throttling. The
+ * throttling codes (4, 17, 32, 613, 80002, 80006) come from
+ * META_RATE_LIMIT_CODES through isMetaRateLimit below, so a code added there
+ * is retryable here too and the two lists cannot drift apart.
+ */
+const TRANSIENT_META_CODES = new Set([1, 2, 341]);
 
 /** Meta's usage headers from a response already in hand; never throws, null when absent. */
 function responseUsage(response: Response): MetaUsage | null {
@@ -471,6 +477,9 @@ function responseUsage(response: Response): MetaUsage | null {
 }
 
 function isTransientMetaError(error: Record<string, unknown>, status: number): boolean {
+  const code = typeof error.code === "number" ? error.code : undefined;
   return status === 429 || status >= 500 || error.is_transient === true ||
-    (typeof error.code === "number" && TRANSIENT_META_CODES.has(error.code));
+    (code !== undefined && TRANSIENT_META_CODES.has(code)) ||
+    // Meta sends throttling as HTTP 400, often without is_transient.
+    isMetaRateLimit({ status, code });
 }

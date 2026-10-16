@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isAuthRetryableFetchError } from "@supabase/supabase-js";
 import { safeNextPath } from "@/src/lib/auth/session";
 import { LoginRateLimitStore, loginRateLimitKey, networkRateLimitKey } from "@/src/lib/auth/rate-limit";
 import { clientAddress } from "@/src/lib/auth/client-address";
@@ -52,6 +53,18 @@ export async function POST(request: Request) {
     // Supabase only reports this after the password matched, so naming it
     // reveals nothing a correct password does not already prove.
     if (error.code === "email_not_confirmed") return backToLogin("unconfirmed", { email });
+    // Neither of these checked the password, so do not call it wrong. The
+    // attempt still counts toward the limits above: an outage must not hand
+    // out free guesses. Supabase's rate limit counts this server's address,
+    // which every visitor shares.
+    if (error.code === "over_request_rate_limit" || error.status === 429) {
+      logger.warn("Supabase Auth rate limited sign-in", { status: error.status, code: error.code });
+      return backToLogin("unavailable");
+    }
+    if (isAuthRetryableFetchError(error) || (error.status ?? 0) >= 500) {
+      logger.warn("Supabase Auth unavailable at sign-in", { status: error.status });
+      return backToLogin("unavailable");
+    }
     return backToLogin("invalid");
   }
 
@@ -59,7 +72,18 @@ export async function POST(request: Request) {
   const userId = data.user?.id;
   const platformOwner = Boolean(userId && env.platformOwnerUserIds.includes(userId.toLowerCase()));
   const ownerConsoleOnly = platformOwner && nextPath.startsWith("/admin");
-  let workspaceId = await repository.findWorkspaceIdByMemberEmail(email);
+  let workspaceId: string | null;
+  try {
+    workspaceId = await repository.findWorkspaceIdByMemberEmail(email);
+  } catch (lookupError) {
+    // The database failing is not a wrong password. Sign the new session
+    // out, since nothing could check where it should land.
+    logger.error("Workspace lookup at sign-in failed", {
+      error: lookupError instanceof Error ? lookupError.message : String(lookupError),
+    });
+    await supabase.auth.signOut({ scope: "local" });
+    return backToLogin("unavailable");
+  }
   if (!workspaceId && !ownerConsoleOnly && userId) {
     // Workspaces are provisioned once the email is verified (here, at the
     // first successful password sign-in, or at /auth/confirm), never at
@@ -72,10 +96,15 @@ export async function POST(request: Request) {
         repository,
       });
     } catch (provisionError) {
+      // completeOAuthSignIn has no business-rule throws: an invalid or used
+      // invite falls through to a fresh workspace, and a lost race to accept
+      // one or to bind a member returns without throwing. A throw is the
+      // database failing, so ask the person to try again.
       logger.error("Workspace provisioning at sign-in failed", {
         error: provisionError instanceof Error ? provisionError.message : String(provisionError),
       });
-      workspaceId = null;
+      await supabase.auth.signOut({ scope: "local" });
+      return backToLogin("unavailable");
     }
   }
   if (!workspaceId && !ownerConsoleOnly) {

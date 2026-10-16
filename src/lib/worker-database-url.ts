@@ -10,17 +10,20 @@
  * migrations use: port 5432, no pgbouncer flag).
  *
  * Pool size: the WORKER_DATABASE_CONNECTIONS env var (1 to 20, default 5 from
- * the constant below; a `connection_limit` already in the URL wins), with a
- * 10 s pool_timeout. DATABASE_URL's `connection_limit` does not apply here. This
- * one pool serves every WORKER_CONCURRENCY job, the bulk worker, the periodic
- * sweeps and the health check's `SELECT 1`, so jobs beyond it queue for a
- * connection. Session-pooler connections are held for the whole session:
- * check the Supabase session pool size before raising it.
+ * the constant below; a `connection_limit` already in the URL wins).
+ * DATABASE_URL's `connection_limit` does not apply here. This one pool serves
+ * every WORKER_CONCURRENCY job, the bulk worker, the periodic sweeps and the
+ * health check's `SELECT 1`, so jobs beyond it queue for a connection: a plain
+ * query that finds the pool full waits up to 10 s (pool_timeout, P2024); an
+ * interactive transaction waits up to its maxWait, 5 s by default
+ * (TRANSACTION_DEFAULTS in src/lib/prisma.ts, P2028). Session-pooler
+ * connections are held for the whole session: check the Supabase session pool
+ * size before raising it.
  *
  * Returns undefined - keep Prisma's default `DATABASE_URL` and its
- * `connection_limit` - outside the worker, when no direct URL is configured,
- * or when WORKER_DATABASE_MODE is "pooled" (the escape hatch if the session
- * pool ever runs short).
+ * `connection_limit` - outside the worker, when neither WORKER_DATABASE_URL
+ * nor DIRECT_URL is configured, or when WORKER_DATABASE_MODE is "pooled" (the
+ * escape hatch if the session pool ever runs short).
  */
 export type WorkerDatabaseEnv = {
   role: string | undefined;

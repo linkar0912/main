@@ -35,9 +35,15 @@ function getRateLimiterRedis(): Redis | undefined {
   const redisUrl = getServerEnv().redisUrl;
   if (!redisUrl) return undefined;
   if (!globalForRateLimiter.linkarSendRateLimitRedis) {
-    // Not a BullMQ worker connection: fail a command after one reconnect
-    // attempt instead of queueing it forever while Redis is unreachable.
-    globalForRateLimiter.linkarSendRateLimitRedis = new Redis(redisUrl, { maxRetriesPerRequest: 1 });
+    // Not a BullMQ worker connection. A command fails after one reconnect
+    // attempt while Redis is unreachable, and after 1.5 s when Valkey accepts
+    // the connection but never answers (a stall), so the fallback budget below
+    // runs instead of the send hanging.
+    const redis = new Redis(redisUrl, { maxRetriesPerRequest: 1, connectTimeout: 3_000, commandTimeout: 1_500 });
+    // Failures surface on each command; the event is handled so ioredis does
+    // not also print an unhandled-error warning on every reconnect.
+    redis.on("error", () => undefined);
+    globalForRateLimiter.linkarSendRateLimitRedis = redis;
   }
   return globalForRateLimiter.linkarSendRateLimitRedis;
 }

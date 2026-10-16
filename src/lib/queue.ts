@@ -2,6 +2,7 @@ import { Queue, type Job, type JobType } from "bullmq";
 import Redis from "ioredis";
 import { createHash } from "node:crypto";
 import { getServerEnv } from "./env";
+import { logger } from "./logger";
 import { bulkSendIntervalMs } from "./automation/send-rate-limiter";
 import type { ManualReplyEcho } from "./automation/manual-reply";
 import type { NormalizedEvent } from "./automation/types";
@@ -137,10 +138,19 @@ export function createLeadDeliveryJobId(deliveryKey: string): string {
 /**
  * Producer connections (web requests enqueueing work, the worker scheduling
  * follow-ups) must fail fast while Redis is unreachable rather than queue the
- * command forever and hang the request. Only BullMQ Worker connections need
- * `maxRetriesPerRequest: null` - those are created in src/worker.ts.
+ * command forever and hang the request, and after 1.5 s when Valkey accepts
+ * the connection but never answers (a stall). Only BullMQ Worker connections
+ * need `maxRetriesPerRequest: null` - those are created in src/worker.ts.
  */
-export const PRODUCER_REDIS_OPTIONS = { maxRetriesPerRequest: 1, enableOfflineQueue: false } as const;
+export const PRODUCER_REDIS_OPTIONS = {
+  maxRetriesPerRequest: 1,
+  enableOfflineQueue: false,
+  connectTimeout: 3_000,
+  commandTimeout: 1_500,
+} as const;
+
+/** How long a producer waits for a Queue's first connection before giving up. */
+export const QUEUE_READY_TIMEOUT_MS = 3_000;
 
 const globalForQueue = globalThis as unknown as {
   linkarWebhookQueue?: Queue;
@@ -149,11 +159,26 @@ const globalForQueue = globalThis as unknown as {
   linkarBulkRedis?: Redis;
 };
 
+/** Queue connection errors repeat on every reconnect, so they are logged once a minute. */
+const QUEUE_ERROR_LOG_INTERVAL_MS = 60_000;
+let lastQueueErrorLogAt = Number.NEGATIVE_INFINITY;
+
+function warnQueueError(error: unknown): void {
+  const now = Date.now();
+  if (now - lastQueueErrorLogAt < QUEUE_ERROR_LOG_INTERVAL_MS) return;
+  lastQueueErrorLogAt = now;
+  logger.warn("Queue connection error", { error: error instanceof Error ? error.message : String(error) });
+}
+
+function cachedQueue(name: AdminQueueName): Queue | undefined {
+  return name === "webhooks" ? globalForQueue.linkarWebhookQueue : globalForQueue.linkarBulkQueue;
+}
+
 function getQueue(name: AdminQueueName): Queue | null {
   const redisUrl = getServerEnv().redisUrl;
   if (!redisUrl) return null;
-  if (name === "webhooks" && globalForQueue.linkarWebhookQueue) return globalForQueue.linkarWebhookQueue;
-  if (name === "bulk" && globalForQueue.linkarBulkQueue) return globalForQueue.linkarBulkQueue;
+  const cached = cachedQueue(name);
+  if (cached) return cached;
 
   const redis = new Redis(redisUrl, PRODUCER_REDIS_OPTIONS);
   const queue = new Queue(name === "webhooks" ? WEBHOOK_QUEUE_NAME : BULK_QUEUE_NAME, { connection: redis });
@@ -164,15 +189,59 @@ function getQueue(name: AdminQueueName): Queue | null {
     globalForQueue.linkarBulkRedis = redis;
     globalForQueue.linkarBulkQueue = queue;
   }
+  // Optional calls only because some in-repo Queue test doubles implement
+  // neither on() nor waitUntilReady(); BullMQ's Queue has both.
+  queue.on?.("error", warnQueueError);
+  // BullMQ runs its start-up check (an INFO) once per connection and keeps the
+  // result. If that check fails (commandTimeout during a Valkey stall), the
+  // Queue never works again, so drop it and let the next call build a new one.
+  queue.waitUntilReady?.().catch(() => {
+    if (cachedQueue(name) !== queue) return;
+    if (name === "webhooks") {
+      globalForQueue.linkarWebhookQueue = undefined;
+      globalForQueue.linkarWebhookRedis = undefined;
+    } else {
+      globalForQueue.linkarBulkQueue = undefined;
+      globalForQueue.linkarBulkRedis = undefined;
+    }
+    redis.disconnect();
+  });
   return queue;
 }
 
-function getWebhookQueue(): Queue | null { return getQueue("webhooks"); }
-function getBulkQueue(): Queue | null { return getQueue("bulk"); }
+/**
+ * The producer Queue once its connection is ready, or null when REDIS_URL is
+ * not set. Throws Error("queue_unavailable") when it is not ready within
+ * QUEUE_READY_TIMEOUT_MS: while Valkey is down at a Queue's first use, BullMQ
+ * waits for a connection with no deadline of its own.
+ */
+async function readyQueue(name: AdminQueueName): Promise<Queue | null> {
+  const queue = getQueue(name);
+  if (!queue) return null;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      Promise.resolve(queue.waitUntilReady?.()),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error("queue_unavailable")), QUEUE_READY_TIMEOUT_MS);
+      }),
+    ]);
+  } catch {
+    throw new Error("queue_unavailable");
+  } finally {
+    clearTimeout(timer);
+  }
+  return queue;
+}
 
-function adminQueue(name: string): Queue | null {
+async function readyAdminQueue(name: string): Promise<Queue | null> {
   if (!ADMIN_QUEUE_NAMES.includes(name as AdminQueueName)) throw new Error("unknown_queue");
-  return getQueue(name as AdminQueueName);
+  return readyQueue(name as AdminQueueName);
+}
+
+async function readyQueues(): Promise<Queue[]> {
+  const queues = await Promise.all([readyQueue("webhooks"), readyQueue("bulk")]);
+  return queues.filter((queue): queue is Queue => queue !== null);
 }
 
 function safeFailureCode(reason?: string): string | null {
@@ -183,7 +252,7 @@ function safeFailureCode(reason?: string): string | null {
 }
 
 export async function getAdminQueueSnapshot(name: AdminQueueName): Promise<AdminQueueSnapshot> {
-  const queue = adminQueue(name);
+  const queue = await readyAdminQueue(name);
   if (!queue) return { name, configured: false, paused: null, waiting: 0, active: 0, delayed: 0, completed: 0, failed: 0, oldestWaitingAgeMs: null, lastFailedCode: null };
   const [counts, paused, oldest, failed] = await Promise.all([
     queue.getJobCounts("waiting", "prioritized", "active", "delayed", "completed", "failed"),
@@ -197,14 +266,14 @@ export async function getAdminQueueSnapshot(name: AdminQueueName): Promise<Admin
 }
 
 export async function setAdminQueuePaused(name: string, paused: boolean): Promise<{ name: AdminQueueName; paused: boolean }> {
-  const queue = adminQueue(name); if (!queue) throw new Error("queue_unavailable");
+  const queue = await readyAdminQueue(name); if (!queue) throw new Error("queue_unavailable");
   if (paused) await queue.pause(); else await queue.resume();
   return { name: name as AdminQueueName, paused };
 }
 
 export async function retryAdminQueueJobs(name: string, jobIds: string[]): Promise<{ retried: string[] }> {
   if (jobIds.length < 1 || jobIds.length > 100) throw new Error("invalid_job_batch");
-  const queue = adminQueue(name); if (!queue) throw new Error("queue_unavailable"); const jobs = await Promise.all(jobIds.map((id) => queue.getJob(id)));
+  const queue = await readyAdminQueue(name); if (!queue) throw new Error("queue_unavailable"); const jobs = await Promise.all(jobIds.map((id) => queue.getJob(id)));
   if (jobs.some((job) => !job)) throw new Error("job_not_found");
   for (const job of jobs) { if (await job!.getState() !== "failed") throw new Error("job_not_failed"); }
   await Promise.all(jobs.map((job) => job!.retry("failed")));
@@ -213,13 +282,13 @@ export async function retryAdminQueueJobs(name: string, jobIds: string[]): Promi
 
 /** Lists the most recent failed jobs with safe codes only; payloads and raw reasons never leave Redis. */
 export async function listAdminFailedJobs(name: string, limit = 50): Promise<Array<{ id: string; name: string; failedAt: string | null; attemptsMade: number; code: string | null }>> {
-  const queue = adminQueue(name); if (!queue) throw new Error("queue_unavailable");
+  const queue = await readyAdminQueue(name); if (!queue) throw new Error("queue_unavailable");
   const jobs = await queue.getJobs(["failed"], 0, Math.max(1, Math.min(limit, 100)) - 1);
   return jobs.flatMap((job) => job?.id ? [{ id: job.id, name: job.name, failedAt: job.finishedOn ? new Date(job.finishedOn).toISOString() : null, attemptsMade: job.attemptsMade, code: safeFailureCode(job.failedReason) }] : []);
 }
 
 export async function enqueueAdminMaintenance(action: "delivery_reconciliation" | "usage_reconciliation"): Promise<boolean> {
-  const queue = getWebhookQueue(); if (!queue) return false;
+  const queue = await readyQueue("webhooks"); if (!queue) return false;
   const existing = await queue.getJob(`admin-maintenance_${action}`);
   if (existing) {
     if (await existing.getState() === "failed") await existing.retry("failed");
@@ -230,7 +299,7 @@ export async function enqueueAdminMaintenance(action: "delivery_reconciliation" 
 }
 
 export async function enqueueAdminDeletion(jobId: string): Promise<boolean> {
-  const queue = getWebhookQueue();
+  const queue = await readyQueue("webhooks");
   if (!queue) return false;
   const existing = await queue.getJob(`admin-deletion_${createHash("sha256").update(jobId).digest("base64url")}`);
   if (existing) {
@@ -283,10 +352,10 @@ async function removeJobsAllowingMissing(jobs: Job[]): Promise<void> {
 // those workspaces (igUserIds, pageIds) - webhook job payloads carry those
 // instead of workspaceId.
 export async function deleteQueuedWorkspaceEventsBatch(identifiers: readonly string[]): Promise<void> {
-  const queues = [getWebhookQueue(), getBulkQueue()].filter((queue): queue is Queue => queue !== null);
-  if (queues.length === 0) return;
   const targets = new Set(identifiers);
   if (targets.size === 0) return;
+  const queues = await readyQueues();
+  if (queues.length === 0) return;
   const states: JobType[] = ["waiting", "delayed", "prioritized", "waiting-children", "failed", "completed"];
   for (const queue of queues) {
     let start = 0;
@@ -336,8 +405,7 @@ async function findJobsByAccount(queue: Queue, igUserId: string, includeActive: 
 }
 
 export async function deleteQueuedInstagramEvents(igUserId: string): Promise<void> {
-  for (const queue of [getWebhookQueue(), getBulkQueue()]) {
-    if (!queue) continue;
+  for (const queue of await readyQueues()) {
     const removable = await findJobsByAccount(queue, igUserId, false);
     await Promise.all(removable.map((job) => job.remove()));
     const remaining = await findJobsByAccount(queue, igUserId, true);
@@ -352,7 +420,8 @@ export async function enqueueWebhookEvents(
   retryId?: string,
   timing: EnqueueTiming = {},
 ): Promise<number> {
-  const queue = getWebhookQueue();
+  if (events.length === 0) return 0;
+  const queue = await readyQueue("webhooks");
   if (!queue) return 0;
 
   await Promise.all(
@@ -388,7 +457,8 @@ export function createManualReplyEchoJobOptions(echo: ManualReplyEcho) {
 }
 
 export async function enqueueManualReplyEchoes(echoes: ManualReplyEcho[]): Promise<number> {
-  const queue = getWebhookQueue();
+  if (echoes.length === 0) return 0;
+  const queue = await readyQueue("webhooks");
   if (!queue) return 0;
   await Promise.all(echoes.map((echo) => {
     const job = createManualReplyEchoJobOptions(echo);
@@ -409,7 +479,8 @@ export async function enqueueFacebookEvents(
   retryId?: string,
   timing: EnqueueTiming = {},
 ): Promise<number> {
-  const queue = getWebhookQueue();
+  if (events.length === 0) return 0;
+  const queue = await readyQueue("webhooks");
   if (!queue) return 0;
   await Promise.all(
     events.map((event) => {
@@ -422,7 +493,7 @@ export async function enqueueFacebookEvents(
 }
 
 export async function enqueueLeadDelivery(job: LeadDeliveryJob, retryId?: string): Promise<boolean> {
-  const queue = getBulkQueue();
+  const queue = await readyQueue("bulk");
   if (!queue) return false;
   await queue.add("lead-delivery", job, {
     jobId: createLeadDeliveryJobId(retryId ? `${job.deliveryKey}\0admin\0${retryId}` : job.deliveryKey),
@@ -455,7 +526,8 @@ export function createFlowFollowUpJobId(deliveryKey: string): string {
 }
 
 export async function enqueueFlowFollowUps(jobs: FlowFollowUpJob[]): Promise<number> {
-  const queue = getWebhookQueue();
+  if (jobs.length === 0) return 0;
+  const queue = await readyQueue("webhooks");
   if (!queue) return 0;
   await Promise.all(
     jobs.map((job) =>
@@ -494,9 +566,9 @@ export function isQueueConfigured(): boolean {
 }
 
 export async function getWebhookQueueCounts(): Promise<WebhookQueueCounts> {
-  const queues = [getWebhookQueue(), getBulkQueue()].filter((queue): queue is Queue => queue !== null);
-  if (queues.length === 0) return { state: "not_configured", waiting: 0, active: 0, delayed: 0, failed: 0 };
+  if (!isQueueConfigured()) return { state: "not_configured", waiting: 0, active: 0, delayed: 0, failed: 0 };
   try {
+    const queues = await readyQueues();
     const results = await Promise.all(queues.map((queue) => queue.getJobCounts("waiting", "prioritized", "active", "delayed", "failed")));
     return {
       state: "ok",
@@ -515,11 +587,13 @@ export async function enqueueBroadcastSends(
   baseDelayMs = 0,
   retryId?: string,
 ): Promise<BroadcastEnqueueResult> {
-  const queue = getBulkQueue();
   const recipientKey = (job: BroadcastSendJob): BroadcastRecipientKey => ({
     igAccountId: job.igAccountId,
     igScopedUserId: job.igScopedUserId,
   });
+  if (jobs.length === 0) return { accepted: [], rejected: [] };
+  // A queue that is not ready rejects every recipient, like a failed add.
+  const queue = await readyQueue("bulk").catch(() => null);
   if (!queue) return { accepted: [], rejected: jobs.map(recipientKey) };
   // Paced per Instagram account (each has its own send bucket) at the rate
   // the bulk share of that bucket allows, so a blast drains steadily instead

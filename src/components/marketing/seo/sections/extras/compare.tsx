@@ -240,7 +240,7 @@ export function ExtraCompare({ page }: { page: SeoPage }) {
               ))}
             </ul>
             <div className={styles.cta}>
-              <Link className={shell.inverseAction} href="/signup"><ButtonRoll label="Create your first reply" /></Link>
+              <a className={shell.inverseAction} href="/signup"><ButtonRoll label="Create your first reply" /></a>
             </div>
           </article>
         </div>

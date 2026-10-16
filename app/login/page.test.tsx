@@ -2,14 +2,14 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ getRequestSession: vi.fn(), redirect: vi.fn(), verifyOtp: vi.fn(), signOut: vi.fn(), host: "app.linkar.in" }));
+const mocks = vi.hoisted(() => ({ checkRequestSession: vi.fn(), redirect: vi.fn(), verifyOtp: vi.fn(), signOut: vi.fn(), host: "app.linkar.in" }));
 
 vi.mock("@/src/lib/env", () => ({
   getServerEnv: () => ({ publicSiteUrl: "https://linkar.in", appUrl: "https://app.linkar.in", adminUrl: "https://admin.linkar.in" }),
 }));
 vi.mock("@/src/lib/auth/session", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/src/lib/auth/session")>()),
-  getRequestSession: mocks.getRequestSession,
+  checkRequestSession: mocks.checkRequestSession,
 }));
 vi.mock("next/navigation", () => ({
   redirect: (path: string) => {
@@ -38,7 +38,7 @@ const { default: ConfirmPage } = await import("@/app/auth/confirm/page");
 
 describe("auth pages", () => {
   beforeEach(() => {
-    mocks.getRequestSession.mockReset().mockResolvedValue(null);
+    mocks.checkRequestSession.mockReset().mockResolvedValue({ session: null, authUnavailable: false });
     mocks.redirect.mockReset();
     vi.stubGlobal("matchMedia", vi.fn((query: string) => ({
       matches: false, media: query, onchange: null,
@@ -54,9 +54,51 @@ describe("auth pages", () => {
   });
 
   it("sends an already signed-in visitor on to their destination", async () => {
-    mocks.getRequestSession.mockResolvedValue({ userId: "u1", email: "a@example.com", workspaceId: "w1" });
+    mocks.checkRequestSession.mockResolvedValue({ session: { userId: "u1", email: "a@example.com", workspaceId: "w1" }, authUnavailable: false });
     await expect(LoginPage({ searchParams: Promise.resolve({ next: "/automations" }) })).rejects.toThrow("NEXT_REDIRECT");
     expect(mocks.redirect).toHaveBeenCalledWith("/automations");
+  });
+
+  // Nothing was submitted on a page load, so the notice does not mention a password.
+  const SESSION_CHECK_NOTICE = "We could not check your sign-in just now, so signing in may not work yet. Try again in a minute.";
+
+  it("still shows the form when the session check fails, with a notice that sign-in may not work yet", async () => {
+    mocks.checkRequestSession.mockRejectedValue(Object.assign(new Error("Timed out fetching a new connection from the connection pool."), { code: "P2024" }));
+    render(await LoginPage({ searchParams: Promise.resolve({ next: "/automations" }) }));
+
+    expect(mocks.redirect).not.toHaveBeenCalled();
+    const form = screen.getByRole("form", { name: "Sign in to Linkar" });
+    expect(form.querySelector<HTMLInputElement>('input[name="next"]')?.value).toBe("/automations");
+    const notice = screen.getByRole("alert");
+    expect(notice.textContent).toBe(SESSION_CHECK_NOTICE);
+    // The notice sits above the form.
+    expect(notice.compareDocumentPosition(form) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("shows the same notice when Supabase Auth could not answer the session check", async () => {
+    mocks.checkRequestSession.mockResolvedValue({ session: null, authUnavailable: true });
+    render(await LoginPage({ searchParams: Promise.resolve({ next: "/automations" }) }));
+
+    expect(mocks.redirect).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert").textContent).toBe(SESSION_CHECK_NOTICE);
+    expect(screen.getByRole("form", { name: "Sign in to Linkar" })).toBeTruthy();
+  });
+
+  it("keeps a more specific error from the last attempt over the notice", async () => {
+    mocks.checkRequestSession.mockRejectedValue(new Error("database unreachable"));
+    render(await LoginPage({ searchParams: Promise.resolve({ error: "locked" }) }));
+    expect(screen.getByRole("alert").textContent).toBe("Too many attempts. Wait fifteen minutes before trying again.");
+  });
+
+  it("says the password was not checked when the login route could not reach Supabase Auth", async () => {
+    render(await LoginPage({ searchParams: Promise.resolve({ error: "unavailable" }) }));
+    expect(screen.getByRole("alert").textContent).toBe("We could not reach the sign-in service, so your password was not checked. Try again in a minute.");
+    expect(screen.getByRole("form", { name: "Sign in to Linkar" })).toBeTruthy();
+  });
+
+  it("shows no notice when the session check simply finds no session", async () => {
+    render(await LoginPage({ searchParams: Promise.resolve({}) }));
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it("keeps owner-console sign-in on the console host, whatever next it was given", async () => {
@@ -74,7 +116,7 @@ describe("auth pages", () => {
 
   it("sends a signed-in owner on the console host to the console, not the workspace", async () => {
     mocks.host = "admin.linkar.in";
-    mocks.getRequestSession.mockResolvedValue({ userId: "u1", email: "owner@example.com", workspaceId: "w1" });
+    mocks.checkRequestSession.mockResolvedValue({ session: { userId: "u1", email: "owner@example.com", workspaceId: "w1" }, authUnavailable: false });
     await expect(LoginPage({ searchParams: Promise.resolve({ next: "/dashboard" }) })).rejects.toThrow("NEXT_REDIRECT");
     expect(mocks.redirect).toHaveBeenCalledWith("/admin");
   });

@@ -205,9 +205,19 @@ export function createSaveQueue({ save, onSaved, onFailing, onSignedOut, retryDe
         } catch (error) {
           lastOk = false;
           lastFailed = intent;
+          const status = failedStatus(error);
           if (!closed) {
             onFailing(true);
-            if (failedStatus(error) === 401) onSignedOut?.();
+            if (status === 401) onSignedOut?.();
+          }
+          // The server refused these answers (signed in, but a 400 or 403):
+          // sending them again can only be refused again, so they are dropped
+          // instead of riding along with every later save, Skip and Finish.
+          // After a 401 they stay, for when the person has signed back in.
+          if (resendCannotHelp(error) && status !== 401) {
+            for (const [key, value] of Object.entries(answers)) {
+              if (unsaved[key] === value) delete unsaved[key];
+            }
           }
           // A newer save already queued carries these answers, so it goes next.
           if (!retry || closed || generation !== ticket) return false;
@@ -250,6 +260,21 @@ export function createSaveQueue({ save, onSaved, onFailing, onSignedOut, retryDe
 }
 
 type Direction = "forward" | "back";
+
+/**
+ * The name to prefill from the email (`suggestedName`), cut to what the
+ * server accepts (NAME_MAX, after the same whitespace clean-up). Otherwise a
+ * long one would be refused with the first step's save, and with it every
+ * later save, Skip and Finish.
+ */
+export function prefillName(suggested: string | null | undefined): string | undefined {
+  let name = "";
+  for (const char of (suggested ?? "").replace(/\s+/g, " ").trim()) {
+    if (name.length + char.length > NAME_MAX) break;
+    name += char;
+  }
+  return name.trim() || undefined;
+}
 
 function toggle<T>(list: readonly T[] | undefined, value: T): T[] {
   const current = list ?? [];
@@ -311,10 +336,10 @@ export function OnboardingFlow({ view, client, connectReturn, initialStep, initi
   const [moved, setMoved] = useState(false);
   const [answers, setAnswers] = useState<OnboardingAnswers>(() => ({
     ...view.answers,
-    name: view.answers.name ?? view.member.name ?? view.suggestedName ?? undefined,
+    name: view.answers.name ?? view.member.name ?? prefillName(view.suggestedName),
     channels: view.answers.channels ?? ["instagram"],
   }));
-  const [member, setMember] = useState<MemberAnswers>(() => ({ ...view.member, name: view.member.name ?? view.suggestedName ?? undefined }));
+  const [member, setMember] = useState<MemberAnswers>(() => ({ ...view.member, name: view.member.name ?? prefillName(view.suggestedName) }));
   const [connections, setConnections] = useState(view.connections);
   // Each visit to the plan step asks for a fresh plan (answers may have
   // changed); `planResult` records which request it answers.
