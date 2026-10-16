@@ -1,7 +1,7 @@
-import { cookies } from "next/headers";
 import { createServerClient, type SetAllCookies } from "@supabase/ssr";
 import { isAuthApiError, isAuthRetryableFetchError } from "@supabase/supabase-js";
 import { supabaseAuthCookieOptions } from "@/src/lib/auth/cookie-domain";
+import { requestSessionCookies } from "@/src/lib/auth/request-session-cookies";
 import { getServerEnv } from "@/src/lib/env";
 import { SessionCheckDeadlineError, createSessionCheck } from "@/src/lib/supabase/session-check";
 import { getRepository } from "../repository-provider";
@@ -92,10 +92,14 @@ type ClaimsCheck = { claims: SessionClaims; authUnavailable: false } | { claims:
  * so a 429 says nothing about this session; auth-js still removes the session
  * on it, and its cookie deletions (empty values) are dropped so the person is
  * not signed out. Cookies with a value, such as a rotated session, are kept.
+ *
+ * When the browser also sent a leftover host-only session, the client reads
+ * the freshest one (request-session-cookies.ts) instead of refreshing the
+ * stale one and deleting both.
  */
 async function checkSessionClaims(): Promise<ClaimsCheck> {
   const env = getServerEnv();
-  const cookieStore = await cookies();
+  const { cookieStore, getAll, replacedFor } = await requestSessionCookies(env.supabaseUrl);
   const writeCookies = (cookiesToSet: CookiesToSet) => {
     try {
       for (const { name, value, options } of cookiesToSet) cookieStore.set(name, value, options);
@@ -111,7 +115,7 @@ async function checkSessionClaims(): Promise<ClaimsCheck> {
     cookieOptions: supabaseAuthCookieOptions(env),
     global: { fetch: sessionCheck.fetch },
     cookies: {
-      getAll: () => cookieStore.getAll(),
+      getAll,
       setAll: (cookiesToSet) => {
         if (settled) writeCookies(cookiesToSet);
         else pending.push(...cookiesToSet);
@@ -121,18 +125,25 @@ async function checkSessionClaims(): Promise<ClaimsCheck> {
 
   let check: ClaimsCheck;
   let rateLimited = false;
+  // A swapped-in session that does not verify as the person it was chosen
+  // for: none of the check's writes may reach the browser.
+  let discardWrites = false;
   try {
     const { data, error } = await sessionCheck.run(supabase.auth.getClaims());
     rateLimited = Boolean(error && isAuthApiError(error) && error.status === 429);
-    if (error && (rateLimited || isAuthRetryableFetchError(error))) check = { claims: null, authUnavailable: true };
+    if (replacedFor !== null && (error || data?.claims?.sub !== replacedFor)) {
+      discardWrites = true;
+      check = { claims: null, authUnavailable: Boolean(error && (rateLimited || isAuthRetryableFetchError(error))) };
+    } else if (error && (rateLimited || isAuthRetryableFetchError(error))) check = { claims: null, authUnavailable: true };
     else if (error || !data?.claims?.sub || !data.claims.email) check = { claims: null, authUnavailable: false };
     else check = { claims: data.claims, authUnavailable: false };
   } catch (error) {
     if (!(error instanceof SessionCheckDeadlineError || isAuthRetryableFetchError(error))) throw error;
+    discardWrites = replacedFor !== null;
     check = { claims: null, authUnavailable: true };
   } finally {
     settled = true;
-    writeCookies(rateLimited ? pending.filter((cookie) => cookie.value) : pending);
+    if (!discardWrites) writeCookies(rateLimited ? pending.filter((cookie) => cookie.value) : pending);
   }
   return check;
 }
@@ -150,8 +161,7 @@ async function checkSessionClaims(): Promise<ClaimsCheck> {
  * are typed (`(request: Request, context) => …`) and so a future change to
  * pull additional context (IP-bound rate limiting, request-scoped caches,
  * etc.) doesn't need to update every call site. It is intentionally unused
- * today - cookie reads happen via next/headers cookies() in
- * checkSessionClaims().
+ * today - cookie reads happen via next/headers in checkSessionClaims().
  */
 export async function getValidatedSession(
   _request: Request,

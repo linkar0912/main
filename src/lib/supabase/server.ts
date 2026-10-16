@@ -1,7 +1,7 @@
-import { cookies } from "next/headers";
-import { createServerClient } from "@supabase/ssr";
+import { createServerClient, type SetAllCookies } from "@supabase/ssr";
 import { getServerEnv } from "@/src/lib/env";
 import { supabaseAuthCookieOptions } from "@/src/lib/auth/cookie-domain";
+import { requestSessionCookies } from "@/src/lib/auth/request-session-cookies";
 
 /**
  * Per-request cap on one Supabase HTTP call. Without it undici waits up to
@@ -30,17 +30,22 @@ export function supabaseFetchWithTimeout(timeoutMs = SUPABASE_FETCH_TIMEOUT_MS, 
  * cookie store, so it works in Route Handlers (read-write) and Server
  * Components (read-only - setAll is a caught no-op there; proxy.ts refreshes
  * the session for that path instead, per @supabase/ssr's documented pattern).
+ * It reads the freshest session when the browser also sent a leftover
+ * host-only one (request-session-cookies.ts).
+ *
+ * `setAll` sends the client's cookie writes somewhere else than the cookie
+ * store, such as straight onto the Route Handler's response.
  */
-export async function createSupabaseServerClient(options: { fetchTimeoutMs?: number } = {}) {
+export async function createSupabaseServerClient(options: { fetchTimeoutMs?: number; setAll?: SetAllCookies } = {}) {
   const env = getServerEnv();
-  const cookieStore = await cookies();
+  const { cookieStore, getAll } = await requestSessionCookies(env.supabaseUrl);
 
   return createServerClient(env.supabaseUrl, env.supabasePublishableKey, {
     cookieOptions: supabaseAuthCookieOptions(env),
     global: { fetch: supabaseFetchWithTimeout(options.fetchTimeoutMs ?? SUPABASE_FETCH_TIMEOUT_MS) },
     cookies: {
-      getAll: () => cookieStore.getAll(),
-      setAll: (cookiesToSet) => {
+      getAll,
+      setAll: options.setAll ?? ((cookiesToSet) => {
         try {
           for (const { name, value, options } of cookiesToSet) {
             cookieStore.set(name, value, options);
@@ -49,7 +54,7 @@ export async function createSupabaseServerClient(options: { fetchTimeoutMs?: num
           // Called during a Server Component render, where the cookie store
           // is read-only.
         }
-      },
+      }),
     },
   });
 }

@@ -3,11 +3,14 @@ import type { AddressInfo, Socket } from "node:net";
 import { AuthApiError, AuthRetryableFetchError } from "@supabase/supabase-js";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { SESSION_CHECK_DEADLINE_MS } from "@/src/lib/supabase/session-check";
+import { cookieHeader, fakeSession, nextRequestCookies, sessionCookies, sessionStorageKey, staleAndFreshSessions, startFakeSupabaseAuth, type FakeSupabaseAuth } from "./session-cookie-fixtures";
 
 const mocks = vi.hoisted(() => ({
   getClaims: vi.fn(),
   createServerClient: vi.fn(),
   requestCookies: [] as { name: string; value: string }[],
+  /** The raw Cookie header; null when a test only sets the cookie store. */
+  cookieHeader: null as string | null,
   setCookie: vi.fn(),
   env: {
     supabaseUrl: "https://example.supabase.co",
@@ -26,6 +29,7 @@ vi.mock("@supabase/ssr", () => ({ createServerClient: mocks.createServerClient }
 
 vi.mock("next/headers", () => ({
   cookies: async () => ({ getAll: () => mocks.requestCookies, set: mocks.setCookie }),
+  headers: async () => new Headers(mocks.cookieHeader === null ? {} : { cookie: mocks.cookieHeader }),
 }));
 
 vi.mock("@/src/lib/env", () => ({ getServerEnv: () => mocks.env }));
@@ -60,6 +64,7 @@ const ACTIVE_MEMBER = {
 beforeEach(() => {
   mocks.createServerClient.mockReset().mockReturnValue({ auth: { getClaims: mocks.getClaims } });
   mocks.requestCookies = [];
+  mocks.cookieHeader = null;
   mocks.setCookie.mockReset();
 });
 
@@ -424,11 +429,142 @@ describe("session checks against a failing Supabase Auth", () => {
   });
 });
 
+// The production failure: a host-only session left from before the session
+// cookies moved to Domain=linkar.in, sent beside the fresh shared session.
+// Next keeps one value per cookie name and @supabase/ssr prefers an
+// unchunked cookie over chunks, so either can hand auth-js the stale session.
+describe("session checks with a leftover host-only session", () => {
+  let fake: FakeSupabaseAuth;
+  let storageKey: string;
+  const defaultSupabaseUrl = mocks.env.supabaseUrl;
+  const { stale, fresh } = staleAndFreshSessions();
+  const rotated = fakeSession({ userId: "owner-user-id", email: "owner@example.com", refreshToken: "rt-rotated-by-proxy", expiresAt: Math.floor(Date.now() / 1000) + 3600, padding: 3000 });
+  const OWNER_SESSION = { userId: "owner-user-id", email: "owner@example.com", workspaceId: "workspace_1" };
+
+  beforeAll(async () => {
+    fake = await startFakeSupabaseAuth({ sessions: [fresh, rotated], usedRefreshTokens: [stale.refresh_token] });
+    storageKey = sessionStorageKey(fake.url);
+    mocks.env.supabaseUrl = fake.url;
+  });
+  afterAll(async () => {
+    mocks.env.supabaseUrl = defaultSupabaseUrl;
+    await fake.close();
+  });
+  beforeEach(async () => {
+    fake.hits.length = 0;
+    const actual = await vi.importActual<typeof import("@supabase/ssr")>("@supabase/ssr");
+    mocks.createServerClient.mockReset().mockImplementation(actual.createServerClient);
+    mocks.getSessionAccessSnapshot.mockReset().mockResolvedValue({ ...ACTIVE_MEMBER, email: "owner@example.com" });
+  });
+
+  /** A request whose Cookie header carries `cookies`, as Next presents it. */
+  function sendCookies(cookies: { name: string; value: string }[]) {
+    mocks.cookieHeader = cookieHeader(cookies);
+    mocks.requestCookies = nextRequestCookies(cookies);
+  }
+
+  it.each([
+    ["getValidatedSession", () => getValidatedSession(new Request("https://admin.linkar.in/api/admin/overview"))],
+    ["getRequestSession", () => getRequestSession()],
+  ])("%s reads the fresh chunked session, not the stale unchunked one, and deletes nothing", async (_name, check) => {
+    sendCookies([...sessionCookies(storageKey, stale), ...sessionCookies(storageKey, fresh)]);
+
+    expect(await check()).toEqual(OWNER_SESSION);
+    expect(fake.refreshPosts()).toEqual([]);
+    expect(fake.userLookups().map((hit) => hit.authorization)).toEqual([`Bearer ${fresh.access_token}`]);
+    expect(mocks.setCookie).not.toHaveBeenCalled();
+  });
+
+  it("reads the fresh session when the stale one has the same cookie names and is sent last", async () => {
+    const paddedStale = { ...stale, user: { ...stale.user, user_metadata: { note: "y".repeat(3000) } } };
+    const staleCookies = sessionCookies(storageKey, paddedStale);
+    const freshCookies = sessionCookies(storageKey, fresh);
+    expect(staleCookies.map(({ name }) => name)).toEqual(freshCookies.map(({ name }) => name));
+    // Next keeps the last value of each name, which here is the stale one.
+    sendCookies([...freshCookies, ...staleCookies]);
+
+    expect(await checkRequestSession()).toEqual({ session: OWNER_SESSION, authUnavailable: false });
+    expect(fake.refreshPosts()).toEqual([]);
+    expect(mocks.setCookie).not.toHaveBeenCalled();
+  });
+
+  it("reads the session the proxy rotated during this request, which only the cookie store holds", async () => {
+    // The browser sent only the stale cookie; the proxy refreshed and set the
+    // rotated session, which Next merges into the cookie store but not into
+    // the raw Cookie header.
+    mocks.cookieHeader = cookieHeader(sessionCookies(storageKey, stale));
+    mocks.requestCookies = [...sessionCookies(storageKey, stale), ...sessionCookies(storageKey, rotated)];
+
+    expect(await getRequestSession()).toEqual(OWNER_SESSION);
+    expect(fake.refreshPosts()).toEqual([]);
+    expect(fake.userLookups().map((hit) => hit.authorization)).toEqual([`Bearer ${rotated.access_token}`]);
+  });
+
+  it("still finds the fresh session from the cookie store when there is no Cookie header to read", async () => {
+    mocks.requestCookies = [...sessionCookies(storageKey, stale), ...sessionCookies(storageKey, fresh)];
+
+    expect(await getValidatedSession(new Request("https://app.linkar.in/api/automations"))).toEqual(OWNER_SESSION);
+    expect(fake.refreshPosts()).toEqual([]);
+  });
+});
+
 describe("safeNextPath", () => {
   it("rejects external and backslash-based post-login redirects", () => {
     expect(safeNextPath("https://evil.example")).toBe("/dashboard");
     expect(safeNextPath("//evil.example")).toBe("/dashboard");
     expect(safeNextPath("/\\evil.example")).toBe("/dashboard");
     expect(safeNextPath("/automations?tab=active")).toBe("/automations?tab=active");
+  });
+});
+
+describe("session checks with a session cookie added from another host", () => {
+  // A Domain=linkar.in cookie added by script on another linkar.in host can
+  // claim anyone in its unsigned token; only Supabase's verification counts.
+  let fake: FakeSupabaseAuth;
+  let storageKey: string;
+  const defaultSupabaseUrl = mocks.env.supabaseUrl;
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  const victim = fakeSession({ userId: "victim-id", email: "victim@example.com", refreshToken: "rt-victim", expiresAt: nowSeconds - 600 });
+  const victimRenewed = fakeSession({ userId: "victim-id", email: "victim@example.com", refreshToken: "rt-victim-2", expiresAt: nowSeconds + 3600 });
+  const attackerRenewed = fakeSession({ userId: "attacker-id", email: "attacker@example.com", refreshToken: "rt-attacker-2", expiresAt: nowSeconds + 3600 });
+  const forged = (expiresAt: number) => {
+    const session = fakeSession({ userId: "attacker-id", email: "attacker@example.com", refreshToken: "rt-attacker", expiresAt });
+    const header = Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url");
+    const payload = Buffer.from(JSON.stringify({ sub: "victim-id", email: "victim@example.com", exp: expiresAt })).toString("base64url");
+    return { ...session, access_token: `${header}.${payload}.forged` };
+  };
+
+  beforeAll(async () => {
+    fake = await startFakeSupabaseAuth({ sessions: [], usedRefreshTokens: [], rotations: { "rt-victim": victimRenewed, "rt-attacker": attackerRenewed } });
+    storageKey = sessionStorageKey(fake.url);
+    mocks.env.supabaseUrl = fake.url;
+  });
+  afterAll(async () => {
+    mocks.env.supabaseUrl = defaultSupabaseUrl;
+    await fake.close();
+  });
+  beforeEach(async () => {
+    fake.hits.length = 0;
+    const actual = await vi.importActual<typeof import("@supabase/ssr")>("@supabase/ssr");
+    mocks.createServerClient.mockReset().mockImplementation(actual.createServerClient);
+    mocks.getSessionAccessSnapshot.mockReset().mockResolvedValue({ ...ACTIVE_MEMBER, email: "victim@example.com" });
+  });
+
+  function sendCookies(cookies: { name: string; value: string }[]) {
+    mocks.cookieHeader = cookieHeader(cookies);
+    mocks.requestCookies = nextRequestCookies(cookies);
+  }
+
+  it.each([
+    ["one that renews into another account", () => forged(nowSeconds - 60)],
+    ["one that claims to last for ever and fails verification", () => forged(9_999_999_999)],
+  ])("answers signed out and writes no cookie for %s", async (_label, added) => {
+    // Added first (a longer Path); Next keeps the person's own copy.
+    sendCookies([...sessionCookies(storageKey, added()), ...sessionCookies(storageKey, victim)]);
+
+    expect(await getValidatedSession(new Request("https://app.linkar.in/api/contacts"))).toBeNull();
+    // Neither the attacker's renewed session nor a deletion of the person's
+    // own cookie reaches the browser.
+    expect(mocks.setCookie).not.toHaveBeenCalled();
   });
 });

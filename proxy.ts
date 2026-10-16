@@ -8,6 +8,7 @@ import { logger } from "@/src/lib/logger";
 import { SessionCheckDeadlineError, createSessionCheck } from "@/src/lib/supabase/session-check";
 import { ADMIN_HOST, isAdminRoutePath, isProtectedAppPath, resolveHostRedirect, resolveRequestHostname } from "@/src/lib/site-routing";
 import { supabaseAuthCookieOptions } from "@/src/lib/auth/cookie-domain";
+import { leftoverSessionCookieDeletions, sessionCookieSelector, supabaseSessionStorageKey } from "@/src/lib/auth/session-cookie-cleanup";
 import { isCrossSiteRequest } from "@/src/lib/security/same-origin";
 import { rememberPlanIntent } from "@/src/lib/billing/plan-intent-cookie";
 
@@ -127,6 +128,30 @@ export async function proxy(request: NextRequest) {
   const env = getServerEnv();
 
   const hostname = resolveRequestHostname(request.headers, request.nextUrl.hostname);
+
+  // A browser can still hold host-only session cookies from before they moved
+  // to Domain=linkar.in, and sends them beside the shared ones; read as is,
+  // the stale session shadows the fresh one (session-cookie-cleanup.ts). The
+  // raw header is the only place duplicate names survive. The selector makes
+  // its choice once, and again only after the session check writes a
+  // session cookie into request.cookies.
+  const selectSession = sessionCookieSelector(supabaseSessionStorageKey(env.supabaseUrl), request.headers.get("cookie"));
+  // What the browser sent, before the session check writes anything.
+  const sent = selectSession(request.cookies.getAll());
+  // Session cookie names the session check wrote: a refresh or a removal.
+  const written = new Set<string>();
+  // Every response also carries the deletions that clean up after the
+  // session cookies the browser sent. `changed` names the session cookies
+  // the session check changed: everything it wrote, except on a 429, which
+  // passes on only the cookies it keeps so the person stays signed in. The
+  // deletions are appended last because each response.cookies.set rewrites
+  // the Set-Cookie headers, and as raw headers because Next's cookie API
+  // keeps one entry per name, where these sit beside the shared cookies' own.
+  const respond = (result: NextResponse, changed: ReadonlySet<string> = written): NextResponse => {
+    for (const deletion of leftoverSessionCookieDeletions({ origins: env, hostname, selection: sent, written: changed })) result.headers.append("set-cookie", deletion);
+    return result;
+  };
+
   const hostRedirect = resolveHostRedirect(hostname, request.nextUrl.pathname, new URL(env.adminUrl).host);
   if (hostRedirect) {
     const baseUrl = hostRedirect.target === "admin" ? env.adminUrl : hostRedirect.target === "app" ? env.appUrl : env.publicSiteUrl;
@@ -137,14 +162,14 @@ export async function proxy(request: NextRequest) {
     // consolidate on it. Every other hop stays temporary (307): /login,
     // /signup and the other app routes moving to app., the owner console
     // moving to admin., and the bare app and admin roots (/dashboard, /admin).
-    return NextResponse.redirect(destination, hostRedirect.target === "marketing" ? 308 : 307);
+    return respond(NextResponse.redirect(destination, hostRedirect.target === "marketing" ? 308 : 307));
   }
 
   // Public marketing, legal, and authentication routes should not be sent
   // through the session gate. Their host canonicalization above is separate
   // from authorization so the same app build can serve both domains safely.
   // /signup and /login also remember a plan picked on /pricing (plan-intent-cookie.ts).
-  if (!isProtectedAppPath(request.nextUrl.pathname)) return rememberPlanIntent(request, NextResponse.next(), env);
+  if (!isProtectedAppPath(request.nextUrl.pathname)) return respond(rememberPlanIntent(request, NextResponse.next(), env));
 
   const response = NextResponse.next();
   const isAdminRoute = isAdminRoutePath(request.nextUrl.pathname);
@@ -155,9 +180,10 @@ export async function proxy(request: NextRequest) {
     cookieOptions: supabaseAuthCookieOptions(env),
     global: { fetch: sessionCheck.fetch },
     cookies: {
-      getAll: () => request.cookies.getAll(),
+      getAll: () => selectSession(request.cookies.getAll()).cookies,
       setAll: (cookiesToSet) => {
         for (const { name, value, options } of cookiesToSet) {
+          written.add(name);
           request.cookies.set(name, value);
           response.cookies.set(name, value, options);
         }
@@ -170,14 +196,30 @@ export async function proxy(request: NextRequest) {
     claims = await sessionCheck.run(supabase.auth.getClaims());
   } catch (error) {
     if (error instanceof SessionCheckDeadlineError || isAuthRetryableFetchError(error)) {
-      return sessionCheckUnavailable(request, response, "claims", error);
+      // A swapped-in session was never verified (see below): keep none of its writes.
+      if (sent.replacedFor !== null) return respond(sessionCheckUnavailable(request, NextResponse.next(), "claims", error), new Set());
+      return respond(sessionCheckUnavailable(request, response, "claims", error));
     }
     throw error;
   }
   const { data, error } = claims;
+  const login = new URL("/login", hostname.toLowerCase().replace(/:\d+$/, "") === ADMIN_HOST || request.nextUrl.pathname.startsWith("/admin") ? env.adminUrl : env.appUrl);
+  // safeNextPath rejects off-site paths ("//evil.example") and control
+  // characters; we re-use it so a crafted /help?x=1%0d%0anext=… cannot smuggle
+  // headers or a different login next into the redirect.
+  login.searchParams.set("next", safeNextPath(`${request.nextUrl.pathname}${request.nextUrl.search}`));
+  // A session other than the one @supabase/ssr would read was swapped in
+  // because a leftover shadowed it. Whose it is is known only now that
+  // Supabase has verified it: if it is not the person it was chosen for (a
+  // cookie added from another host can claim anyone), pass on none of the
+  // check's writes, neither a refreshed session nor auth-js's deletions.
+  if (sent.replacedFor !== null && (error || data?.claims?.sub !== sent.replacedFor)) {
+    const unavailable = error && (isAuthRetryableFetchError(error) || (isAuthApiError(error) && error.status === 429));
+    return respond(unavailable ? sessionCheckUnavailable(request, NextResponse.next(), "claims", error) : NextResponse.redirect(login), new Set());
+  }
   // A network failure or a 5xx from Supabase Auth says nothing about the
   // session. Only a definite answer (no session, a bad token) means sign in.
-  if (error && isAuthRetryableFetchError(error)) return sessionCheckUnavailable(request, response, "claims", error);
+  if (error && isAuthRetryableFetchError(error)) return respond(sessionCheckUnavailable(request, response, "claims", error));
   // Supabase's rate limit on token refreshes counts this server's address,
   // which every signed-in user shares, so a 429 says nothing about this
   // session either. auth-js has already queued deletion of the session
@@ -186,13 +228,13 @@ export async function proxy(request: NextRequest) {
   if (error && isAuthApiError(error) && error.status === 429) {
     const kept = NextResponse.next();
     for (const cookie of response.cookies.getAll()) if (cookie.value) kept.cookies.set(cookie);
-    return sessionCheckUnavailable(request, kept, "claims", error);
+    return respond(sessionCheckUnavailable(request, kept, "claims", error), new Set(kept.cookies.getAll().map(({ name }) => name)));
   }
   if (!error && data?.claims?.sub && data.claims.email) {
     // Admin authorization is intentionally separate from workspace access:
     // the platform owner may have no workspace membership at all. Let the
     // owner-console DAL perform the authoritative allowlist/MFA checks.
-    if (isAdminRoute) return response;
+    if (isAdminRoute) return respond(response);
 
     let access: Awaited<ReturnType<typeof assertApplicationAccess>>;
     try {
@@ -204,18 +246,12 @@ export async function proxy(request: NextRequest) {
     } catch (accessError) {
       // A database error (a pool timeout, an outage) is "could not check".
       // A null result is a definite "no access" and still goes to /login.
-      return sessionCheckUnavailable(request, response, "access", accessError);
+      return respond(sessionCheckUnavailable(request, response, "access", accessError));
     }
-    if (access) return response;
+    if (access) return respond(response);
   }
 
-  const login = new URL("/login", hostname.toLowerCase().replace(/:\d+$/, "") === ADMIN_HOST || request.nextUrl.pathname.startsWith("/admin") ? env.adminUrl : env.appUrl);
-  // safeNextPath rejects off-site paths ("//evil.example") and control
-  // characters; we re-use it so a crafted /help?x=1%0d%0anext=… cannot smuggle
-  // headers or a different login next into the redirect.
-  const next = safeNextPath(`${request.nextUrl.pathname}${request.nextUrl.search}`);
-  login.searchParams.set("next", next);
-  return NextResponse.redirect(login);
+  return respond(NextResponse.redirect(login));
 }
 
 export const config = {
