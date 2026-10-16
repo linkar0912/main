@@ -21,7 +21,15 @@ import { reconcileStaleExecutions } from "./lib/automation/execution-reconciliat
 import { processLeadDelivery } from "./lib/automation/lead-delivery";
 import { processFlowFollowUp, type FlowFollowUpRunnerOptions } from "./lib/automation/followup-runner";
 import type { FlowFollowUpJob } from "./lib/queue";
-import { consumersProcessing, createWorkerHealthServer, workerHealthPort } from "./lib/worker-health";
+import {
+  consumersProcessing,
+  createWorkerHealthServer,
+  createWorkerShutdown,
+  readLivenessExitAfterMs,
+  startLivenessWatchdog,
+  trackConsumerActivity,
+  workerHealthPort,
+} from "./lib/worker-health";
 import { reconcileUsageReservations } from "./lib/admin/system/usage-reconciliation";
 import { sweepLapsedBillingEntitlements } from "./lib/billing/expiry-sweep";
 import { processAdminDeletion } from "./lib/admin/deletion/processor";
@@ -205,12 +213,16 @@ if (!env.redisUrl) {
   const workers = [worker, bulkWorker];
 
   // Dependency probes alone can be green when BullMQ has stopped consuming.
-  // Require both consumers to be running with ready Redis connections,
-  // BullMQ's blocking clients included (see consumersProcessing).
-  const healthServer = createWorkerHealthServer({}, () => consumersProcessing([
-    { consumer: worker, connection: redis },
-    { consumer: bulkWorker, connection: bulkRedis },
-  ]));
+  // Require both consumers to be running, and each either taking jobs or on
+  // ready Redis connections, BullMQ's blocking clients included (see
+  // consumersProcessing).
+  const workerActivity = trackConsumerActivity(worker);
+  const bulkWorkerActivity = trackConsumerActivity(bulkWorker);
+  const isProcessing = () => consumersProcessing([
+    { consumer: worker, connection: redis, lastActivityAt: workerActivity() },
+    { consumer: bulkWorker, connection: bulkRedis, lastActivityAt: bulkWorkerActivity() },
+  ]);
+  const healthServer = createWorkerHealthServer({}, isProcessing);
   healthServer.listen(workerHealthPort(), () =>
     logger.info("Worker health server listening", { port: workerHealthPort() }));
   healthServer.unref();
@@ -240,13 +252,17 @@ if (!env.redisUrl) {
   // The dispatch-lease reconciliation recovers abandoned work, but a clean close
   // avoids ambiguity windows entirely. Periodic sweeps stop scheduling and the
   // running ones are awaited before the database pool is closed, so no sweep is
-  // cut off mid-statement.
+  // cut off mid-statement. A wedged or unreachable Valkey can hold
+  // Worker.close() for good, so the process is forced out (code 1) 5 s after
+  // the sweep drain deadline whatever started the shutdown.
   let shuttingDown = false;
-  const shutdown = async (signal: string) => {
-    if (shuttingDown) return;
-    shuttingDown = true;
-    logger.info("Worker shutting down", { signal });
-    try {
+  let stopWatchdog: () => void = () => undefined;
+  const shutdown = createWorkerShutdown({
+    onStart: () => {
+      shuttingDown = true;
+      stopWatchdog();
+    },
+    close: async () => {
       const [, drained] = await Promise.all([
         Promise.all(workers.map((consumer) => consumer.close())),
         background.stop(SHUTDOWN_DRAIN_TIMEOUT_MS),
@@ -259,15 +275,32 @@ if (!env.redisUrl) {
         const { prisma } = await import("./lib/prisma");
         await prisma.$disconnect();
       }
-      process.exit(0);
-    } catch (error) {
-      logger.error("Worker shutdown failed", { error: error instanceof Error ? error.message : String(error) });
-      process.exit(1);
-    }
-  };
+    },
+    forceExitAfterMs: SHUTDOWN_DRAIN_TIMEOUT_MS + 5_000,
+    exit: (code) => process.exit(code),
+    log: logger,
+  });
   process.on("SIGTERM", () => void shutdown("SIGTERM"));
   process.on("SIGINT", () => void shutdown("SIGINT"));
 
+  // Under plain docker compose a failing health check only marks the container
+  // unhealthy, so a worker that has stopped consuming (a wedged BullMQ
+  // connection after a Valkey outage) would never come back. Exit instead, and
+  // let the restart policy start a fresh worker with new connections. The
+  // exit code is 1 so an on-failure policy restarts it too.
+  const liveness = readLivenessExitAfterMs();
+  if (liveness.warning) logger.warn("Worker liveness setting not used as written", { reason: liveness.warning });
+  logger.info("Worker liveness watchdog", liveness.exitAfterMs > 0 ? { exitAfterMs: liveness.exitAfterMs } : { disabled: true });
+  stopWatchdog = startLivenessWatchdog(isProcessing, (failingForMs) => {
+    logger.error("Worker stopped consuming jobs; exiting so it restarts", { failingForMs });
+    void shutdown("liveness", 1);
+  }, { exitAfterMs: liveness.exitAfterMs });
+
+  // The daily and hourly sweeps wait a little after boot, longer than one
+  // liveness restart cycle, so a worker restarting every few minutes during a
+  // Valkey outage does not re-run them (and retry Meta for failing tokens)
+  // each time. A normal deploy only delays them.
+  const SWEEP_FIRST_RUN_DELAY_MS = 10 * 60 * 1_000;
   if (env.metaTokenEncryptionKey) {
     background.every("Instagram token refresh", 24 * 60 * 60 * 1_000, async () => {
       const result = await refreshExpiringInstagramTokens(
@@ -278,7 +311,7 @@ if (!env.redisUrl) {
       if (result.refreshed || result.failed) {
         logger.info("Instagram token refresh", { refreshed: result.refreshed, failed: result.failed });
       }
-    });
+    }, { firstRunDelayMs: SWEEP_FIRST_RUN_DELAY_MS });
   }
 
   background.every("Participant retention sweep", 60 * 60 * 1_000, async () => {
@@ -286,7 +319,7 @@ if (!env.redisUrl) {
     if (result.expired || result.deleted) {
       logger.info("Participant retention sweep", { expired: result.expired, deleted: result.deleted });
     }
-  });
+  }, { firstRunDelayMs: SWEEP_FIRST_RUN_DELAY_MS });
 
   // Razorpay sends no event when a cancelled/halted subscription's paid period
   // ends, so lapsed paid plans are downgraded here (within 15 minutes).
