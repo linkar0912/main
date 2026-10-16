@@ -402,7 +402,7 @@
 .statRow .statusPill { margin-inline-start: auto; }
 
 /* Marks the counts beside it as sample figures, in the same chip language as
-   the "Example" tag on the use-case cards at the top of the page. */
+   the sample tag in the insights showcase. */
 .sampleTag {
   align-self: center;
   padding: 3px 7px;

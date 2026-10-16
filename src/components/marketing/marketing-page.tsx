@@ -8,7 +8,6 @@ import { ManifestoSection } from "./manifesto-section";
 import { MarketingFooter } from "./marketing-footer";
 import { MarketingHashScroll } from "./marketing-hash-scroll";
 import { MarketingHeader } from "./marketing-header";
-import { ProofRail } from "./proof-rail";
 import { SetupSteps } from "./setup-steps";
 import { SurfaceRunway } from "./surface-runway";
 import { WorkflowGallery } from "./workflow-gallery";
@@ -23,7 +22,6 @@ export function MarketingPage() {
       <MarketingHeader />
       <main id="main-content" className={styles.page}>
         <HeroSection />
-        <ProofRail />
         <ManifestoSection />
         <AutomationStory />
         <SurfaceRunway />

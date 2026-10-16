@@ -33,7 +33,6 @@ describe("marketing theme contract", () => {
 
   it("themes every adaptive marketing chapter", () => {
     const adaptiveModules = [
-      "./proof-rail.module.css",
       "./manifesto-section.module.css",
       "./surface-runway.module.css",
       "./before-after-section.module.css",

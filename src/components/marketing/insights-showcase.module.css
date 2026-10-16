@@ -102,7 +102,7 @@
 }
 
 /* Says the figures are illustrative, in the same chip language as the
-   "Example" tag on the use-case cards at the top of the page. */
+   sample tag in Setup. */
 .sampleTag {
   padding: 3px 7px;
   color: var(--marketing-text);

@@ -5,7 +5,6 @@ import { MarketingPage } from "./marketing-page";
 
 const landmarkIds = [
   "top",
-  "proof",
   "product",
   "how-it-works",
   "surfaces",
@@ -47,7 +46,7 @@ describe("MarketingPage", () => {
     const landmarks = Array.from(
       container.querySelectorAll("header[data-surface], section[id], footer[id]"),
     );
-    expect(landmarks).toHaveLength(13);
+    expect(landmarks).toHaveLength(12);
     expect(landmarks.map((landmark) => landmark.id || "header")).toEqual([
       "header",
       ...landmarkIds,
@@ -82,12 +81,9 @@ describe("MarketingPage", () => {
     ]) {
       expect(main.getByRole("link", { name }).getAttribute("href")).toBe(href);
     }
-    // The cards that name a destination link to it: the use cases to their
-    // feature guides, the ready-made workflows to their recipes, and each
-    // channel to its own guides.
+    // The cards that name a destination link to it: the ready-made workflows
+    // to their recipes, and each channel to its own guides.
     for (const [name, href] of [
-      ["Comment to DM workflow", "/features/instagram-comment-to-dm"],
-      ["Lead qualification workflow", "/features/instagram-lead-qualification"],
       ["Instagram comment to guide template", "/templates/comment-guide-delivery"],
       ["Explore Instagram automation features", "/features"],
       ["Explore Facebook Page comment replies", "/features/facebook-comment-auto-reply"],
@@ -149,13 +145,12 @@ describe("MarketingPage", () => {
     expect(within(channels).getByText(/public replies to top-level Page comments/i)).toBeTruthy();
   });
 
-  it("shows illustrative use cases instead of named testimonials", () => {
+  it("shows no named testimonials", () => {
     const { container } = render(<MarketingPage />);
-    const proof = screen.getByRole("region", { name: "Creator conversation examples" });
 
+    // Names and quotes may appear only for real users who gave written consent.
     expect(container.textContent).not.toMatch(/Aanya|Arjun/);
-    expect(proof.querySelectorAll("blockquote")).toHaveLength(0);
-    expect(within(proof).getAllByRole("heading", { level: 3 })).toHaveLength(2);
+    expect(container.querySelectorAll("blockquote, q, cite")).toHaveLength(0);
   });
 
   it("labels sample figures and uses placeholder handles in the product previews", () => {

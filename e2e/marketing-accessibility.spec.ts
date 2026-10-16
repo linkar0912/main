@@ -93,30 +93,6 @@ function scopeModuleCss(css: string, prefix: string, classes: string[]) {
   );
 }
 
-function proofRailMarkup() {
-  return `
-    <section id="proof" class="proof-section" aria-label="Creator conversation examples">
-      <div class="proof-inner">
-        <div class="proof-statement">
-          <h2>Instagram automation for creators, marketers &amp; brands.</h2>
-        </div>
-        <div class="proof-ticker" data-ticker="continuous" data-pause-on-hover="true" data-pause-on-focus="true">
-          <div class="proof-track">
-            <div class="proof-trackSegment">
-              <article class="proof-example" tabindex="0">Aanya Mehta</article>
-              <article class="proof-example">Arjun Nair</article>
-            </div>
-            <div class="proof-trackSegment" data-proof-duplicate="true" aria-hidden="true">
-              <article class="proof-example">Aanya Mehta</article>
-              <article class="proof-example">Arjun Nair</article>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-  `;
-}
-
 function manifestoMarkup() {
   return `
     <section id="product" class="manifesto-section manifesto-section--enhanced" data-enhanced="true" data-reduced-motion-state="visible">
@@ -128,37 +104,15 @@ function manifestoMarkup() {
   `;
 }
 
-test("ProofRail pauses on hover/focus and settles both editorial sections under reduced motion", async ({ page }) => {
-  const proofCss = scopeModuleCss(
-    await readFile("src/components/marketing/proof-rail.module.css", "utf8"),
-    "proof",
-    ["section", "inner", "statement", "ticker", "track", "trackSegment", "example"],
-  );
+test("the manifesto settles under reduced motion", async ({ page }) => {
   const manifestoCss = scopeModuleCss(
     await readFile("src/components/marketing/manifesto-section.module.css", "utf8"),
     "manifesto",
     ["section", "frame", "title", "body"],
   );
 
-  await page.emulateMedia({ reducedMotion: "no-preference" });
-  await page.setContent(`<style>${proofCss}${manifestoCss}</style>${proofRailMarkup()}${manifestoMarkup()}`);
-
-  const frame = page.locator(".proof-ticker");
-  const track = page.locator(".proof-track");
-  await expect(track).toHaveCSS("animation-play-state", "running");
-  await frame.hover();
-  await expect(track).toHaveCSS("animation-play-state", "paused");
-
-  await page.mouse.move(1000, 500);
-  await expect(track).toHaveCSS("animation-play-state", "running");
-  await page.locator(".proof-example").first().focus();
-  await expect(track).toHaveCSS("animation-play-state", "paused");
-
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await page.setContent(`<style>${proofCss}${manifestoCss}</style>${proofRailMarkup()}${manifestoMarkup()}`);
-  await expect(frame).toHaveCSS("overflow-x", "hidden");
-  await expect(track).toHaveCSS("animation-name", "none");
-  await expect(page.locator('.proof-trackSegment[data-proof-duplicate="true"]')).toHaveCSS("display", "none");
+  await page.setContent(`<style>${manifestoCss}</style>${manifestoMarkup()}`);
   await expect(page.locator(".manifesto-title")).toHaveCSS("opacity", "1");
   await expect(page.locator(".manifesto-title")).toHaveCSS("transform", /^(none|matrix\(1, 0, 0, 1, 0, 0\))$/);
   await expect(page.locator(".manifesto-title")).toHaveCSS("transition-duration", "0s");
