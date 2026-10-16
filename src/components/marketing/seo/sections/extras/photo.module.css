@@ -344,7 +344,6 @@ section.section {
   border: 1px solid rgb(255 255 255 / 26%);
   border-radius: 20px;
   box-shadow: 0 22px 50px rgb(0 0 0 / 30%);
-  -webkit-backdrop-filter: blur(14px) saturate(140%);
   backdrop-filter: blur(14px) saturate(140%);
   font-size: .9375rem;
   line-height: 1.4;
@@ -385,7 +384,7 @@ section.section {
 
 .content { position: relative; z-index: 1; display: grid; justify-items: center; inline-size: 100%; }
 
-.content > .label { color: #ffffff; background: rgb(16 17 22 / 40%); border-color: rgb(255 255 255 / 40%); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
+.content > .label { color: #ffffff; background: rgb(16 17 22 / 40%); border-color: rgb(255 255 255 / 40%); backdrop-filter: blur(8px); }
 
 .content > .title {
   /* Two lines at most on wide screens, and always inside the wire on the far left. */
@@ -522,6 +521,6 @@ section.section {
 
 /* Without the blur the chips go solid, so a wire behind one never shows through its words. */
 @media (prefers-reduced-transparency: reduce) {
-  .glass { background: color-mix(in srgb, var(--band) 86%, #ffffff); -webkit-backdrop-filter: none; backdrop-filter: none; }
-  .content > .label { background: rgb(16 17 22 / 82%); -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .glass { background: color-mix(in srgb, var(--band) 86%, #ffffff); backdrop-filter: none; }
+  .content > .label { background: rgb(16 17 22 / 82%); backdrop-filter: none; }
 }
