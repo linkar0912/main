@@ -6,16 +6,33 @@ environment through a restricted release command.
 
 ## Production topology
 
-- `linkar-web` is a Dokploy Application with one steady-state replica and a
-  start-first update policy.
-- `linkar-worker` is the singleton BullMQ worker. A release updates it only
-  after the web application is healthy on the requested commit. The worker
-  container runs the same image with the command `node dist/worker.js`; the
-  image's default `CMD` starts the web server instead.
-- Valkey is private, password protected, and persistent. It has no public port
-  or domain.
+As checked in Dokploy on 16 Oct 2026, the Linkar project (environment
+`production`) holds one Application and one Compose. Dokploy's TrackParcel
+project runs on the same host and the same Dokploy instance.
+
+- `linkar-web` in this runbook is the Dokploy **Application** "Linkar Web"
+  (Swarm service `app-compress-primary-pixel-qjmded`, one replica). Its
+  environment is the Application's own Environment tab.
+- `linkar-worker` in this runbook is the `worker` service of the Dokploy
+  **Compose** "Linkar Production" (type `docker-compose`, project
+  `linkar-production-dkirew`, container `linkar-production-dkirew-worker-1`).
+  It is the singleton BullMQ worker: the same image with the command
+  `node dist/worker.js` (the image's default `CMD` starts the web server
+  instead). Its image tag is the Compose environment variable
+  `LINKAR_IMAGE_TAG`, and its other variables are the Compose's environment,
+  separate from Linkar Web's. A release updates it only after the web is
+  healthy on the requested commit. There is no separate worker Application.
+- The same Compose also runs Valkey (`valkey/valkey:9.1.1-alpine3.24`, password
+  protected, `--appendonly yes`, data on the external volume
+  `linkar-valkey-data`, no public port or domain) and defines a one-shot
+  `migrate` service (`prisma migrate deploy` on the same image).
 - PostgreSQL and Auth are hosted by Supabase.
 - Cloudflare routes public HTTPS traffic to Dokploy's Traefik ingress.
+
+A Dokploy redeploy of the "Linkar Production" Compose recreates its services,
+Valkey included (seen on 16 Oct 2026). Valkey's data survives on its volume,
+but jobs wait while it restarts, so update the worker through the release
+script rather than a Compose redeploy when you only need a new image.
 
 The web and worker must run the same immutable image commit. The web health
 endpoint and private worker health endpoint both report that baked commit, and
@@ -31,16 +48,15 @@ The image's `HEALTHCHECK` runs `node scripts/container-healthcheck.mjs` every
 either role. The runtime image has no `curl` or `wget`, so any check must run
 `node`.
 
-A health check set on a Dokploy service (a Docker Swarm service) replaces the
-image's `HEALTHCHECK`; it does not run alongside it. Dokploy's check on
-`linkar-web` still reads `dependencies.database` and `dependencies.redis` from
-`/api/health`, so a database or Redis outage can replace the only web task.
-**Owner action, on both `linkar-web` and `linkar-worker`:** in the service's
-Swarm settings, either
+A health check set in Dokploy replaces the image's `HEALTHCHECK`; it does not
+run alongside it. Both services therefore carry an explicit liveness check,
+set on 16 Oct 2026. Never point either one at `/api/health` or the worker's
+`/health`: those follow the database and Redis, and a dependency blip would
+then take the service down.
 
-- clear the Dokploy health check, so the image's `HEALTHCHECK` applies; or
-- set the same check explicitly. Docker takes the durations in nanoseconds
-  (Interval 30 s, Timeout 10 s, StartPeriod 40 s):
+- **`linkar-web`** (Linkar Web, Advanced, Swarm Settings, Health Check) uses
+  the image's own check. Docker takes the durations in nanoseconds (Interval
+  30 s, Timeout 10 s, StartPeriod 40 s):
 
   ```json
   {
@@ -51,6 +67,24 @@ Swarm settings, either
     "Retries": 3
   }
   ```
+
+  Swarm replaces a task that fails it, so a stuck web process is restarted.
+  Before 16 Oct this field read the dependencies from `/api/health`, so a
+  database or Redis outage could replace the only web task.
+
+- **`linkar-worker`** is set in the "Linkar Production" Compose file, under the
+  `worker` service's `healthcheck:`. It runs
+  `node -e "fetch('http://127.0.0.1:3001/live')..."` every 20 s (8 s timeout,
+  30 s start period, 5 retries). Before 16 Oct it probed `/health`.
+
+  The Compose runs under plain `docker compose`, not Swarm. In that mode a
+  failing check only marks the container `unhealthy`; Docker does not
+  restart it (a restart policy acts only when the process exits). So a worker
+  whose BullMQ connection is stuck (see `/live` below) is flagged, not
+  replaced. Watch for an `unhealthy` worker in Dokploy, and restart it there.
+  Making the worker exit on its own when `/live` stays failed, so the
+  Compose restart policy brings it back, is an open follow-up (confirm the
+  `worker` service has one, such as `restart: unless-stopped`; Valkey's does).
 
 What each liveness endpoint checks:
 
@@ -64,10 +98,12 @@ What each liveness endpoint checks:
   `src/lib/worker-health.ts`). It fails while those connections are down, and
   when a blocking client stays stuck reconnecting after Valkey is back (seen
   with BullMQ 6.1.2 and ioredis 6.0.0: the worker stops taking jobs while its
-  main connection looks fine). With 3 retries 30 s apart, a Valkey outage
-  longer than about 1 to 1.5 minutes gets the worker replaced. That is
-  intended: a new worker connects afresh, and a stuck one never recovers. A
-  slow or unreachable database does not fail it.
+  main connection looks fine). With the Compose check (5 retries, 20 s apart)
+  the worker shows as `unhealthy` after about 2 minutes of that. A stuck one
+  never recovers by itself and a new worker connects afresh, so restart it
+  (see the `linkar-worker` note above: under `docker compose` this is manual
+  until the worker can exit on its own). A slow or unreachable database does
+  not fail it.
 
 Dependency state is readiness and stays on `/api/health` (web) and the
 worker's `/health`, which the release script and monitoring read. Each probe
@@ -129,6 +165,20 @@ the Dokploy version in use. It reads, all root-owned and mode 600:
   configured on `linkar-web`;
 - `/etc/dokploy-release/linkar.env` - `LINKAR_WEB_APPLICATION_ID` and
   `LINKAR_WORKER_APPLICATION_ID`.
+
+**Known drift (16 Oct 2026): the template does not match production.** Its
+worker step calls `application.saveDockerProvider` and `application.deploy`
+on `LINKAR_WORKER_APPLICATION_ID`, but there is no worker Application: the
+worker is a service of the "Linkar Production" Compose (see "Production
+topology"). Releases still move the worker, so the installed host copy must
+do it differently. After the 6330420 release the Compose environment's
+`LINKAR_IMAGE_TAG` carried that commit and the worker container had been
+recreated on it, while Dokploy had recorded no Compose deployment since
+6 Sep. **Owner action:** copy the installed
+`/usr/local/libexec/dokploy-release-linkar` back over this template so the two
+match again, then run `sh ops/dokploy/release-linkar.test.sh`. Until then, do
+not install the template on the host: its worker step targets an Application
+that does not exist, so it would not move the worker.
 
 The deploy key must not provide an interactive shell, port forwarding, agent
 forwarding, or access to another application's release command.
@@ -196,13 +246,26 @@ gh run view <run-id> --log-failed
   containers are still serving; the requested release did not complete.
 - The deploy step logged "not deploying superseded": a newer commit reached
   `main` first and is (or will be) released by its own run.
-- `worker.heartbeat` is `stale`: the worker is stopped, cannot reach Valkey,
-  or BullMQ stopped consuming. Check the `linkar-worker` logs and its
-  `/health`.
+- `worker.heartbeat` is `stale`, or Dokploy shows the worker `unhealthy`: the
+  worker is stopped, cannot reach Valkey, or BullMQ stopped consuming. Open
+  the "Linkar Production" Compose in Dokploy, check the `worker` logs, and
+  restart the worker; under `docker compose` an unhealthy worker is not
+  restarted for you.
 
-The Dokploy panel and API are not published. Reach them from an administrator
-machine through an SSH tunnel to the host, on a local port that does not clash
-with a running dev server.
+The Dokploy panel and API are not published: Dokploy listens only on the
+host's `localhost:3000`. Reach them from an administrator machine through an
+SSH tunnel, on a local port that does not clash with a running dev server, for
+example:
+
+```bash
+ssh -N -L 3999:localhost:3000 root@<host>
+```
+
+The panel is then at `http://localhost:3999`, and the API at
+`http://localhost:3999/api` with an `x-api-key` header. Close the tunnel when
+you are done. Cloudflare answers 403 to some scripted clients (Python's
+default user agent among them), so send a normal `User-Agent` when a script
+checks the public site.
 
 ## Database migrations
 
@@ -215,6 +278,14 @@ use `prisma migrate dev` or `db:seed` in production.
 
 If a migration fails, stop the release and inspect `_prisma_migrations` before
 retrying. Do not edit or delete migration history to force a deployment.
+
+The "Linkar Production" Compose also defines a one-shot `migrate` service
+(`prisma migrate deploy` on the release image). Whether a release runs it
+depends on how the installed host release script brings the worker up, which
+is not confirmed (see "Known drift" under "Host release script"). A Dokploy
+Compose redeploy brings up the whole Compose. Until that is settled, keep
+running the step below yourself, and check `_prisma_migrations` after a
+release that adds migrations.
 
 Run migrations on the **direct** connection (port 5432), not the pooled one:
 `DATABASE_URL` in production points at the transaction pooler, which cannot run
@@ -298,7 +369,8 @@ release contained an incompatible migration, stop and restore through the
 database recovery procedure instead of guessing.
 
 Keep Valkey and its named volume running during web or worker rollback. Never
-start a second worker concurrently.
+start a second worker concurrently. Prefer the release script over a Dokploy
+redeploy of the "Linkar Production" Compose, which restarts Valkey as well.
 
 ## Production configuration
 
@@ -311,8 +383,11 @@ pnpm preflight:billing
 pnpm preflight:instagram-ownership
 ```
 
-Rotate a credential in its provider and Dokploy together, then deploy both web
-and worker and repeat the health checks. Anonymous `/api/health` callers get
+The web and the worker keep separate environments: Linkar Web's Environment
+tab, and the "Linkar Production" Compose's environment. A variable both use
+must be set in both. Rotate a credential in its provider and in both Dokploy
+environments together, then deploy both web and worker and repeat the health
+checks. Anonymous `/api/health` callers get
 only `status`; the `x-health-token` detail view reports configuration state
 and release commits, never credential values or connection details.
 
@@ -332,8 +407,13 @@ Also required in production, though not checked at boot:
   everyone trying one email shares its lockout, and tracked-link clicks cannot
   tell visitors apart, so `/r/<slug>` counts them without the per-visitor cap.
   The app still starts; `/r/<slug>` logs a warning once per process instead.
+  Set on Linkar Web as of 16 Oct 2026. The worker does not need it.
 - `DIRECT_URL` on both `linkar-web` (migrations) and `linkar-worker` (its
-  runtime connection unless `WORKER_DATABASE_URL` is set).
+  runtime connection unless `WORKER_DATABASE_URL` is set). The Compose
+  environment had it, and no `WORKER_DATABASE_URL`, on 16 Oct 2026.
+- `PRIVATE_REPLY_RATE_LIMIT_PER_HOUR` is best left unset, so the code default
+  (400 an hour) applies. An old template set 750, which overrides it. It was
+  unset in both environments on 16 Oct 2026.
 
 ### Google Analytics (public website)
 
