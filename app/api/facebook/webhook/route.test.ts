@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   findWorkspaceByFacebookPage: vi.fn(),
   getWorkspaceStatus: vi.fn(),
   logError: vi.fn(),
+  RetryableFacebookError: class RetryableFacebookError extends Error {},
 }));
 
 vi.mock("@/src/lib/logger", () => ({
@@ -29,8 +30,9 @@ vi.mock("@/src/lib/facebook/webhooks", () => ({ normalizeFacebookWebhook: () => 
 vi.mock("@/src/lib/queue", () => ({ enqueueFacebookEvents: mocks.enqueueFacebookEvents }));
 vi.mock("@/src/lib/facebook/runner", () => ({
   processNormalizedFacebookEvent: mocks.processNormalizedFacebookEvent,
-  isRetryableFacebookError: (error: unknown) => Boolean((error as { retryable?: boolean })?.retryable),
-  RetryableFacebookError: class extends Error {},
+  // As in the runner: only its own retryable error, not any error marked retryable.
+  isRetryableFacebookError: (error: unknown) => error instanceof mocks.RetryableFacebookError,
+  RetryableFacebookError: mocks.RetryableFacebookError,
 }));
 vi.mock("@/src/lib/repository-provider", () => ({ getRepository: () => ({
   findWorkspaceByFacebookPage: mocks.findWorkspaceByFacebookPage,
@@ -42,6 +44,7 @@ vi.mock("@/src/lib/facebook/client", () => ({
 }));
 
 const { GET, POST } = await import("./route");
+const { SendDeferredError } = await import("@/src/lib/automation/send-deferral");
 
 describe("GET /api/facebook/webhook", () => {
   it("returns the challenge when the verify token matches", async () => {
@@ -104,10 +107,27 @@ describe("POST /api/facebook/webhook", () => {
   });
 
   it("returns 503 when the inline runner has a retryable failure", async () => {
-    mocks.processNormalizedFacebookEvent.mockRejectedValue(Object.assign(new Error("Meta 429"), { retryable: true }));
+    mocks.processNormalizedFacebookEvent.mockRejectedValue(new mocks.RetryableFacebookError("Meta 429"));
     const response = await POST(new Request("http://localhost/api/facebook/webhook", { method: "POST", body: "{}" }));
     expect(response.status).toBe(503);
     await expect(response.json()).resolves.toEqual({ received: false, retryable: true });
+  });
+
+  it("returns 503 for a reply held while the Page cools down, so Meta delivers the event again", async () => {
+    // Nothing is claimed or recorded for a held reply; without a queue to
+    // park it on, a redelivery is the only way it is still sent.
+    mocks.processNormalizedFacebookEvent.mockRejectedValue(
+      new SendDeferredError("Facebook asked Linkar to slow down, so replies from this Page are waiting a few minutes.", 15 * 60_000),
+    );
+    const response = await POST(new Request("http://localhost/api/facebook/webhook", { method: "POST", body: "{}" }));
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toEqual({ received: false, retryable: true });
+  });
+
+  it("acknowledges a failure that is not worth retrying", async () => {
+    mocks.processNormalizedFacebookEvent.mockRejectedValue(new Error("Invalid definition"));
+    const response = await POST(new Request("http://localhost/api/facebook/webhook", { method: "POST", body: "{}" }));
+    expect(response.status).toBe(200);
   });
 
   it("acknowledges when the inline runner handles the event", async () => {

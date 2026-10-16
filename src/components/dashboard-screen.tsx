@@ -115,7 +115,7 @@ function flowTriggerLabel(automation: AutomationRecord): string {
 
 /** The three recipes a new workspace sees first; each says what it does, not just its name. */
 const QUICKSTART_TEMPLATES = [
-  { id: "comment-link-dm", title: "Send a link when someone comments", detail: "Someone comments a keyword, they get your link in a DM.", popular: true },
+  { id: "comment-link-dm", title: "Send a link when someone comments", detail: "Someone comments a keyword, they get a button in a DM, then your link when they tap it.", popular: true },
   { id: "story-mention-reply", title: "Turn story mentions into DMs", detail: "Thank people who tag you in their story, automatically.", popular: false },
   { id: "default-reply", title: "Respond to all your DMs", detail: "Send a friendly first reply to every new message.", popular: false },
 ] as const;

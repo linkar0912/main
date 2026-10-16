@@ -177,6 +177,19 @@ describe("/api/inbox/[contactId]", () => {
     expect(await response.json()).toEqual({ error: "limit_reached", capability: "deliveries" });
   });
 
+  it("says plainly that sending is paused when Meta has limited the account", async () => {
+    mocks.getRepository.mockReturnValue(replyRepository());
+    const held = "Not sent. Instagram has limited this account, so Linkar paused sending from it for another 5 hours and 12 minutes.";
+    mocks.executeOutboundDelivery.mockResolvedValue({
+      status: "FAILED", retryable: false, error: held, reason: "ACCOUNT_PAUSED",
+    });
+
+    const response = await reply();
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ error: held });
+  });
+
   it("never returns the provider's raw error text", async () => {
     mocks.getRepository.mockReturnValue(replyRepository());
     mocks.executeOutboundDelivery.mockResolvedValue({

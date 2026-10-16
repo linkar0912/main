@@ -8,6 +8,8 @@ import { executeOutboundDelivery } from "./outbound-delivery";
 import { isQuietNow, isWithinMessagingWindow, msUntilQuietEnd } from "../messaging-window";
 import { checkSendRateLimit } from "./send-rate-limiter";
 import { findSendDeferral, SendDeferredError } from "./send-deferral";
+import { lastInboundDmAt } from "./last-inbound-dm";
+import { withBroadcastOptOutLine } from "./broadcast-opt-out";
 
 export type BroadcastRunnerOptions = {
   client?: {
@@ -148,7 +150,10 @@ async function deliverBroadcastRecipient(
   // inactive_30d segments, which by construction select only contacts whose
   // window closed 7+ or 30+ days ago. That is an unsolicited automated DM in
   // Meta's terms and is exactly what gets a professional account restricted.
-  if (!isWithinMessagingWindow(contact.lastSeenAt)) {
+  // The window runs from the person's last inbound DM, the same timestamp that
+  // chose the recipients; with none on record the window counts as closed.
+  const lastInboundAt = await lastInboundDmAt(repository, job.workspaceId, job.igAccountId, job.igScopedUserId);
+  if (!isWithinMessagingWindow(lastInboundAt)) {
     await skipRecipient(repository, job, "The 24-hour messaging window has closed", "WINDOW_CLOSED");
     return;
   }
@@ -170,7 +175,7 @@ async function deliverBroadcastRecipient(
   // rather than parked and retried into a policy violation.
   const defer = async (message: string, delayMs: number) => {
     const deferral = new SendDeferredError(message, delayMs);
-    if (!isWithinMessagingWindow(contact.lastSeenAt, Date.now() + deferral.delayMs)) {
+    if (!isWithinMessagingWindow(lastInboundAt, Date.now() + deferral.delayMs)) {
       await skipRecipient(repository, job, "The 24-hour messaging window closes before the send could go out", "WINDOW_CLOSED");
       return;
     }
@@ -206,10 +211,15 @@ async function deliverBroadcastRecipient(
     claimLeaseMs: options.claimLeaseMs ?? 30_000,
     repository,
   }, async (payload) => {
+    // The ledger keeps the text as composed; the opt-out line is added here,
+    // deterministically, so a retry sends exactly the same message.
+    const message = payload as { type: "text"; text: string };
     const response = await options.client!.sendDirectMessage(
       connection,
       job.igScopedUserId,
-      payload as { type: "text"; text: string },
+      typeof message.text === "string"
+        ? { ...message, text: withBroadcastOptOutLine(message.text) }
+        : message,
     );
     const messageId = typeof response === "object" && response !== null
       && "message_id" in response && typeof response.message_id === "string"

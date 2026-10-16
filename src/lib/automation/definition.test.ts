@@ -459,3 +459,107 @@ describe("validateFlowDefinition", () => {
   });
 });
 
+describe("public link shorteners at save time", () => {
+  const shortenerError = /Short links from (\S+) are not allowed\. Paste the full link instead/;
+
+  function issuesOf(input: unknown): Array<{ path: PropertyKey[]; message: string }> {
+    try {
+      validateFlowDefinition(input);
+    } catch (error) {
+      return (error as { issues?: Array<{ path: PropertyKey[]; message: string }> }).issues ?? [];
+    }
+    return [];
+  }
+
+  it("refuses a shortened button link with a plain, field-addressed error", () => {
+    const issues = issuesOf({
+      version: 1,
+      trigger: { type: "message", match: "keyword", keywords: ["shop"] },
+      conditions: [],
+      actions: [{ type: "send_button", text: "Here you go", buttonLabel: "Shop now", url: "https://bit.ly/shop" }],
+    });
+    expect(issues).toEqual([
+      expect.objectContaining({ path: ["actions", 0, "url"], message: expect.stringMatching(shortenerError) }),
+    ]);
+    expect(issues[0]?.message).toContain("bit.ly");
+  });
+
+  it("refuses a short link typed into a private reply or a follow-up", () => {
+    expect(issuesOf({
+      version: 1,
+      trigger: { type: "comment", match: "keyword", keywords: ["guide"], mediaIds: [] },
+      conditions: [],
+      actions: [{ type: "private_reply", text: "Here’s your guide: tinyurl.com/free-guide" }],
+    })).toEqual([expect.objectContaining({ path: ["actions", 0, "text"] })]);
+
+    expect(issuesOf({
+      version: 1,
+      trigger: { type: "message", match: "keyword", keywords: ["offer"] },
+      conditions: [],
+      actions: [{ type: "send_text", text: "Offer inside" }],
+      followUps: [{ delayMinutes: 60, text: "Still keen?", buttonLabel: "Use my code", url: "https://cutt.ly/code" }],
+    })).toEqual([expect.objectContaining({ path: ["followUps", 0, "url"] })]);
+  });
+
+  it("refuses a shortened delivery link or opening message in a two-step campaign", () => {
+    expect(issuesOf({ ...campaign, delivery: { ...campaign.delivery, url: "https://rb.gy/guide" } }))
+      .toEqual([expect.objectContaining({ path: ["delivery", "url"], message: expect.stringContaining("rb.gy") })]);
+    expect(issuesOf({ ...campaign, publicReplies: ["Link: t.co/abc"] }))
+      .toEqual([expect.objectContaining({ path: ["publicReplies", 0] })]);
+  });
+
+  it("ignores a short link in the post's own caption, which the customer did not write", () => {
+    const flow = validateFlowDefinition({
+      ...campaign,
+      trigger: {
+        ...campaign.trigger,
+        mediaSnapshots: [{ ...campaign.trigger.mediaSnapshots[0], caption: "New drop! Link in bio bit.ly/drop" }],
+      },
+    });
+    expect(flow.version).toBe(2);
+  });
+
+  it("ignores short links used as trigger words, such as words that filter out spam comments", () => {
+    expect(() => validateFlowDefinition({
+      version: 1,
+      trigger: {
+        type: "comment",
+        match: "keyword",
+        keywords: ["price", "bit.ly/free"],
+        negativeKeywords: ["tinyurl.com/win", "t.co/"],
+        mediaIds: [],
+      },
+      conditions: [{ type: "contains_keyword", keywords: ["cutt.ly/deal"] }],
+      actions: [{ type: "private_reply", text: "Here are our prices." }],
+    })).not.toThrow();
+  });
+
+  it("still accepts full links and brand links", () => {
+    expect(() => validateFlowDefinition({
+      version: 1,
+      trigger: { type: "message", match: "keyword", keywords: ["shop"] },
+      conditions: [],
+      actions: [
+        { type: "send_link", text: "Our shop", url: "https://shop.example.in/products/kurta" },
+        { type: "send_button", text: "On Amazon", buttonLabel: "Buy", url: "https://amzn.to/3xYz" },
+      ],
+    })).not.toThrow();
+  });
+});
+
+describe("follow gate switched off", () => {
+  it("accepts the blank follow-gate copy the builder sends when the gate is off", () => {
+    const flow = validateFlowDefinition({
+      ...campaign,
+      followGate: { required: false, notFollowingMessage: "", recheckButtonLabel: "" },
+    });
+    expect(flow).toMatchObject({ version: 2, followGate: { required: false, notFollowingMessage: "", recheckButtonLabel: "" } });
+  });
+
+  it("still requires the copy when the gate is on", () => {
+    expect(() => validateFlowDefinition({
+      ...campaign,
+      followGate: { required: true, notFollowingMessage: "  ", recheckButtonLabel: "I've followed" },
+    })).toThrow("Follow-gated campaigns need a not-following message");
+  });
+});

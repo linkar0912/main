@@ -3,7 +3,8 @@
 // server's structured error code and never a raw response body.
 
 export class AdminCommandError extends Error {
-  constructor(public readonly code: string, public readonly status: number) {
+  /** `detail` is the plain sentence the server wrote for the operator, when it sent one. */
+  constructor(public readonly code: string, public readonly status: number, public readonly detail?: string) {
     super(code);
     this.name = "AdminCommandError";
   }
@@ -44,9 +45,10 @@ export async function adminCommandResponse(url: string, options: AdminCommandOpt
   });
   if (!response.ok) {
     // Error pages from a proxy or an outage are not JSON; fall back to the code.
-    const payload = await response.json().catch(() => ({})) as { error?: unknown };
+    const payload = await response.json().catch(() => ({})) as { error?: unknown; message?: unknown };
     const code = typeof payload.error === "string" && payload.error ? payload.error : options.fallback ?? "admin_operation_failed";
-    throw new AdminCommandError(code, response.status);
+    const detail = typeof payload.message === "string" && payload.message.trim() ? payload.message.trim() : undefined;
+    throw new AdminCommandError(code, response.status, detail);
   }
   return response;
 }
@@ -76,7 +78,7 @@ export function humanizeAdminCode(code: string): string {
 }
 
 export function adminErrorMessage(cause: unknown, fallback = "Operation failed"): string {
-  if (cause instanceof AdminCommandError) return humanizeAdminCode(cause.code);
+  if (cause instanceof AdminCommandError) return cause.detail ?? humanizeAdminCode(cause.code);
   // fetch rejects with a TypeError when the request never reached the server
   // (offline, DNS, CORS, or a header it refused to send). Its message is
   // browser-specific prose, so say what happened instead.

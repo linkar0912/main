@@ -55,11 +55,19 @@ export type ServerEnv = {
   providerRequestTimeoutMs: number;
   // Meta caps private replies to comments on posts/Reels at 750 calls/hour per
   // Instagram professional account (confirmed against Meta's own Business
-  // Messaging docs, Sept 2026 - re-verify before changing, Meta revises these).
-  // Scoped per account, not per app, since that's how Meta enforces it.
+  // Messaging docs, Sept 2026 - re-verify, Meta revises these). Linkar defaults
+  // well below that cap (400) because accounts report restrictions far under
+  // it. Scoped per account, not per app, since that's how Meta enforces it.
   privateReplyRateLimitPerHour: number;
   directMessageRateLimitPerHour: number;
   commentReplyRateLimitPerHour: number;
+  // After Meta blocks an Instagram account from sending (error 368 or #2022),
+  // its automatic sends stop for this many hours, then run on a reduced hourly
+  // budget (this percent of the DM ceiling) for the recovery hours. See
+  // automation/account-pause.ts for which sends pass that gate.
+  accountBlockPauseHours: number;
+  accountRecoveryHours: number;
+  accountRecoverySendPercent: number;
   adminChallengeTtlSeconds: number;
   deletionJobAttempts: number;
   deletionJobBackoffMs: number;
@@ -193,6 +201,12 @@ function integerEnv(name: string, value: string | undefined, fallback: number): 
     // from the error log without re-deriving it from the environment dump.
     throw new Error(`${name} must be a non-negative integer (got "${value}")`);
   }
+  return parsed;
+}
+
+function percentEnv(name: string, value: string | undefined, fallback: number): number {
+  const parsed = integerEnv(name, value, fallback);
+  if (parsed < 1 || parsed > 100) throw new Error(`${name} must be between 1 and 100 (got "${value}")`);
   return parsed;
 }
 
@@ -428,10 +442,11 @@ export function getServerEnv(): ServerEnv {
     workerConcurrency: integerEnv("WORKER_CONCURRENCY", process.env.WORKER_CONCURRENCY, 15),
     dispatchLeaseMs,
     providerRequestTimeoutMs,
+    // Below Meta's documented 750/hour on purpose - see the type comment above.
     privateReplyRateLimitPerHour: integerEnv(
       "PRIVATE_REPLY_RATE_LIMIT_PER_HOUR",
       process.env.PRIVATE_REPLY_RATE_LIMIT_PER_HOUR,
-      750,
+      400,
     ),
     // Self-imposed per-account ceilings, not documented Meta figures - see the
     // comment on bucketLimit in automation/send-rate-limiter.ts. Set to 0 to
@@ -445,6 +460,18 @@ export function getServerEnv(): ServerEnv {
       "COMMENT_REPLY_RATE_LIMIT_PER_HOUR",
       process.env.COMMENT_REPLY_RATE_LIMIT_PER_HOUR,
       250,
+    ),
+    accountBlockPauseHours: positiveIntegerEnv(
+      "ACCOUNT_BLOCK_PAUSE_HOURS",
+      process.env.ACCOUNT_BLOCK_PAUSE_HOURS,
+      24,
+    ),
+    // 0 resumes at the full budget straight after the pause.
+    accountRecoveryHours: integerEnv("ACCOUNT_RECOVERY_HOURS", process.env.ACCOUNT_RECOVERY_HOURS, 24),
+    accountRecoverySendPercent: percentEnv(
+      "ACCOUNT_RECOVERY_SEND_PERCENT",
+      process.env.ACCOUNT_RECOVERY_SEND_PERCENT,
+      25,
     ),
     adminChallengeTtlSeconds: integerEnv("ADMIN_CHALLENGE_TTL_SECONDS", process.env.ADMIN_CHALLENGE_TTL_SECONDS, 600),
     deletionJobAttempts: integerEnv("DELETION_JOB_ATTEMPTS", process.env.DELETION_JOB_ATTEMPTS, 8),

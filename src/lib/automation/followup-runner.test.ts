@@ -51,6 +51,18 @@ async function seed(automationStatus: "ACTIVE" | "PAUSED" = "ACTIVE") {
   return repository;
 }
 
+let inboundEvents = 0;
+/** Records an inbound DM from lead_1, the event that opens Meta's 24-hour window. */
+async function recordInboundDm(repository: Awaited<ReturnType<typeof seed>>, receivedAt: string) {
+  inboundEvents += 1;
+  await repository.recordWebhookEvent("workspace_a", {
+    providerEventId: `inbound_${inboundEvents}`,
+    eventType: "message.received",
+    receivedAt,
+    payload: { accountId: "ig_1", recipientId: "lead_1", text: "offer" },
+  });
+}
+
 function client() {
   return {
     sendDirectMessage: vi.fn().mockResolvedValue({ message_id: "nudge_1" }),
@@ -66,6 +78,7 @@ describe("flow follow-up runner", () => {
   it("delivers a due nudge through the delivery ledger", async () => {
     const repository = await seed();
     await repository.touchContact("workspace_a", "ig_1", "lead_1", new Date().toISOString());
+    await recordInboundDm(repository, new Date().toISOString());
     const dmClient = client();
 
     await processFlowFollowUp(job(), repository, options(dmClient));
@@ -78,12 +91,9 @@ describe("flow follow-up runner", () => {
 
   it("skips with WINDOW_CLOSED when the person has not messaged in 24 hours", async () => {
     const repository = await seed();
-    await repository.touchContact(
-      "workspace_a",
-      "ig_1",
-      "lead_1",
-      new Date(Date.now() - 25 * 60 * 60 * 1_000).toISOString(),
-    );
+    const lastMessage = new Date(Date.now() - 25 * 60 * 60 * 1_000).toISOString();
+    await repository.touchContact("workspace_a", "ig_1", "lead_1", lastMessage);
+    await recordInboundDm(repository, lastMessage);
     const dmClient = client();
 
     await processFlowFollowUp(job(), repository, options(dmClient));
@@ -123,6 +133,7 @@ describe("flow follow-up runner", () => {
   it("defers through quiet hours instead of spending a retry attempt", async () => {
     const repository = await seed();
     await repository.touchContact("workspace_a", "ig_1", "lead_1", new Date().toISOString());
+    await recordInboundDm(repository, new Date().toISOString());
     const hour = new Date().getUTCHours();
     await repository.setMessagingWindow("workspace_a", { startHour: hour, endHour: (hour + 2) % 24, timezone: "UTC" });
     const dmClient = client();
@@ -130,5 +141,43 @@ describe("flow follow-up runner", () => {
     await expect(processFlowFollowUp(job(), repository, { ...options(dmClient), finalAttempt: true }))
       .rejects.toBeInstanceOf(SendDeferredError);
     expect(dmClient.sendDirectMessage).not.toHaveBeenCalled();
+  });
+
+  it("uses the last inbound DM, not a fresher lastSeenAt", async () => {
+    const repository = await seed();
+    // A comment moved lastSeenAt to now; the last DM was 25 hours ago.
+    await repository.touchContact("workspace_a", "ig_1", "lead_1", new Date().toISOString());
+    await recordInboundDm(repository, new Date(Date.now() - 25 * 60 * 60 * 1_000).toISOString());
+    const dmClient = client();
+
+    await processFlowFollowUp(job(), repository, options(dmClient));
+
+    expect(dmClient.sendDirectMessage).not.toHaveBeenCalled();
+    expect((await repository.getOutboundDelivery(job().deliveryKey))?.resultCode).toBe("WINDOW_CLOSED");
+  });
+
+  it("treats a contact with no inbound DM on record as outside the window", async () => {
+    const repository = await seed();
+    await repository.touchContact("workspace_a", "ig_1", "lead_1", new Date().toISOString());
+    const dmClient = client();
+
+    await processFlowFollowUp(job(), repository, options(dmClient));
+
+    expect(dmClient.sendDirectMessage).not.toHaveBeenCalled();
+    expect((await repository.getOutboundDelivery(job().deliveryKey))?.resultCode).toBe("WINDOW_CLOSED");
+  });
+
+  it("settles as WINDOW_CLOSED when quiet hours outlast the last inbound DM's window", async () => {
+    const repository = await seed();
+    await repository.touchContact("workspace_a", "ig_1", "lead_1", new Date().toISOString());
+    await recordInboundDm(repository, new Date(Date.now() - 23 * 60 * 60 * 1_000).toISOString());
+    const hour = new Date().getUTCHours();
+    await repository.setMessagingWindow("workspace_a", { startHour: hour, endHour: (hour + 3) % 24, timezone: "UTC" });
+    const dmClient = client();
+
+    await processFlowFollowUp(job(), repository, options(dmClient));
+
+    expect(dmClient.sendDirectMessage).not.toHaveBeenCalled();
+    expect((await repository.getOutboundDelivery(job().deliveryKey))?.resultCode).toBe("WINDOW_CLOSED");
   });
 });

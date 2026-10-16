@@ -1,15 +1,29 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MetaApiError } from "../meta/client";
+import {
+  ACCOUNT_RECOVERING_REASON,
+  ACCOUNT_THROTTLED_REASON,
+  META_ERROR_REASONS,
+  parseAccountPauseReason,
+} from "../meta/errors";
 import { createMemoryRepository } from "../memory-repository";
+import { notifyWorkspaceManagers } from "../notifications";
 import { getRepository } from "../repository-provider";
 import type { AutomationRepository } from "../repository";
+import { checkAccountSendGate, resetAccountPauseStateForTests } from "./account-pause";
 import {
   classifyProviderFailure,
   deliveryKeys,
   executeOutboundDelivery,
+  providerAccountSignal,
 } from "./outbound-delivery";
+import { SendDeferredError } from "./send-deferral";
 
 vi.mock("../repository-provider", () => ({ getRepository: vi.fn() }));
+vi.mock("../notifications", () => ({ notifyWorkspaceManagers: vi.fn(async () => true) }));
+
+const PAUSE_ENV_KEYS = ["REDIS_URL", "DIRECT_MESSAGE_RATE_LIMIT_PER_HOUR", "ACCOUNT_RECOVERY_HOURS"] as const;
+const savedPauseEnv = Object.fromEntries(PAUSE_ENV_KEYS.map((key) => [key, process.env[key]]));
 
 const request = {
   deliveryKey: "automation:automation_1:event:event_1:action:0",
@@ -34,6 +48,19 @@ describe("outbound delivery coordinator", () => {
     repository = createMemoryRepository();
     vi.mocked(getRepository).mockReturnValue(repository);
     request.entitlementService.getMonthlyDeliveryLimit.mockReset().mockResolvedValue(100);
+    // Account pauses live in this process's memory here (no Redis), and must
+    // not carry from one test to the next.
+    for (const key of PAUSE_ENV_KEYS) delete process.env[key];
+    resetAccountPauseStateForTests();
+    vi.mocked(notifyWorkspaceManagers).mockClear();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    for (const key of PAUSE_ENV_KEYS) {
+      if (savedPauseEnv[key] === undefined) delete process.env[key];
+      else process.env[key] = savedPauseEnv[key];
+    }
   });
 
   it("skips the provider for an existing SENT delivery", async () => {
@@ -123,7 +150,9 @@ describe("outbound delivery coordinator", () => {
     expect(classifyProviderFailure(error)).toBe(expected);
     const releaseReservation = vi.spyOn(repository, "releaseOutboundDeliveryReservation");
 
-    await expect(executeOutboundDelivery(request, vi.fn().mockRejectedValue(error)))
+    // A sequence step returns its failure; a throttled classic or campaign
+    // action would park the job instead (covered below).
+    await expect(executeOutboundDelivery({ ...request, kind: "SEQUENCE_STEP" }, vi.fn().mockRejectedValue(error)))
       .resolves.toEqual({ status: "FAILED", retryable, error: `Meta ${status}` });
     expect(await repository.getOutboundDelivery(request.deliveryKey)).toMatchObject({
       state: "FAILED",
@@ -132,16 +161,248 @@ describe("outbound delivery coordinator", () => {
     expect(releaseReservation).toHaveBeenCalledWith(request.deliveryKey);
   });
 
-  it.each([4, 17, 32, 613])("retries Meta throttling (HTTP 400, Graph code %i)", async (code) => {
+  it.each([4, 17, 32, 613, 80002, 80006])("waits out Meta throttling (HTTP 400, Graph code %i) instead of retrying in seconds", async (code) => {
     const error = new MetaApiError("Application request limit reached", 400, true, true, code);
     expect(classifyProviderFailure(error)).toBe("KNOWN_RETRYABLE");
-    await expect(executeOutboundDelivery(request, vi.fn().mockRejectedValue(error)))
-      .resolves.toMatchObject({ status: "FAILED", retryable: true });
+    expect(providerAccountSignal(error)).toBe("rate_limited");
+
+    const deferral = await executeOutboundDelivery(request, vi.fn().mockRejectedValue(error)).catch((thrown: unknown) => thrown);
+    expect(deferral).toBeInstanceOf(SendDeferredError);
+    expect((deferral as SendDeferredError).message).toBe(ACCOUNT_THROTTLED_REASON);
+    // The first throttled attempt waits a minute (plus up to a minute of jitter).
+    expect((deferral as SendDeferredError).delayMs).toBeGreaterThanOrEqual(60_000);
+    expect((deferral as SendDeferredError).delayMs).toBeLessThanOrEqual(120_000);
     expect(await repository.getOutboundDelivery(request.deliveryKey)).toMatchObject({
       state: "FAILED",
       retryable: true,
       resultCode: "RETRYABLE_REJECTION",
     });
+  });
+
+  it("backs off 1, 5, then 15 minutes, and then leaves a throttled send to the job's own retries", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const start = Date.parse("2026-10-16T10:00:00.000Z");
+    vi.setSystemTime(start);
+    const error = new MetaApiError("Application request limit reached", 400, true, true, 4);
+    const send = vi.fn().mockRejectedValue(error);
+    const waits: number[] = [];
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      // Far enough apart that the throttles never pause the whole account.
+      vi.setSystemTime(start + attempt * 20 * 60_000);
+      const thrown = await executeOutboundDelivery(request, send).catch((caught: unknown) => caught);
+      expect(thrown).toBeInstanceOf(SendDeferredError);
+      waits.push((thrown as SendDeferredError).delayMs);
+    }
+    expect(waits[0]).toBeGreaterThanOrEqual(60_000);
+    expect(waits[1]).toBeGreaterThanOrEqual(5 * 60_000);
+    expect(waits[2]).toBeGreaterThanOrEqual(15 * 60_000);
+    expect(waits.every((wait, index) => wait <= [60_000, 5 * 60_000, 15 * 60_000][index] + 60_000)).toBe(true);
+
+    vi.setSystemTime(start + 60 * 60_000);
+    await expect(executeOutboundDelivery(request, send)).resolves.toEqual({
+      status: "FAILED",
+      retryable: true,
+      error: "Application request limit reached",
+    });
+    expect(send).toHaveBeenCalledTimes(4);
+  });
+
+  it("returns a retryable failure for throttled kinds that cannot park a job", async () => {
+    const step = { ...request, kind: "SEQUENCE_STEP" as const };
+    const error = new MetaApiError("Application request limit reached", 400, true, true, 613);
+    await expect(executeOutboundDelivery(step, vi.fn().mockRejectedValue(error)))
+      .resolves.toEqual({ status: "FAILED", retryable: true, error: "Application request limit reached" });
+  });
+
+  it("parks a throttled campaign action, which campaign-runner hands back before the job waits", async () => {
+    const campaign = { ...request, kind: "CAMPAIGN_ACTION" as const };
+    const error = new MetaApiError("Application request limit reached", 400, true, true, 613);
+    const deferral = await executeOutboundDelivery(campaign, vi.fn().mockRejectedValue(error)).catch((thrown: unknown) => thrown);
+    expect(deferral).toBeInstanceOf(SendDeferredError);
+    expect((deferral as SendDeferredError).message).toBe(ACCOUNT_THROTTLED_REASON);
+    // Left retryable, so the parked job's next attempt sends it.
+    expect(await repository.getOutboundDelivery(request.deliveryKey)).toMatchObject({ state: "FAILED", retryable: true });
+  });
+
+  it("pauses the whole account briefly after repeated throttles, so its other sends wait too", async () => {
+    const error = new MetaApiError("Application request limit reached", 400, true, true, 4);
+    for (let index = 0; index < 3; index += 1) {
+      await executeOutboundDelivery(
+        { ...request, deliveryKey: `throttled:${index}` },
+        vi.fn().mockRejectedValue(error),
+      ).catch(() => undefined);
+    }
+    await expect(checkAccountSendGate({ channel: "instagram", accountId: "ig_1" })).resolves.toMatchObject({ status: "throttled" });
+
+    const prepare = vi.spyOn(repository, "prepareOutboundDelivery");
+    const send = vi.fn().mockResolvedValue({ id: "provider_1" });
+    const held = await executeOutboundDelivery({ ...request, deliveryKey: "another:send" }, send).catch((thrown: unknown) => thrown);
+    expect(held).toBeInstanceOf(SendDeferredError);
+    expect((held as SendDeferredError).message).toBe(ACCOUNT_THROTTLED_REASON);
+    expect((held as SendDeferredError).delayMs).toBeGreaterThan(14 * 60_000);
+    const campaign = await executeOutboundDelivery({ ...request, kind: "CAMPAIGN_ACTION", deliveryKey: "campaign:send" }, send)
+      .catch((thrown: unknown) => thrown);
+    expect(campaign).toBeInstanceOf(SendDeferredError);
+    expect((campaign as SendDeferredError).message).toBe(ACCOUNT_THROTTLED_REASON);
+    await expect(executeOutboundDelivery({ ...request, kind: "SEQUENCE_STEP", deliveryKey: "sequence:send" }, send))
+      .resolves.toEqual({ status: "FAILED", retryable: true, error: ACCOUNT_THROTTLED_REASON });
+    expect(send).not.toHaveBeenCalled();
+    expect(prepare).not.toHaveBeenCalled();
+
+    // A different account keeps sending.
+    await expect(executeOutboundDelivery({ ...request, instagramAccountId: "ig_2", deliveryKey: "other:account" }, send))
+      .resolves.toMatchObject({ status: "SENT" });
+  });
+
+  it.each([
+    ["error 368", new MetaApiError(META_ERROR_REASONS.accountBlocked, 400, true, false, 368)],
+    ["#2022 under a permission code", new MetaApiError(META_ERROR_REASONS.accountBlocked, 400, true, false, 10)],
+    ["#2022 as the subcode of a retryable error", new MetaApiError("Temporary", 400, true, true, 2, 2022)],
+  ])("pauses every send for the account after %s, and tells the owners once", async (_label, error) => {
+    expect(classifyProviderFailure(error)).toBe("KNOWN_PERMANENT");
+    expect(providerAccountSignal(error)).toBe("account_blocked");
+    await repository.upsertConnection({
+      workspaceId: "workspace_a",
+      igUserId: "ig_1",
+      username: "creator",
+      accessTokenEncrypted: "sealed",
+      status: "CONNECTED",
+    });
+
+    const refused = await executeOutboundDelivery(request, vi.fn().mockRejectedValue(error));
+    expect(refused).toMatchObject({ status: "FAILED", retryable: false });
+    expect(refused.status === "FAILED" && parseAccountPauseReason(refused.error)).toEqual({ platform: "Instagram", durationMs: 24 * 60 * 60_000 });
+    expect(await repository.getOutboundDelivery(request.deliveryKey)).toMatchObject({
+      state: "FAILED",
+      retryable: false,
+      resultCode: "PROVIDER_REJECTED",
+    });
+    await vi.waitFor(() => expect(notifyWorkspaceManagers).toHaveBeenCalledOnce());
+    expect(vi.mocked(notifyWorkspaceManagers).mock.calls[0]?.[2]).toBe("Instagram has limited @creator");
+
+    // New triggers stop at the gate: no Meta call, no usage kept, a plain reason.
+    const release = vi.spyOn(repository, "releaseOutboundDeliveryReservation");
+    const send = vi.fn().mockResolvedValue({ id: "provider_1" });
+    for (const kind of ["CLASSIC_ACTION", "CAMPAIGN_ACTION", "BROADCAST_RECIPIENT", "FLOW_FOLLOWUP", "MANUAL_INBOX"] as const) {
+      const deliveryKey = `held:${kind}`;
+      const held = await executeOutboundDelivery({ ...request, kind, deliveryKey }, send);
+      expect(held).toMatchObject({ status: "FAILED", retryable: false, reason: "ACCOUNT_PAUSED" });
+      expect(held.status === "FAILED" && held.error).toMatch(
+        /^Not sent\. Instagram has limited this account, so Linkar paused sending from it for another (24 hours|23 hours and 59 minutes)\.$/,
+      );
+      expect(await repository.getOutboundDelivery(deliveryKey)).toMatchObject({
+        state: "FAILED",
+        retryable: false,
+        resultCode: "SUPPRESSED",
+      });
+      expect(release).toHaveBeenCalledWith(deliveryKey);
+    }
+    expect(send).not.toHaveBeenCalled();
+
+    // A sequence step waits the pause out instead: retryable, and nothing is
+    // recorded, so sequence-runner backs it off rather than ending the sequence.
+    const step = await executeOutboundDelivery({ ...request, kind: "SEQUENCE_STEP", deliveryKey: "held:SEQUENCE_STEP" }, send);
+    expect(step).toMatchObject({ status: "FAILED", retryable: true, reason: "ACCOUNT_PAUSED" });
+    expect(step.status === "FAILED" && parseAccountPauseReason(step.error)?.platform).toBe("Instagram");
+    expect(await repository.getOutboundDelivery("held:SEQUENCE_STEP")).toBeNull();
+    expect(send).not.toHaveBeenCalled();
+
+    // Another block during the same pause does not email again.
+    await executeOutboundDelivery({ ...request, deliveryKey: "in-flight" }, vi.fn().mockRejectedValue(error));
+    expect(notifyWorkspaceManagers).toHaveBeenCalledOnce();
+  });
+
+  it("keeps an outcome already recorded, and still sends lead emails, during a pause", async () => {
+    await repository.ensureOutboundDelivery(persistedRequest);
+    await repository.claimOutboundDelivery(request.deliveryKey, "seed_owner", "2026-08-23T10:05:00.000Z");
+    await repository.completeOutboundDelivery(request.deliveryKey, "seed_owner", "provider_existing", "2026-08-23T10:01:00.000Z");
+    const block = new MetaApiError(META_ERROR_REASONS.accountBlocked, 400, true, false, 368);
+    await executeOutboundDelivery({ ...request, deliveryKey: "blocked" }, vi.fn().mockRejectedValue(block));
+
+    const send = vi.fn().mockResolvedValue({ id: "lead_1" });
+    await expect(executeOutboundDelivery(request, send)).resolves.toMatchObject({
+      status: "SENT",
+      providerMessageId: "provider_existing",
+      reused: true,
+    });
+    await expect(executeOutboundDelivery({ ...request, kind: "LEAD_EMAIL", deliveryKey: "lead:1" }, send))
+      .resolves.toMatchObject({ status: "SENT", providerMessageId: "lead_1" });
+    expect(send).toHaveBeenCalledOnce();
+  });
+
+  it("restarts slowly after the pause: a reduced hourly share, not counting typed replies", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const start = Date.parse("2026-10-16T10:15:00.000Z");
+    vi.setSystemTime(start);
+    // 25% of a 4-an-hour DM ceiling: one automatic send an hour while recovering.
+    process.env.DIRECT_MESSAGE_RATE_LIMIT_PER_HOUR = "4";
+    const block = new MetaApiError(META_ERROR_REASONS.accountBlocked, 400, true, false, 368);
+    await executeOutboundDelivery({ ...request, deliveryKey: "blocked" }, vi.fn().mockRejectedValue(block));
+
+    vi.setSystemTime(start + 24 * 60 * 60_000 + 60_000);
+    const send = vi.fn().mockResolvedValue({ id: "provider_1" });
+    await expect(executeOutboundDelivery({ ...request, deliveryKey: "first" }, send)).resolves.toMatchObject({ status: "SENT" });
+    const held = await executeOutboundDelivery({ ...request, deliveryKey: "second" }, send).catch((thrown: unknown) => thrown);
+    expect(held).toBeInstanceOf(SendDeferredError);
+    expect((held as SendDeferredError).message).toBe(ACCOUNT_RECOVERING_REASON);
+    await expect(executeOutboundDelivery({ ...request, kind: "SEQUENCE_STEP", deliveryKey: "sequence" }, send))
+      .resolves.toEqual({ status: "FAILED", retryable: true, error: ACCOUNT_RECOVERING_REASON });
+    await expect(executeOutboundDelivery({ ...request, kind: "MANUAL_INBOX", deliveryKey: "typed" }, send))
+      .resolves.toMatchObject({ status: "SENT" });
+    expect(send).toHaveBeenCalledTimes(2);
+  });
+
+  it("holds a campaign action once the hour's recovery share is used, like any automatic send", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const start = Date.parse("2026-10-16T10:15:00.000Z");
+    vi.setSystemTime(start);
+    // 25% of a 4-an-hour DM ceiling: one automatic send an hour while recovering.
+    process.env.DIRECT_MESSAGE_RATE_LIMIT_PER_HOUR = "4";
+    const block = new MetaApiError(META_ERROR_REASONS.accountBlocked, 400, true, false, 368);
+    await executeOutboundDelivery({ ...request, deliveryKey: "blocked" }, vi.fn().mockRejectedValue(block));
+
+    // 10:16 the next day: recovering, with this hour's one send still free.
+    vi.setSystemTime(start + 24 * 60 * 60_000 + 60_000);
+    const send = vi.fn().mockResolvedValue({ id: "provider_1" });
+    await expect(executeOutboundDelivery({ ...request, kind: "CAMPAIGN_ACTION", deliveryKey: "campaign:1" }, send))
+      .resolves.toMatchObject({ status: "SENT" });
+
+    // The next comment's DM waits for 11:00 (plus up to a minute of jitter).
+    // Nothing is reserved or recorded for it, so the parked job sends it then.
+    const prepare = vi.spyOn(repository, "prepareOutboundDelivery");
+    const held = await executeOutboundDelivery({ ...request, kind: "CAMPAIGN_ACTION", deliveryKey: "campaign:2" }, send)
+      .catch((thrown: unknown) => thrown);
+    expect(held).toBeInstanceOf(SendDeferredError);
+    expect((held as SendDeferredError).message).toBe(ACCOUNT_RECOVERING_REASON);
+    expect((held as SendDeferredError).delayMs).toBeGreaterThanOrEqual(44 * 60_000);
+    expect((held as SendDeferredError).delayMs).toBeLessThanOrEqual(45 * 60_000);
+    expect(prepare).not.toHaveBeenCalled();
+    expect(await repository.getOutboundDelivery("campaign:2")).toBeNull();
+
+    vi.setSystemTime(start + 25 * 60 * 60_000 + 60_000);
+    await expect(executeOutboundDelivery({ ...request, kind: "CAMPAIGN_ACTION", deliveryKey: "campaign:2" }, send))
+      .resolves.toMatchObject({ status: "SENT" });
+    expect(send).toHaveBeenCalledTimes(2);
+  });
+
+  it("stretches a throttle pause to Meta's own estimate from its usage headers", async () => {
+    const usage = { highestPercent: 100, regainAccessMs: 40 * 60_000 };
+    const error = new MetaApiError("Application request limit reached", 400, true, true, 4, undefined, usage);
+    const deferral = await executeOutboundDelivery(request, vi.fn().mockRejectedValue(error)).catch((thrown: unknown) => thrown);
+    expect(deferral).toBeInstanceOf(SendDeferredError);
+    // One throttle alone would wait a minute; Meta said 40.
+    expect((deferral as SendDeferredError).delayMs).toBeGreaterThanOrEqual(39 * 60_000);
+    const gate = await checkAccountSendGate({ channel: "instagram", accountId: "ig_1" });
+    expect(gate.status).toBe("throttled");
+    expect(gate.status === "throttled" && gate.until - Date.now()).toBeGreaterThan(39 * 60_000);
+  });
+
+  it("reads only Meta's own answers as account signals", () => {
+    expect(providerAccountSignal(new SendDeferredError("Send rate limit reached", 1_000))).toBeNull();
+    expect(providerAccountSignal(new MetaApiError("network", 0, false))).toBeNull();
+    expect(providerAccountSignal(new MetaApiError("Bad request", 400, true, false, 100))).toBeNull();
+    expect(providerAccountSignal(new Error("boom"))).toBeNull();
+    expect(providerAccountSignal(new MetaApiError("Too many", 429, true))).toBe("rate_limited");
   });
 
   it("marks the connection EXPIRED when a send is rejected with code 190", async () => {

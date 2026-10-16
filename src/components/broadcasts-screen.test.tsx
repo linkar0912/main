@@ -3,6 +3,9 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { BroadcastsScreen } from "./broadcasts-screen";
 
+// En and em dashes, built from char codes so the branding check never sees the characters in source.
+const LONG_DASHES = new RegExp(`[${String.fromCharCode(0x2013, 0x2014)}]`);
+
 const running = { id: "broadcast_1", name: "Weekend offer", status: "RUNNING", segment: "all_contacts", total: 10, sent: 3, failed: 0, skipped: 0 };
 
 describe("BroadcastsScreen", () => {
@@ -64,6 +67,36 @@ describe("BroadcastsScreen", () => {
     fireEvent.click(screen.getByRole("button", { name: "Confirm send" }));
 
     expect(await screen.findByText(/500 most recently active of 740/)).toBeTruthy();
+  });
+
+  it("notes under the message that one text sent to many people looks repetitive, without blocking the send", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "/api/broadcasts" && init?.method === "POST") {
+        return new Response(JSON.stringify({ data: running, audience: { eligible: 3, queued: 3, truncated: false } }), { status: 201 });
+      }
+      return new Response(JSON.stringify({ data: [] }), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<BroadcastsScreen />);
+    await screen.findByText("No broadcasts yet");
+
+    const message = screen.getByPlaceholderText("Write the message everyone will get");
+    const hint = screen.getByRole("note");
+    expect(hint.textContent).toMatch(/same text to many people can look repetitive/i);
+    expect(hint.textContent).toMatch(/relevant/i);
+    expect(hint.textContent).toMatch(/now and then/i);
+    expect(hint.textContent).not.toMatch(LONG_DASHES);
+    // It sits with the message box it is about.
+    expect(hint.closest("label")).toBe(message.closest("label"));
+
+    fireEvent.change(screen.getByPlaceholderText("e.g. Weekend offer"), { target: { value: "Drop" } });
+    fireEvent.change(message, { target: { value: "New stock" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send broadcast" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm send" }));
+
+    expect(await screen.findByText(/for 3 people in the 24-hour window/)).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledWith("/api/broadcasts", expect.objectContaining({ method: "POST" }));
   });
 
   it("explains a manager-only refusal instead of showing the error code", async () => {

@@ -380,13 +380,248 @@ export function validateFieldAnswer(
 }
 
 /**
- * Exact-match opt-out commands (case-insensitive). Deliberately conservative -
- * "stop" inside a longer sentence is a normal message, not an opt-out.
+ * Opt-out recognition. The WHOLE message must be an opt-out request: "Stop!",
+ * " STOP. ", "please stop", "band karo" and "मैसेज मत भेजो" all count, while
+ * "where is the bus stop" or "dukaan kab band hoti hai" stay normal messages.
+ * Suppression is permanent (only an owner can lift it), so every phrase below
+ * is a clear request to stop messaging; vague replies such as "no", "cancel",
+ * "not interested" or "stop it" are deliberately left out.
+ *
+ * Matching ignores case, Unicode width, punctuation, apostrophes and spacing,
+ * and tolerates polite words on either side ("please", "now", "ji").
+ *
+ * Emoji only matter for the few short forms people also use as a joke: a bare
+ * "stop", "band karo", "mat bhejo" or "roko", "bas karo" with a messages word,
+ * "leave me alone", "don't bother me" and "pareshan mat karo". On those, a
+ * laughing, winking or tongue face, a heart or kiss, a skull or 😭 (or a text
+ * face such as ";)", ":P" or "^_^") means the person is joking, so "stop 😂"
+ * and "bas karo bhai 😂" stay normal messages. Every other emoji, including smiles (🙂, 😊, ":)"), thumbs up, ticks,
+ * warning signs and annoyed or angry faces (😤, 🙄, 😡, 💢), fits a sincere
+ * request. Phrases that can only mean opt-out ("unsubscribe", "stop messaging
+ * me", "remove me from your list", "मैसेज मत भेजो") count whatever the emoji.
+ *
+ * A question mark only cancels forms that really can be questions: "no more
+ * messages?" and any Hindi phrase ("band karo?", "mat bhejo?"), since Hindi
+ * marks a yes or no question by the "?" alone. English requests such as
+ * "Please stop???" or "stop messaging me?!" still count.
  */
-const OPT_OUT_COMMANDS = new Set(["stop", "unsubscribe", "optout", "opt-out", "remove me", "stop messaging"]);
+const OPT_OUT_MAX_LENGTH = 200;
+const APOSTROPHES = /['‘’ʼ`´]/gu;
+/** Zero-width joiners and other format characters, plus emoji variation selectors and keycaps. */
+const INVISIBLE_CHARACTERS = /[\p{Cf}\u{fe00}-\u{fe0f}\u{20e3}\u{e0100}-\u{e01ef}]/gu;
+const NON_WORD_CHARACTERS = /[^\p{L}\p{N}\p{M}]+/gu;
+const EMOJI = /\p{Extended_Pictographic}/gu;
+/**
+ * Emoji that read as a joke on the forms that can be one. Skin tones, variation
+ * selectors and joiners are not pictographs, so "❤️" and "🙈🏽" match too.
+ */
+const PLAYFUL_EMOJI = new Set([
+  // Laughing and grinning faces
+  "😀", "😃", "😄", "😁", "😆", "😅", "😂", "🤣", "😹", "😸", "🤭",
+  // Winking, tongue and teasing faces
+  "😉", "😜", "😝", "😛", "🤪", "😋", "😏", "🙃", "🙈",
+  // Hearts and kisses
+  "😍", "🥰", "😘", "😗", "😙", "😚", "😻", "😽", "💋", "🫶",
+  "❤", "♥", "🧡", "💛", "💚", "💙", "💜", "🤎", "🖤", "🤍", "🩷", "🩵", "🩶",
+  "💕", "💞", "💓", "💗", "💖", "💘", "💝", "💟", "❣",
+  // Skulls ("I'm dead") and loud crying, both mostly used for laughing
+  "💀", "☠", "😭",
+]);
+/**
+ * Winking, laughing or tongue text faces such as ";)", ";-)", ":D", ":P" and
+ * "^_^". A plain ":)" is a polite smile, like 🙂, so it does not count.
+ */
+const PLAYFUL_TEXT_FACE = /;['’-]?[)\]}]|[;:=]['’-]?[dDpP3](?![\p{L}\p{N}])|\^_*\^/u;
+
+function hasPlayfulTone(text: string): boolean {
+  if (PLAYFUL_TEXT_FACE.test(text)) return true;
+  for (const [emoji] of text.matchAll(EMOJI)) {
+    if (PLAYFUL_EMOJI.has(emoji)) return true;
+  }
+  return false;
+}
+
+function normalizeOptOutText(text: string): string {
+  return text
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(INVISIBLE_CHARACTERS, "")
+    .replace(APOSTROPHES, "")
+    .replace(NON_WORD_CHARACTERS, " ")
+    .trim();
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** One required word slot: any of the options. */
+function anyOf(options: readonly string[]): string {
+  return `(?:${options.map((option) => escapeRegExp(normalizeOptOutText(option))).join("|")})`;
+}
+
+/** One optional word slot, consuming its trailing space when present. */
+function maybe(options: readonly string[]): string {
+  return `(?:${anyOf(options)} )?`;
+}
+
+type OptOutPhrase = {
+  pattern: RegExp;
+  /** Also used as a joke, so a playful emoji or text face cancels it. */
+  canBeJoke: boolean;
+  /** Can be a genuine question, so any "?" cancels it. */
+  canBeQuestion: boolean;
+};
+
+/** A request that can only mean opt-out: no emoji or "?" cancels it. */
+function request(source: string): OptOutPhrase {
+  return { pattern: wholeMessage(source), canBeJoke: false, canBeQuestion: false };
+}
+
+/** A short form people also say as a joke ("stop 😂", "leave me alone 😂"). */
+function jokeable(source: string): OptOutPhrase {
+  return { pattern: wholeMessage(source), canBeJoke: true, canBeQuestion: false };
+}
+
+/** A form that is also a question when it ends in "?" ("band karo?", "no more messages?"). */
+function askable(source: string): OptOutPhrase {
+  return { pattern: wholeMessage(source), canBeJoke: false, canBeQuestion: true };
+}
+
+/** A short form that can be both a joke and a question ("band karo", "mat bhejo"). */
+function jokeableAskable(source: string): OptOutPhrase {
+  return { pattern: wholeMessage(source), canBeJoke: true, canBeQuestion: true };
+}
+
+function wholeMessage(source: string): RegExp {
+  return new RegExp(`^${source}$`, "u");
+}
+
+// English
+const EN_MESSAGES = ["messages", "message", "msgs", "msg", "dms", "dm", "texts", "notifications", "spam"];
+const EN_QUANTIFIER = ["the", "these", "this", "those", "all", "all the", "all these", "your", "any", "any more", "anymore", "more", "such", "automated"];
+const EN_CONTACT_VERBS = ["message", "msg", "text", "dm", "contact", "spam", "ping"];
+const EN_AGAIN = ["again", "anymore", "any more", "ever again"];
+
+// Hindi in Latin script (Hinglish)
+const HI_ME = ["mujhe", "mujhko", "muje", "mujhe ab", "hume", "humein", "hamein"];
+const HI_THIS = ["ye", "yeh", "aur", "dobara", "dubara", "phir se", "fir se", "koi", "sab", "saare", "sare", "aise"];
+const HI_MESSAGES = ["message", "messages", "msg", "msgs", "mssg", "mesage", "messege", "sms", "dm", "dms", "text", "texts", "spam", "messaging", "spamming"];
+const HI_STOP = ["band", "bandh", "bnd", "stop"];
+const HI_DO = ["karo", "kro", "kar do", "kardo", "kr do", "krdo", "kar dijiye", "kar dijie", "kijiye", "kijie", "kariye", "kare", "karen", "karein", "kar den", "kar dein", "kar dena"];
+const HI_DONT_DO = ["karo", "kro", "karna", "krna", "kariye", "kijiye", "kijie", "kare", "karen", "karein", "kariyega"];
+const HI_NOT = ["mat", "matt", "mt", "na"];
+const HI_SEND = ["bhejo", "bhjo", "bhejna", "bhejiye", "bhejie", "bheje", "bhejen", "bhejein", "bhejiyega"];
+const HI_FROM_LIST = ["list se", "yahan se", "yaha se"];
+const HI_REMOVE = ["hatao", "htao", "hata do", "hta do", "hata dijiye", "hataiye", "hata dena", "nikalo", "nikal do"];
+const HI_NOT_WANTED = ["nahi chahiye", "nahin chahiye", "nai chahiye", "nhi chahiye", "nahi chaiye", "nhi chaiye"];
+const HI_BOTHER = ["pareshan", "pareshaan", "preshan", "tang", "tung", "disturb", "irritate", "bother"];
+const HI_HALT = ["roko", "rok do", "rok dijiye", "rokiye", "rok dena"];
+
+// Hindi in Devanagari
+const DV_ME = ["मुझे", "मुझको", "हमें", "हमे"];
+const DV_THIS = ["ये", "यह", "और", "दोबारा", "फिर से", "कोई", "सब", "सारे", "ऐसे"];
+const DV_MESSAGES = ["मैसेज", "मेसेज", "मैसेजेस", "मेसेजेस", "मैसेजस", "संदेश", "एसएमएस"];
+const DV_STOP = ["बंद", "बन्द", "स्टॉप", "स्टाप"];
+const DV_DO = ["करो", "करें", "करे", "करिए", "करिये", "कीजिए", "कीजिये", "कर दो", "करदो", "कर दें", "कर दीजिए", "कर दीजिये", "कर देना"];
+const DV_DONT_DO = ["करो", "करें", "करे", "करिए", "करिये", "कीजिए", "कीजिये", "करना"];
+const DV_NOT = ["मत", "न", "ना"];
+const DV_SEND = ["भेजो", "भेजें", "भेजे", "भेजिए", "भेजिये", "भेजना"];
+const DV_FROM_LIST = ["लिस्ट से", "सूची से", "यहाँ से", "यहां से"];
+const DV_REMOVE = ["हटाओ", "हटा दो", "हटा दीजिए", "हटा दीजिये", "हटाइए", "हटाइये", "निकालो", "निकाल दो"];
+const DV_NOT_WANTED = ["नहीं चाहिए", "नहीं चाहिये", "नही चाहिए", "नही चाहिये"];
+const DV_BOTHER = ["परेशान", "तंग", "डिस्टर्ब"];
+const DV_HALT = ["रोको", "रोक दो", "रोक दीजिए", "रोकिए", "रोकिये"];
+const DV_UNSUBSCRIBE = ["अनसब्सक्राइब", "अनसबस्क्राइब"];
+
+const OPT_OUT_PHRASES: readonly OptOutPhrase[] = [
+  // English keywords and short forms: "STOP", "stop stop", "STOP ALL". "stop
+  // it", "stop that" and "stop this" are left out: on a story they are banter.
+  jokeable(`stop(?: stop)*(?: all)?`),
+  jokeable(`stopall`),
+  jokeable(`leave me alone`),
+  jokeable(`stop bothering(?: me)?`),
+  jokeable(`${anyOf(["dont", "do not", "never"])} bother me(?: ${anyOf(EN_AGAIN)})?`),
+  // English requests that can only mean opt-out
+  request(`stop ${anyOf(["messaging", "msging", "texting", "dming", "spamming", "contacting", "pinging", "sending"])}(?: me)?`),
+  request(`stop sending(?: me)? ${maybe(EN_QUANTIFIER)}${anyOf([...EN_MESSAGES, "stuff", "anything", "this", "these"])}`),
+  request(`stop ${maybe(EN_QUANTIFIER)}${anyOf(EN_MESSAGES)}`),
+  request(`${anyOf(["unsubscribe", "unsub"])}(?: me)?`),
+  request(anyOf(["opt out", "optout", "opt me out"])),
+  request(`${anyOf(["i want to", "i would like to", "id like to", "i wanna", "i wish to", "let me"])} ${anyOf(["unsubscribe", "opt out"])}`),
+  request(`remove me(?: from ${anyOf(["your", "the", "this", "all", "my"])} ${anyOf(["list", "lists", "mailing list"])}| from ${anyOf(["here", "this"])})?`),
+  request(`take me off ${anyOf(["your", "the", "this"])} list`),
+  request(`${anyOf(["dont", "do not", "never"])} ${anyOf(EN_CONTACT_VERBS)} me(?: ${anyOf(EN_AGAIN)})?`),
+  request(`${anyOf(["dont", "do not", "never"])} send me ${maybe(EN_QUANTIFIER)}${anyOf([...EN_MESSAGES, "anything", "stuff"])}(?: ${anyOf(EN_AGAIN)})?`),
+  request(`i ${anyOf(["dont", "do not"])} want ${maybe(EN_QUANTIFIER)}${anyOf(EN_MESSAGES)}(?: ${anyOf(["anymore", "any more"])})?`),
+  // "no more messages?" can also ask whether any are left.
+  askable(`no more ${maybe(["of these", "of your", "of the"])}${anyOf(EN_MESSAGES)}`),
+
+  // Hinglish. Every form is askable: Hindi turns a request into a question with
+  // the "?" alone. Forms without a messages word can also be a joke.
+  // "band karo", "messages band kar do", "message bhejna band karo"
+  jokeableAskable(`${maybe(HI_ME)}${maybe(HI_THIS)}${anyOf(HI_STOP)} ${anyOf(HI_DO)}`),
+  askable(`${maybe(HI_ME)}${maybe(HI_THIS)}${anyOf(HI_MESSAGES)} ${anyOf(HI_STOP)} ${anyOf(HI_DO)}`),
+  askable(`${maybe(HI_ME)}${maybe(HI_THIS)}${maybe(HI_MESSAGES)}bhejna ${anyOf(HI_STOP)} ${anyOf(HI_DO)}`),
+  // "mat bhejo", "mujhe message mat bhejo", "message mat karo"
+  jokeableAskable(`${maybe(HI_ME)}${maybe(HI_THIS)}${anyOf(HI_NOT)} ${anyOf(HI_SEND)}`),
+  askable(`${maybe(HI_ME)}${maybe(HI_THIS)}${anyOf(HI_MESSAGES)} ${anyOf(HI_NOT)} ${anyOf(HI_SEND)}`),
+  askable(`${maybe(HI_ME)}${maybe(HI_THIS)}${anyOf(HI_MESSAGES)} ${anyOf(HI_NOT)} ${anyOf(HI_DONT_DO)}`),
+  // "mujhe pareshan mat karo"; "bas karo" only with a messages word, since on
+  // its own it is just as often a laugh at a joke.
+  jokeableAskable(`${maybe(HI_ME)}${anyOf(HI_BOTHER)} ${anyOf(HI_NOT)} ${anyOf(HI_DONT_DO)}`),
+  jokeableAskable(`${maybe(HI_ME)}${maybe(HI_THIS)}${anyOf(HI_MESSAGES)} ${anyOf(["bas", "bass"])} ${anyOf(HI_DO)}`),
+  // "unsubscribe kar do", "mujhe list se hatao"
+  askable(`${maybe(HI_ME)}${anyOf(["unsubscribe", "unsub", "opt out"])} ${anyOf(HI_DO)}`),
+  askable(`(?:${anyOf(HI_ME)}(?: ${anyOf(HI_FROM_LIST)})?|${anyOf(HI_FROM_LIST)}) (?:remove ${anyOf(HI_DO)}|${anyOf(HI_REMOVE)})`),
+  // "message nahi chahiye", "messages roko"
+  askable(`${maybe(HI_ME)}${maybe(HI_THIS)}${anyOf(HI_MESSAGES)} ${anyOf(HI_NOT_WANTED)}`),
+  jokeableAskable(`${maybe(HI_THIS)}${anyOf(HI_HALT)}`),
+  askable(`${maybe(HI_THIS)}${anyOf(HI_MESSAGES)} ${anyOf(HI_HALT)}`),
+
+  // Devanagari, with the same rules: "बंद करो", "मैसेज भेजना बंद करो", "मुझे मैसेज मत भेजो"
+  jokeableAskable(`${maybe(DV_ME)}${maybe(DV_THIS)}${anyOf(DV_STOP)} ${anyOf(DV_DO)}`),
+  askable(`${maybe(DV_ME)}${maybe(DV_THIS)}${anyOf(DV_MESSAGES)} ${anyOf(DV_STOP)} ${anyOf(DV_DO)}`),
+  askable(`${maybe(DV_ME)}${maybe(DV_THIS)}${maybe(DV_MESSAGES)}भेजना ${anyOf(DV_STOP)} ${anyOf(DV_DO)}`),
+  jokeableAskable(`${maybe(DV_ME)}${maybe(DV_THIS)}${anyOf(DV_NOT)} ${anyOf(DV_SEND)}`),
+  askable(`${maybe(DV_ME)}${maybe(DV_THIS)}${anyOf(DV_MESSAGES)} ${anyOf(DV_NOT)} ${anyOf(DV_SEND)}`),
+  askable(`${maybe(DV_ME)}${maybe(DV_THIS)}${anyOf(DV_MESSAGES)} ${anyOf(DV_NOT)} ${anyOf(DV_DONT_DO)}`),
+  jokeableAskable(`${maybe(DV_ME)}${anyOf(DV_BOTHER)} ${anyOf(DV_NOT)} ${anyOf(DV_DONT_DO)}`),
+  jokeableAskable(`${maybe(DV_ME)}${maybe(DV_THIS)}${anyOf(DV_MESSAGES)} बस ${anyOf(DV_DO)}`),
+  // A bare "अनसब्सक्राइब" is the English keyword written in Devanagari.
+  request(anyOf(DV_UNSUBSCRIBE)),
+  askable(`${maybe(DV_ME)}${anyOf(DV_UNSUBSCRIBE)} ${anyOf(DV_DO)}`),
+  askable(`(?:${anyOf(DV_ME)}(?: ${anyOf(DV_FROM_LIST)})?|${anyOf(DV_FROM_LIST)}) ${anyOf(DV_REMOVE)}`),
+  askable(`${maybe(DV_ME)}${maybe(DV_THIS)}${anyOf(DV_MESSAGES)} ${anyOf(DV_NOT_WANTED)}`),
+  jokeableAskable(`${maybe(DV_THIS)}${anyOf(DV_HALT)}`),
+  askable(`${maybe(DV_THIS)}${anyOf(DV_MESSAGES)} ${anyOf(DV_HALT)}`),
+];
+
+const OPT_OUT_LEADING_POLITENESS = new RegExp(`^(?:${anyOf([
+  "please", "pls", "plz", "plzz", "plss", "kindly", "kripya", "kripaya", "ab", "bhai", "bhaiya", "sir",
+  "कृपया", "प्लीज", "प्लीज़", "अब", "भाई",
+])} )+`, "u");
+const OPT_OUT_TRAILING_POLITENESS = new RegExp(`(?: ${anyOf([
+  "please", "pls", "plz", "plzz", "plss", "now", "already", "thanks", "thank you", "thankyou", "thx", "ty", "sir",
+  "ji", "jee", "bhai", "bhaiya", "yaar", "yar", "na", "abhi", "ab",
+  "जी", "भाई", "यार", "ना", "अभी", "अब", "प्लीज", "प्लीज़",
+])})+$`, "u");
 
 export function isOptOutCommand(text: string): boolean {
-  return OPT_OUT_COMMANDS.has(text.trim().toLowerCase());
+  if (!text || text.length > OPT_OUT_MAX_LENGTH) return false;
+  const folded = text.normalize("NFKC");
+  const normalized = normalizeOptOutText(folded);
+  if (!normalized) return false;
+  const playful = hasPlayfulTone(folded);
+  const question = folded.includes("?");
+  const withoutPoliteness = normalized.replace(OPT_OUT_LEADING_POLITENESS, "").replace(OPT_OUT_TRAILING_POLITENESS, "");
+  const candidates = withoutPoliteness && withoutPoliteness !== normalized ? [normalized, withoutPoliteness] : [normalized];
+  return OPT_OUT_PHRASES.some(
+    (phrase) =>
+      !(phrase.canBeJoke && playful) &&
+      !(phrase.canBeQuestion && question) &&
+      candidates.some((candidate) => phrase.pattern.test(candidate)),
+  );
 }
 
 const OPT_OUT_CONFIRMATION = "Got it - you won't receive any more automated messages from us. 🙏";
@@ -1242,7 +1477,14 @@ async function processEvent(
           event.commentId,
         );
       if (participant) {
-        return processExistingCampaignParticipant(participant, mapping, repository, campaignOptions);
+        // The comment's own time, so a retry still sees a comment that has
+        // crossed Meta's 7-day private reply window since the first attempt.
+        return processExistingCampaignParticipant(
+          participant,
+          mapping,
+          repository,
+          { ...campaignOptions, sourceCommentTimestamp: event.timestamp },
+        );
       }
     }
 

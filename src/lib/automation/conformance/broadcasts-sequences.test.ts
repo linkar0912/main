@@ -56,6 +56,7 @@ import {
   WORKSPACE_ID,
 } from "./harness";
 import type { AutomationRepository } from "../../repository";
+import { BROADCAST_OPT_OUT_LINE } from "../broadcast-opt-out";
 import type { FlowDefinitionV1 } from "../types";
 
 let repository: AutomationRepository;
@@ -117,9 +118,30 @@ describe("broadcasts", () => {
 
     const blast = dms().slice(sentBefore);
     expect(blast.map((call) => call.recipient?.id).sort()).toEqual([lead, recent].sort());
-    expect(blast.every((call) => call.text === "Diwali sale is live!")).toBe(true);
+    expect(blast.every((call) => call.text === `Diwali sale is live!\n\n${BROADCAST_OPT_OUT_LINE}`)).toBe(true);
     const [broadcast] = await repository.listBroadcasts(WORKSPACE_ID, 5);
     expect(broadcast).toMatchObject({ status: "COMPLETED", sent: 2, total: 2 });
+  });
+
+  it("suppresses a person who replies STOP to a broadcast, so the next one skips them", async () => {
+    const staying = person();
+    const leaving = person();
+    await deliverInstagram(messagePayload({ from: staying, text: "hi" }));
+    await deliverInstagram(messagePayload({ from: leaving, text: "hello" }));
+
+    expect((await postBroadcast("all_contacts")).body.audience).toMatchObject({ eligible: 2 });
+    await withClock(Date.now() + HOUR, () => drain());
+    const first = dms().filter((call) => call.recipient?.id === leaving).at(-1);
+    expect(first?.text).toContain(BROADCAST_OPT_OUT_LINE);
+
+    await deliverInstagram(messagePayload({ from: leaving, text: "STOP" }));
+    expect((await repository.getContact(WORKSPACE_ID, IG_ACCOUNT, leaving))?.suppressedAt).toBeTruthy();
+    expect((await repository.getContact(WORKSPACE_ID, IG_ACCOUNT, staying))?.suppressedAt).toBeFalsy();
+
+    const sentBefore = dms().length;
+    expect((await postBroadcast("all_contacts")).body.audience).toMatchObject({ eligible: 1 });
+    await withClock(Date.now() + 2 * HOUR, () => drain());
+    expect(dms().slice(sentBefore).map((call) => call.recipient?.id)).toEqual([staying]);
   });
 
   it("targets only captured leads for the captured-email segment", async () => {

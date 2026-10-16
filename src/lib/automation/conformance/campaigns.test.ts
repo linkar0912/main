@@ -42,20 +42,23 @@ vi.mock("@/src/lib/auth/session", async () => ({
 }));
 // ---------------------------------------------------------------------------
 
-import { fakeMeta, type MetaCall } from "./fakes";
+import { envOverrides, fakeMeta, type MetaCall } from "./fakes";
 import {
   addAutomation,
   commentPayload,
   deliverInstagram,
+  drain,
   IG_ACCOUNT,
   IG_USERNAME,
   person,
   postbackPayload,
+  queuedJobs,
   resetWorld,
   seedWorkspace,
   setMonthlyDeliveryLimit,
   WORKSPACE_ID,
 } from "./harness";
+import { recordAccountThrottle, resetAccountPauseStateForTests } from "../account-pause";
 import type { AutomationRecord, AutomationRepository } from "../../repository";
 import type { FlowDefinitionV2 } from "../types";
 
@@ -271,5 +274,93 @@ describe("comment-to-link campaign (v2)", () => {
     expect(participant).toMatchObject({ state: "FAILED", openingStatus: "FAILED" });
     expect(participant.openingError).toMatch(/^[\x20-\x7E]+$/);
     expect(participant.openingError).toMatch(/couldn't find/i);
+  });
+});
+
+describe("comment-to-link campaign when Meta limits the account", () => {
+  const HOUR = 60 * 60_000;
+  const BLOCKED = "(#2022) The business has been blocked from sending messages via the IG Messaging API";
+
+  beforeEach(() => {
+    // Pauses live in the fake Redis (cleared by resetWorld) and in this
+    // process's memory, which is cleared here.
+    resetAccountPauseStateForTests();
+  });
+
+  async function withClock<T>(at: number, run: () => Promise<T>): Promise<T> {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(at);
+      return await run();
+    } finally {
+      vi.useRealTimers();
+    }
+  }
+
+  const privateReplies = () => fakeMeta.calls.filter((call) => call.kind === "private_reply");
+
+  it("holds comments past the slow restart's hourly share for a later hour, instead of failing them", async () => {
+    // 25% of a 4-an-hour DM ceiling: one automatic send an hour while recovering.
+    envOverrides.directMessageRateLimitPerHour = 4;
+    const automation = await addAutomation(repository, "Launch", campaign({ publicReplies: [] }));
+    fakeMeta.fail((call) => call.kind === "private_reply", { status: 400, error: { message: BLOCKED, code: 10 } });
+    // Five minutes past an hour, so every later step is clear of an hour's
+    // edge and of the up-to-a-minute jitter on a parked job.
+    const start = Math.ceil(Date.now() / HOUR) * HOUR + 5 * 60_000;
+    const comment = () => commentPayload({ from: person(), text: "link", mediaId: MEDIA.id });
+    await withClock(start, () => deliverInstagram(comment()));
+    expect(privateReplies()).toHaveLength(1);
+
+    // During the pause new comments stop at Linkar instead of reaching Meta,
+    // even in a process that never saw Meta's error: the pause is in Redis.
+    resetAccountPauseStateForTests();
+    await withClock(start + HOUR, () => deliverInstagram(comment()));
+    expect(privateReplies()).toHaveLength(1);
+
+    // Recovering: of three comments in the first hour one DM goes out, and
+    // the other two jobs are parked without spending a retry.
+    const recovery = start + 24 * HOUR + 60_000;
+    const failed: unknown[] = [];
+    for (let index = 0; index < 3; index += 1) {
+      failed.push(...(await withClock(recovery, () => deliverInstagram(comment()))).failed);
+    }
+    expect(privateReplies()).toHaveLength(2);
+    const parked = queuedJobs("instagram-event").filter((job) => job.state === "delayed");
+    expect(parked).toHaveLength(2);
+    expect(parked.every((job) => job.attemptsMade === 0)).toBe(true);
+
+    // Each later hour sends one more of them.
+    for (const hour of [1, 2]) {
+      failed.push(...(await withClock(recovery + hour * HOUR, () => drain())).failed);
+      expect(privateReplies()).toHaveLength(2 + hour);
+    }
+    expect(failed).toHaveLength(0);
+    const participants = await repository.listParticipants(WORKSPACE_ID, automation.id, 20);
+    expect(participants.filter((participant) => participant.openingStatus === "SENT")).toHaveLength(3);
+    // Only the comment Meta refused and the one held during the pause failed.
+    expect(participants.filter((participant) => participant.state === "FAILED")).toHaveLength(2);
+  });
+
+  it("parks a comment's DM through a short throttle pause, without spending a retry, and sends it once after", async () => {
+    const automation = await addAutomation(repository, "Launch", campaign({ publicReplies: [] }));
+    const start = Date.now();
+    // Three throttles close together pause the whole account for 15 minutes.
+    for (let index = 0; index < 3; index += 1) {
+      await recordAccountThrottle({ channel: "instagram", accountId: IG_ACCOUNT }, { now: start });
+    }
+
+    const report = await withClock(start, () => deliverInstagram(commentPayload({ from: person(), text: "link", mediaId: MEDIA.id })));
+
+    expect(report.deferred).toHaveLength(1);
+    const [job] = queuedJobs("instagram-event");
+    expect(job).toMatchObject({ state: "delayed", attemptsMade: 0 });
+    expect(job!.processAt).toBeGreaterThanOrEqual(start + 15 * 60_000);
+    expect(privateReplies()).toHaveLength(0);
+    expect(await participantFor(automation)).toMatchObject({ state: "COMMENT_MATCHED", openingStatus: "PENDING" });
+
+    const after = await withClock(start + 16 * 60_000 + 1_000, () => drain());
+    expect(after.completed).toHaveLength(1);
+    expect(privateReplies()).toHaveLength(1);
+    expect(await participantFor(automation)).toMatchObject({ state: "OPENING_SENT", openingStatus: "SENT" });
   });
 });

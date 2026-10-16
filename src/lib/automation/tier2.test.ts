@@ -37,6 +37,13 @@ async function seed() {
     status: "CONNECTED",
   });
   await repository.touchContact("workspace_a", "ig_1", "lead_1", new Date().toISOString());
+  // The inbound DM that opens Meta's 24-hour window for lead_1.
+  await repository.recordWebhookEvent("workspace_a", {
+    providerEventId: "seed_dm_lead_1",
+    eventType: "message.received",
+    receivedAt: new Date().toISOString(),
+    payload: { accountId: "ig_1", recipientId: "lead_1", text: "guide" },
+  });
   return repository;
 }
 
@@ -154,6 +161,12 @@ describe("sequences repository + scheduler", () => {
       // The person messaged the account again, which re-opens the window - the
       // queued step is now deliverable and must not be cancelled.
       await repository.touchContact("workspace_a", "ig_1", "lead_1", new Date().toISOString());
+      await repository.recordWebhookEvent("workspace_a", {
+        providerEventId: "dm_reopen_lead_1",
+        eventType: "message.received",
+        receivedAt: new Date().toISOString(),
+        payload: { accountId: "ig_1", recipientId: "lead_1", text: "hi again" },
+      });
       const finalPass = await processDueSequenceSends(repository, client);
       expect(finalPass).toMatchObject({ sent: 1, cancelled: 0 });
       expect(client.sendDirectMessage.mock.calls[1][2].text).toBe("Two days later");

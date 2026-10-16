@@ -327,7 +327,9 @@ describe("automation runner", () => {
         .mockResolvedValueOnce({ message_id: "message_retry" }),
     });
 
-    await expect(processNormalizedEvent(event, repository, { client, tokenEncryptionKey: key })).rejects.toThrow("rate limited");
+    // A throttled send may surface as Meta's own error or as Linkar's cool-down
+    // wait; either way the queue sees a retryable failure.
+    await expect(processNormalizedEvent(event, repository, { client, tokenEncryptionKey: key })).rejects.toMatchObject({ retryable: true });
     await expect(processNormalizedEvent(event, repository, { client, tokenEncryptionKey: key })).resolves.toEqual({ matched: 1, sent: 1, skipped: 0, failed: 0 });
     expect(client.sendPrivateReply).toHaveBeenCalledTimes(2);
   });
@@ -377,7 +379,7 @@ describe("automation runner", () => {
     await expect(processNormalizedEvent(message, repository, {
       client,
       tokenEncryptionKey: key,
-    })).rejects.toThrow("rate limited");
+    })).rejects.toMatchObject({ retryable: true });
     await expect(processNormalizedEvent(message, repository, {
       client,
       tokenEncryptionKey: key,
@@ -478,12 +480,21 @@ describe("automation runner", () => {
     const client = createRunnerClient();
     const campaignEvent = { ...event, mediaId: "media_1", timestamp: Date.parse("2026-08-21T10:01:00.000Z") };
 
-    const result = await processNormalizedEvent(campaignEvent, repository, {
-      client,
-      tokenEncryptionKey: key,
-      interactionSecret: "app-secret",
-      campaignsEnabled: true,
-    });
+    // Process the comment moments after it was made, inside Meta's 7-day
+    // private reply window, whatever today's date is.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(Date.parse("2026-08-21T10:02:00.000Z"));
+    let result: Awaited<ReturnType<typeof processNormalizedEvent>>;
+    try {
+      result = await processNormalizedEvent(campaignEvent, repository, {
+        client,
+        tokenEncryptionKey: key,
+        interactionSecret: "app-secret",
+        campaignsEnabled: true,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
 
     expect(result).toMatchObject({ handled: true, matched: 1, sent: 1 });
     expect(client.sendPrivateReply).toHaveBeenCalledTimes(1);

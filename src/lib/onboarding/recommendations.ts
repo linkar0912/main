@@ -68,7 +68,7 @@ const NICHE_WEIGHTS: Record<Niche, Record<string, number>> = {
 /** One plain line per template: what it does for this person. */
 const FIT_LINES: Record<string, string> = {
   [FOLLOW_GATE_ID]: "turns comments into new followers before they get your link",
-  "comment-link-dm": "sends your link the moment someone comments your word",
+  "comment-link-dm": "replies to comments with a button, then sends your link",
   "conversation-starters": "answers the questions you get every day with tap-to-reply buttons",
   "email-capture": "asks for an email in the chat and saves it to Contacts",
   "welcome-new-followers": "greets everyone who messages you for the first time",
@@ -81,7 +81,7 @@ const FIT_LINES: Record<string, string> = {
   "optin-confirmation": "confirms a button tap and shares the next step",
   "giveaway-entry": "confirms giveaway entries in messages",
   "affiliate-link": "sends your shop or affiliate link when someone wants to buy",
-  "lead-magnet-comment": "sends your free guide to everyone who comments for it",
+  "lead-magnet-comment": "replies to comments with a button, then sends your free guide",
   "price-list-responder": "sends prices and your catalogue when someone asks",
   "course-faq-booking": "answers course questions and shares your booking link",
   "event-registration": "registers people for your event inside the chat",

@@ -1,6 +1,44 @@
 import { describe, expect, it } from "vitest";
 import { validateFlowDefinition } from "./definition";
-import { basicAutomationTemplates, getCompatibleTemplates, getTemplateById } from "./templates";
+import { basicAutomationTemplates, getCompatibleTemplates, getTemplateById, type PremadeTemplate } from "./templates";
+import type { FlowDefinition, FlowDefinitionV1, FlowDefinitionV2 } from "./types";
+import { findPublicUrlShortenerLinks } from "../security/outbound-url";
+
+/** The classic (version 1) prefill of a template, failing loudly if it is not one. */
+function classic(template: PremadeTemplate | undefined): FlowDefinitionV1 {
+  const definition = template?.setup.definition;
+  if (definition?.version !== 1) throw new Error(`${template?.id ?? "template"} is not a classic template`);
+  return definition;
+}
+
+/** The step-by-step (version 2) prefill of a template, failing loudly if it is not one. */
+function twoStep(template: PremadeTemplate | undefined): FlowDefinitionV2 {
+  const definition = template?.setup.definition;
+  if (definition?.version !== 2) throw new Error(`${template?.id ?? "template"} is not a two-step template`);
+  return definition;
+}
+
+/** What the builder's first step adds to a two-step prefill: the post to watch. */
+function withChosenPost(definition: FlowDefinition): FlowDefinition {
+  if (definition.version !== 2 || definition.trigger.source !== "specific_media") return definition;
+  return {
+    ...definition,
+    trigger: {
+      ...definition.trigger,
+      mediaIds: ["media_1"],
+      mediaSnapshots: [{
+        id: "media_1",
+        mediaType: "VIDEO",
+        mediaProductType: "REELS",
+        permalink: "https://www.instagram.com/reel/demo/",
+        timestamp: "2026-10-01T09:00:00.000Z",
+      }],
+    },
+  };
+}
+
+/** Comment recipes that send a button first and the link only after the tap. */
+const TWO_STEP_LINK_TEMPLATES = ["comment-link-dm", "lead-magnet-comment"];
 
 describe("premade automation templates", () => {
   it("gives every recipe short, outcome-first copy and natural steps", () => {
@@ -36,9 +74,10 @@ describe("premade automation templates", () => {
       expect(template.provider).toBe("FACEBOOK");
       expect(template.surface).toBe("COMMENT");
       expect(template.requiredCapabilities).toEqual(["facebook-page-comment"]);
-      expect(template.setup.definition.trigger.type).toBe("comment");
-      expect(template.setup.definition.actions).toHaveLength(1);
-      expect(template.setup.definition.actions[0].type).toBe("private_reply");
+      const definition = classic(template);
+      expect(definition.trigger.type).toBe("comment");
+      expect(definition.actions).toHaveLength(1);
+      expect(definition.actions[0].type).toBe("private_reply");
       expect(JSON.stringify(template.setup)).not.toContain("example.com");
     }
   });
@@ -56,12 +95,13 @@ describe("premade automation templates", () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it("gives every template a valid classic builder prefill", () => {
+  it("gives every template a valid builder prefill", () => {
     for (const template of basicAutomationTemplates) {
       const setup = template.setup;
       expect(setup, `${template.id} needs a setup prefill`).toBeDefined();
-      const normalized = validateFlowDefinition(setup!.definition);
-      expect(normalized.version).toBe(1);
+      // Two-step templates leave the post to the builder's first step.
+      const normalized = validateFlowDefinition(withChosenPost(setup!.definition));
+      expect(normalized.version, template.id).toBe(TWO_STEP_LINK_TEMPLATES.includes(template.id) ? 2 : 1);
       if (normalized.version === 1) {
         expect(normalized.actions.length).toBeGreaterThanOrEqual(1);
         // Every action carries something deliverable: copy, or an image URL.
@@ -82,7 +122,7 @@ describe("premade automation templates", () => {
       expect(["comment", "message", "referral", "optin", "first_contact", "story_mention", "story_reply"]).toContain(
         definition.trigger.type,
       );
-      if (definition.emailCapture) {
+      if (definition.version === 1 && definition.emailCapture) {
         expect(definition.emailCapture.promptText.trim().length).toBeGreaterThan(0);
         expect(definition.emailCapture.confirmationText.trim().length).toBeGreaterThan(0);
       }
@@ -105,12 +145,12 @@ describe("premade automation templates", () => {
   });
 
   it("captures emails with the email-capture template", () => {
-    const capture = getTemplateById("email-capture")!;
-    expect(capture.setup!.definition.emailCapture).toBeDefined();
-    expect(capture.setup!.definition.trigger.type).toBe("message");
+    const capture = classic(getTemplateById("email-capture"));
+    expect(capture.emailCapture).toBeDefined();
+    expect(capture.trigger.type).toBe("message");
     // The recipe fulfills its own promise: a delivery email ships with the capture.
-    expect(capture.setup!.definition.emailCapture?.delivery?.subject.trim().length).toBeGreaterThan(0);
-    expect(capture.setup!.definition.emailCapture?.delivery?.linkUrl).toBeDefined();
+    expect(capture.emailCapture?.delivery?.subject.trim().length).toBeGreaterThan(0);
+    expect(capture.emailCapture?.delivery?.linkUrl).toBeDefined();
   });
 
   it("looks templates up by id", () => {
@@ -120,16 +160,101 @@ describe("premade automation templates", () => {
   });
 
   it("private-replies to comments instead of DMing, since that's the actual Meta action for a comment trigger", () => {
-    for (const id of ["comment-link-dm", "comment-catch-all"]) {
-      const template = getTemplateById(id)!;
-      expect(template.setup!.definition.trigger.type).toBe("comment");
-      expect(template.setup!.definition.actions.every((action) => action.type === "private_reply")).toBe(true);
+    const catchAll = classic(getTemplateById("comment-catch-all"));
+    expect(catchAll.trigger.type).toBe("comment");
+    expect(catchAll.actions.every((action) => action.type === "private_reply")).toBe(true);
+  });
+
+  it("ships only two-step versions of the comment recipes that send a link", () => {
+    const commentLinkRecipes = basicAutomationTemplates.filter((template) =>
+      template.provider === "INSTAGRAM" && template.surface === "COMMENT" && template.setup.definition.version === 2);
+    expect(commentLinkRecipes.map((template) => template.id).sort()).toEqual([...TWO_STEP_LINK_TEMPLATES].sort());
+    // No classic Instagram comment recipe puts a link in its first private reply.
+    for (const template of basicAutomationTemplates) {
+      const definition = template.setup.definition;
+      if (template.provider !== "INSTAGRAM" || definition.version !== 1 || definition.trigger.type !== "comment") continue;
+      expect(JSON.stringify(definition.actions), template.id).not.toMatch(/https?:\/\/|example\.com/i);
+    }
+  });
+
+  it.each(TWO_STEP_LINK_TEMPLATES)("%s: a button first, the link only after the tap", (id) => {
+    const template = getTemplateById(id)!;
+    const definition = twoStep(template);
+    expect(definition.trigger).toMatchObject({ type: "comment", source: "specific_media", match: "keyword" });
+    // The opening private reply carries a button and no link at all.
+    expect(definition.openingMessage.text).not.toMatch(/https?:\/\/|example\.com/i);
+    expect(definition.openingMessage.optInButtonLabel.length).toBeGreaterThan(0);
+    expect(definition.openingMessage.optInButtonLabel.length).toBeLessThanOrEqual(20);
+    // The link goes out after the tap, behind its own button, with no follow check.
+    expect(definition.followGate.required).toBe(false);
+    expect(definition.delivery.url).toMatch(/^https:\/\//);
+    expect(definition.delivery.buttonLabel).toBeTruthy();
+    expect(definition.publicReplies).toEqual([]);
+    expect(template.surface).toBe("COMMENT");
+    expect(template.requiredCapabilities).toEqual(["instagram-comment"]);
+    expect(template.description).toMatch(/button/);
+    expect(template.howItWorks).toEqual([
+      "Someone comments using a word you choose.",
+      "Linkar privately replies with a short message and a button.",
+      "When they tap the button, Linkar sends your link.",
+    ]);
+    // Savable from the builder once a post is chosen, and not before.
+    expect(validateFlowDefinition(withChosenPost(definition))).toMatchObject({ version: 2, followGate: { required: false } });
+    expect(() => validateFlowDefinition(definition)).toThrow(/at least one media ID/);
+  });
+
+  it("asks for the free guide with GUIDE, PDF or FREE and sends the guide link after the tap", () => {
+    const definition = twoStep(getTemplateById("lead-magnet-comment"));
+    expect(definition.trigger).toMatchObject({ keywords: ["guide", "pdf", "free"] });
+    expect(definition.openingMessage.text).toMatch(/free guide/i);
+    expect(definition.delivery).toMatchObject({ url: "https://example.com/guide", buttonLabel: "Open the guide" });
+  });
+
+  it("sends the comment link in two steps: a button first, the link only after the tap", () => {
+    const template = getTemplateById("comment-link-dm")!;
+    const definition = twoStep(template);
+    expect(definition.trigger).toMatchObject({ type: "comment", match: "keyword", keywords: ["link", "shop"] });
+    // The opening private reply carries a button and no link at all.
+    expect(definition.openingMessage.text).not.toMatch(/https?:\/\/|example\.com/i);
+    expect(definition.openingMessage.optInButtonLabel.length).toBeGreaterThan(0);
+    expect(definition.openingMessage.optInButtonLabel.length).toBeLessThanOrEqual(20);
+    // The link goes out after the tap, behind its own button, with no follow check.
+    expect(definition.followGate.required).toBe(false);
+    expect(definition.delivery.url).toMatch(/^https:\/\//);
+    expect(definition.delivery.buttonLabel).toBeTruthy();
+    // Private only, like the classic recipe it replaces. The builder test
+    // walks every step of the real builder to show a save keeps it that way.
+    expect(definition.publicReplies).toEqual([]);
+    expect(template.surface).toBe("COMMENT");
+    expect(template.requiredCapabilities).toEqual(["instagram-comment"]);
+    expect(template.howItWorks).toEqual([
+      "Someone comments using a word you choose.",
+      "Linkar privately replies with a short message and a button.",
+      "When they tap the button, Linkar sends your link.",
+    ]);
+  });
+
+  it("keeps the two-step link recipe savable from the builder once a post is chosen", () => {
+    const definition = twoStep(getTemplateById("comment-link-dm"));
+    // The builder sends blank follow-gate copy when the gate is off.
+    const saved = validateFlowDefinition(withChosenPost(definition));
+    expect(saved).toMatchObject({ version: 2, followGate: { required: false } });
+    // Without a post the builder's first step stops the save, and so does the server.
+    expect(() => validateFlowDefinition(definition)).toThrow(/at least one media ID/);
+  });
+
+  it("never ships a public link shortener in a template", () => {
+    for (const template of basicAutomationTemplates) {
+      expect(findPublicUrlShortenerLinks(template.setup), template.id).toEqual([]);
     }
   });
 
   it("offers a keyword-free comment recipe, recommended, for “anyone comments anything → they get a reply”", () => {
     const catchAll = getTemplateById("comment-catch-all")!;
     expect(catchAll.setup!.definition.trigger).toMatchObject({ type: "comment", match: "any", keywords: [] });
+    // Replying to every comment suits a small post, not a viral one, and the
+    // card says so before anyone sets it up.
+    expect(catchAll.description).toMatch(/^Meant for smaller posts/);
     // Surfaced under "Recommended" rather than buried in "More templates":
     // replying to every comment is one of the two things people arrive wanting.
     expect(catchAll.popular).toBe(true);
@@ -167,23 +292,22 @@ describe("premade automation templates", () => {
   });
 
   it("builds the price-list responder on an image card with a caption", () => {
-    const priceList = getTemplateById("price-list-responder")!;
-    const firstAction = priceList.setup!.definition.actions[0];
+    const firstAction = classic(getTemplateById("price-list-responder")).actions[0];
     expect(firstAction.type).toBe("send_image");
     expect(firstAction.type === "send_image" && Boolean(firstAction.caption)).toBe(true);
   });
 
   it("collects typed fields in the collab and event intakes", () => {
-    const collab = getTemplateById("influencer-collab-intake")!;
-    expect(collab.setup!.definition.emailCapture?.fields?.map((field) => field.id)).toEqual(["niche", "handle"]);
-    expect(collab.setup!.definition.emailCapture?.notifyUrl).toBeDefined();
+    const collab = classic(getTemplateById("influencer-collab-intake"));
+    expect(collab.emailCapture?.fields?.map((field) => field.id)).toEqual(["niche", "handle"]);
+    expect(collab.emailCapture?.notifyUrl).toBeDefined();
 
-    const event = getTemplateById("event-registration")!;
-    expect(event.setup!.definition.emailCapture?.fields?.some((field) => field.kind === "phone")).toBe(true);
+    const event = classic(getTemplateById("event-registration"));
+    expect(event.emailCapture?.fields?.some((field) => field.kind === "phone")).toBe(true);
   });
 
   it("schedules a follow-up nudge in the offer recipe", () => {
-    const offer = getTemplateById("offer-followup")!;
-    expect(offer.setup!.definition.followUps?.[0]?.delayMinutes).toBe(24 * 60);
+    const offer = classic(getTemplateById("offer-followup"));
+    expect(offer.followUps?.[0]?.delayMinutes).toBe(24 * 60);
   });
 });

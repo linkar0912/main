@@ -1,5 +1,6 @@
 import type { FacebookConnection, FacebookSendResult } from "./types";
 import { withAppSecretProof } from "./appsecret-proof";
+import { isMetaAccountBlock, isMetaRateLimit, parseMetaUsageHeaders, type MetaUsage } from "../meta/errors";
 
 /** Error class parallel to `MetaApiError` so the runner can classify FB calls
  * the same way it classifies IG calls (retryable vs not, transient vs
@@ -9,6 +10,10 @@ export class FacebookApiError extends Error {
   readonly retryable: boolean;
   readonly responseReceived: boolean;
   readonly graphCode?: number;
+  /** Graph `error_subcode`; Meta sometimes sends #2022 (a blocked sender) only here. */
+  readonly subcode?: number;
+  /** Meta's usage headers on the rejected response, when it sent them (see parseMetaUsageHeaders). */
+  readonly usage: MetaUsage | null;
 
   constructor(
     message: string,
@@ -16,6 +21,8 @@ export class FacebookApiError extends Error {
     responseReceived = status > 0,
     retryable = status === 0 || status === 408 || status === 429 || status >= 500,
     graphCode?: number,
+    subcode?: number,
+    usage?: MetaUsage | null,
   ) {
     super(message);
     this.name = "FacebookApiError";
@@ -23,6 +30,39 @@ export class FacebookApiError extends Error {
     this.responseReceived = responseReceived;
     this.retryable = retryable;
     this.graphCode = graphCode;
+    this.subcode = subcode;
+    this.usage = usage ?? null;
+  }
+}
+
+/**
+ * Graph 80001, "There have been too many calls to this Page account": the
+ * Pages rate limit. META_RATE_LIMIT_CODES has Instagram's own (80002) but not
+ * this one, so the Page classification adds it.
+ */
+const PAGE_RATE_LIMIT_CODE = 80001;
+
+/**
+ * What a Page call's rejection says about the whole Page, read the same way
+ * as an Instagram send's (providerAccountSignal in outbound-delivery.ts): an
+ * account-level block (368 or #2022) or a request to slow down. Only an
+ * answer Meta actually sent counts, never a transport failure.
+ */
+export function facebookAccountSignal(error: unknown): "account_blocked" | "rate_limited" | null {
+  if (!(error instanceof FacebookApiError) || !error.responseReceived || error.status <= 0) return null;
+  if (isMetaAccountBlock({ code: error.graphCode, subcode: error.subcode, message: error.message })) return "account_blocked";
+  if (error.graphCode === PAGE_RATE_LIMIT_CODE || isMetaRateLimit({ status: error.status, code: error.graphCode })) {
+    return "rate_limited";
+  }
+  return null;
+}
+
+/** Meta's usage headers from a response already in hand; never throws, null when absent. */
+function responseUsage(response: Response): MetaUsage | null {
+  try {
+    return response.headers ? parseMetaUsageHeaders(response.headers) : null;
+  } catch {
+    return null;
   }
 }
 
@@ -38,7 +78,7 @@ type FacebookClientOptions = {
   appSecret?: string;
 };
 
-const TRANSIENT_FACEBOOK_CODES = new Set([1, 2, 4, 17, 32, 341, 613]);
+const TRANSIENT_FACEBOOK_CODES = new Set([1, 2, 4, 17, 32, 341, 613, PAGE_RATE_LIMIT_CODE]);
 
 function isTransientFacebookError(error: Record<string, unknown>, status: number): boolean {
   return status === 429 || status >= 500 || error.is_transient === true ||
@@ -97,7 +137,15 @@ export class FacebookClient {
       data = (await response.json()) as Record<string, unknown>;
     } catch {
       if (!response.ok) {
-        throw new FacebookApiError(`Facebook request failed (${response.status})`, response.status, true);
+        throw new FacebookApiError(
+          `Facebook request failed (${response.status})`,
+          response.status,
+          true,
+          undefined,
+          undefined,
+          undefined,
+          responseUsage(response),
+        );
       }
       throw new FacebookApiError("Facebook response could not be parsed", 0, true);
     }
@@ -109,6 +157,8 @@ export class FacebookClient {
         true,
         isTransientFacebookError(error, response.status),
         typeof error.code === "number" ? error.code : undefined,
+        typeof error.error_subcode === "number" ? error.error_subcode : undefined,
+        responseUsage(response),
       );
     }
     return data;

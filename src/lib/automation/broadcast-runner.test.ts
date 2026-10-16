@@ -3,9 +3,26 @@ import { createMemoryRepository } from "../memory-repository";
 import { sealSecret } from "../security/secrets";
 import { deliveryKeys } from "./outbound-delivery";
 import { processBroadcastSend } from "./broadcast-runner";
+import { BROADCAST_OPT_OUT_LINE } from "./broadcast-opt-out";
 import { SendDeferredError } from "./send-deferral";
 
 const TOKEN_KEY = "c".repeat(64);
+
+let inboundEvents = 0;
+/** Records an inbound DM from the person, the event that opens Meta's 24-hour window. */
+async function recordInboundDm(
+  repository: ReturnType<typeof createMemoryRepository>,
+  recipientId: string,
+  receivedAt: string,
+) {
+  inboundEvents += 1;
+  await repository.recordWebhookEvent("workspace_a", {
+    providerEventId: `inbound_${inboundEvents}`,
+    eventType: "message.received",
+    receivedAt,
+    payload: { accountId: "ig_1", recipientId, text: "hi" },
+  });
+}
 
 describe("broadcast delivery ledger", () => {
   it("does not resend after provider success and counter reconciliation failure", async () => {
@@ -18,6 +35,7 @@ describe("broadcast delivery ledger", () => {
       status: "CONNECTED",
     });
     await repository.touchContact("workspace_a", "ig_1", "lead_1", new Date().toISOString());
+    await recordInboundDm(repository, "lead_1", new Date().toISOString());
     const broadcast = await repository.createBroadcast("workspace_a", {
       name: "News",
       text: "Big news!",
@@ -77,6 +95,7 @@ describe("broadcast delivery ledger", () => {
     // segment selects for, and squarely outside Meta's 24-hour window.
     const staleIso = new Date(Date.now() - 8 * 24 * 60 * 60 * 1_000).toISOString();
     await repository.touchContact("workspace_a", "ig_1", "lead_1", staleIso);
+    await recordInboundDm(repository, "lead_1", staleIso);
     const broadcast = await repository.createBroadcast("workspace_a", {
       name: "Win-back",
       text: "Come back!",
@@ -119,12 +138,9 @@ describe("broadcast delivery ledger", () => {
       accessTokenEncrypted: sealSecret("access-token", TOKEN_KEY),
       status: "CONNECTED",
     });
-    await repository.touchContact(
-      "workspace_a",
-      "ig_1",
-      "lead_1",
-      new Date(Date.now() - 2 * 60 * 60 * 1_000).toISOString(),
-    );
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1_000).toISOString();
+    await repository.touchContact("workspace_a", "ig_1", "lead_1", twoHoursAgo);
+    await recordInboundDm(repository, "lead_1", twoHoursAgo);
     const broadcast = await repository.createBroadcast("workspace_a", {
       name: "News",
       text: "Big news!",
@@ -155,7 +171,11 @@ describe("broadcast delivery ledger", () => {
   });
 });
 
-async function seedBroadcast(recipients: string[], lastSeenAt = new Date(Date.now() - 60_000).toISOString()) {
+async function seedBroadcast(
+  recipients: string[],
+  lastInboundAt: string | null = new Date(Date.now() - 60_000).toISOString(),
+  lastSeenAt = lastInboundAt ?? new Date().toISOString(),
+) {
   const repository = createMemoryRepository();
   await repository.upsertConnection({
     workspaceId: "workspace_a",
@@ -173,6 +193,7 @@ async function seedBroadcast(recipients: string[], lastSeenAt = new Date(Date.no
   const jobs = [];
   for (const recipient of recipients) {
     await repository.touchContact("workspace_a", "ig_1", recipient, lastSeenAt);
+    if (lastInboundAt) await recordInboundDm(repository, recipient, lastInboundAt);
     const deliveryKey = deliveryKeys.broadcastRecipient(broadcast.id, "ig_1", recipient);
     await repository.ensureOutboundDelivery({
       deliveryKey,
@@ -260,5 +281,67 @@ describe("broadcast pacing and completion", () => {
     await expect(processBroadcastSend(jobs[0], repository, { client, tokenEncryptionKey: TOKEN_KEY, finalAttempt: true }))
       .rejects.toThrow("database unavailable");
     expect(await repository.getBroadcast("workspace_a", broadcast.id)).toMatchObject({ status: "COMPLETED", failed: 1 });
+  });
+});
+
+describe("broadcast window re-check", () => {
+  it("uses the last inbound DM, not a fresher lastSeenAt", async () => {
+    // A comment or a participant sync moved lastSeenAt to now, but the person's
+    // last DM was 30 hours ago, so Meta's window is closed.
+    const { repository, broadcast, jobs } = await seedBroadcast(
+      ["lead_1"],
+      new Date(Date.now() - 30 * 60 * 60_000).toISOString(),
+      new Date().toISOString(),
+    );
+    const client = { sendDirectMessage: vi.fn() };
+
+    await processBroadcastSend(jobs[0], repository, { client, tokenEncryptionKey: TOKEN_KEY });
+
+    expect(client.sendDirectMessage).not.toHaveBeenCalled();
+    expect(await repository.getOutboundDelivery(jobs[0].deliveryKey)).toMatchObject({ state: "FAILED", resultCode: "WINDOW_CLOSED" });
+    expect(await repository.getBroadcast("workspace_a", broadcast.id)).toMatchObject({ status: "COMPLETED", skipped: 1 });
+  });
+
+  it("treats a contact with no inbound DM on record as outside the window", async () => {
+    const { repository, jobs } = await seedBroadcast(["lead_1"], null);
+    const client = { sendDirectMessage: vi.fn() };
+
+    await processBroadcastSend(jobs[0], repository, { client, tokenEncryptionKey: TOKEN_KEY });
+
+    expect(client.sendDirectMessage).not.toHaveBeenCalled();
+    expect(await repository.getOutboundDelivery(jobs[0].deliveryKey)).toMatchObject({ state: "FAILED", resultCode: "WINDOW_CLOSED" });
+  });
+
+  it("ignores comment events when re-checking the window", async () => {
+    const { repository, jobs } = await seedBroadcast(["lead_1"], null);
+    await repository.recordWebhookEvent("workspace_a", {
+      providerEventId: "comment_1",
+      eventType: "comment.created",
+      receivedAt: new Date().toISOString(),
+      payload: { accountId: "ig_1", recipientId: "lead_1", text: "nice" },
+    });
+    const client = { sendDirectMessage: vi.fn() };
+
+    await processBroadcastSend(jobs[0], repository, { client, tokenEncryptionKey: TOKEN_KEY });
+
+    expect(client.sendDirectMessage).not.toHaveBeenCalled();
+    expect(await repository.getOutboundDelivery(jobs[0].deliveryKey)).toMatchObject({ resultCode: "WINDOW_CLOSED" });
+  });
+});
+
+describe("broadcast opt-out line", () => {
+  it("sends the broadcast with the opt-out line appended", async () => {
+    const { repository, jobs } = await seedBroadcast(["lead_1"]);
+    const client = { sendDirectMessage: vi.fn().mockResolvedValue({ message_id: "message_1" }) };
+
+    await processBroadcastSend(jobs[0], repository, { client, tokenEncryptionKey: TOKEN_KEY });
+
+    expect(client.sendDirectMessage).toHaveBeenCalledTimes(1);
+    expect(client.sendDirectMessage.mock.calls[0][2]).toEqual({
+      type: "text",
+      text: `Big news!\n\n${BROADCAST_OPT_OUT_LINE}`,
+    });
+    // The ledger keeps the text as composed; only the sent message carries the line.
+    expect((await repository.getOutboundDelivery(jobs[0].deliveryKey))?.payload).toEqual({ type: "text", text: "Big news!" });
   });
 });

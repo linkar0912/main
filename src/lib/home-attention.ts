@@ -5,6 +5,9 @@
  * rules live in one pure function that tests can pin down.
  */
 
+import { formatDateParts } from "./format-date";
+import { parseAccountPauseReason, type AccountPausePlatform } from "./meta/errors";
+
 export type AttentionTone = "warning" | "danger";
 
 export type AttentionItem = {
@@ -69,6 +72,28 @@ export const USAGE_WARNING_RATIO = 0.8;
 
 const SEVERITY: Record<AttentionTone, number> = { danger: 0, warning: 1 };
 
+/**
+ * When Meta blocked an account from sending, the refused send and every send
+ * held after it record how long the pause had left, to the minute (see
+ * accountPausedReason and accountSendHeldReason in meta/errors). Returns the
+ * latest end still ahead of `now` and which platform it was, or null when no
+ * pause is running.
+ */
+export function activeAccountPause(
+  failures: AttentionInput["failures"],
+  now: number,
+): { until: number; platform: AccountPausePlatform } | null {
+  let latest: { until: number; platform: AccountPausePlatform } | null = null;
+  for (const failure of failures ?? []) {
+    const pause = parseAccountPauseReason(failure.lastError);
+    const recordedAt = Date.parse(failure.updatedAt);
+    if (!pause || !Number.isFinite(recordedAt)) continue;
+    const until = recordedAt + pause.durationMs;
+    if (until > now && (!latest || until > latest.until)) latest = { until, platform: pause.platform };
+  }
+  return latest;
+}
+
 function count(value: number): string {
   return value.toLocaleString("en-IN");
 }
@@ -104,6 +129,20 @@ export function deriveAttentionItems({ connections, automations, automationsKnow
     });
   }
 
+  // Meta limited an account: say so plainly, with when replies restart.
+  const pause = activeAccountPause(failures, now);
+  if (pause) {
+    const restart = formatDateParts(new Date(pause.until), { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
+    const things = pause.platform === "Facebook" ? "Pages" : "accounts";
+    items.push({
+      key: "account-paused",
+      tone: "danger",
+      chip: "Limited",
+      text: `${pause.platform} has limited one of your ${things}. Linkar paused its automatic replies until ${restart}.`,
+      action: { kind: "link", label: "See activity", href: "/activity" },
+    });
+  }
+
   // A send already stopped by the plan this month means replies are paused,
   // even when the usage count has not caught up (or failed to load).
   const limitBlocked = (failures ?? []).some((failure) =>
@@ -132,6 +171,8 @@ export function deriveAttentionItems({ connections, automations, automationsKnow
   // read as hundreds of Meta failures.
   const recentFailures = (failures ?? []).filter((failure) => {
     if (isMonthlyLimitBlock(failure)) return false;
+    // Same for sends the running account pause already explains.
+    if (pause && parseAccountPauseReason(failure.lastError)) return false;
     const time = Date.parse(failure.updatedAt);
     return Number.isFinite(time) && now - time <= RECENT_FAILURE_WINDOW_MS;
   });

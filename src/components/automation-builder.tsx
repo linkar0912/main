@@ -23,7 +23,7 @@ import { getInstagramConnections, getFacebookPages, type FacebookPageSummary } f
 import { ChannelSelector } from "./automation-builder/channel-selector";
 import { CommentKeywordControls, type CommentKeywordMode } from "./automation-builder/trigger-section";
 import { CommentPostsField, ReplyOncePerPersonToggle } from "./automation-builder/comment-conditions-section";
-import { PublicPageReplyVariants } from "./automation-builder/action-section";
+import { PublicPageReplyVariants, ReplyVarietyHint } from "./automation-builder/action-section";
 import { AutomationPriorityField } from "./automation-builder/delivery-controls-section";
 import {
   ReviewBeat,
@@ -997,7 +997,7 @@ function AutomationBuilderV1({
           </Field>
         )}
         {isFacebook && action.type === "private_reply" && (
-          <PublicPageReplyVariants variants={action.textVariants ?? []} onChange={(textVariants) => updateAction(index, { textVariants })} />
+          <PublicPageReplyVariants firstReply={action.text} variants={action.textVariants ?? []} onChange={(textVariants) => updateAction(index, { textVariants })} />
         )}
         {action.type === "send_image" && (
           <>
@@ -1916,7 +1916,9 @@ function AutomationBuilderV2({
     }
     if (step === 1) {
       if (match === "keyword" && parseKeywords(keywords).length === 0) return { field: "keywords", message: "Add at least one keyword." };
-      if (publicReplies.every((reply) => !reply.trim())) return { field: "replies", message: "Write at least one reply." };
+      // A public reply is optional (the schema accepts none): replying under
+      // every comment is the riskiest thing an account can automate, so a
+      // private-only campaign must be savable without one.
       if (publicReplies.map((reply) => reply.trim()).filter(Boolean).length > MAX_PUBLIC_REPLIES) {
         return { field: "replies", message: `Use up to ${MAX_PUBLIC_REPLIES} replies.` };
       }
@@ -2127,8 +2129,15 @@ function AutomationBuilderV2({
       <div className="builder-main">
         <PageHeader
           className="builder-header"
-          title={savedAutomationId ? "Edit comment reply" : "Send a link after someone follows you"}
-          description={templateLede("Reply to a comment, check they follow you, then send your link in a DM.", templateTitle)}
+          title={savedAutomationId
+            ? "Edit comment reply"
+            : followGateRequired ? "Send a link after someone follows you" : "Send a link when someone comments"}
+          description={templateLede(
+            followGateRequired
+              ? "Reply to a comment, check they follow you, then send your link in a DM."
+              : "Reply privately with a button, then send your link after they tap it.",
+            templateTitle,
+          )}
           tabs={<BuilderStepper steps={WIZARD_STEPS.map((label) => ({ label }))} active={activeStep} unlocked={highestUnlockedStep} onSelect={goToStep} />}
         />
 
@@ -2190,7 +2199,7 @@ function AutomationBuilderV2({
         <WizardStep
           hidden={activeStep !== 1}
           title="Which comments should it answer?"
-          description="Choose the words that start it, then write the reply that appears under their comment."
+          description="Choose the words that start it. A reply under their comment is optional."
         >
           <Field label="Which comments count?">
             <select value={match} onChange={(event) => setMatch(event.target.value as "keyword" | "any")}>
@@ -2211,7 +2220,7 @@ function AutomationBuilderV2({
 
           <StepGroup
             title="What should it reply in the comments?"
-            description="Everyone can see this reply, so keep it short. It tells them to check their DMs."
+            description="Optional. Everyone can see this reply, so keep it short and tell them to check their DMs. Leave it empty to reply only in their DMs."
           >
             {publicReplies.map((reply, index) => (
               <div className="reply-version" key={index}>
@@ -2235,6 +2244,7 @@ function AutomationBuilderV2({
               </div>
             ))}
             <FieldError message={fieldError("replies")} />
+            <ReplyVarietyHint replies={publicReplies} />
             <div className="builder-add-row">
               <button
                 type="button"

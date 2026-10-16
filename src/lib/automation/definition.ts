@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { FlowDefinition, FlowDefinitionV1, FlowDefinitionV2, FlowSchedule } from "./types";
-import { isSafeOutboundUrl } from "../security/outbound-url";
+import { findPublicUrlShortenerLinks, isSafeOutboundUrl, publicUrlShortenerMessage } from "../security/outbound-url";
 import { validateDefinitionForTarget, type ChannelDescriptor, type ChannelValidationIssue } from "./channels/registry";
 import { compileRegexKeyword, MAX_REGEX_KEYWORD_LENGTH } from "./match";
 
@@ -334,6 +334,9 @@ const deliveryUrl = z
   }, "Delivery URLs must use HTTPS outside development");
 
 const textVariants = z.array(campaignText).max(5);
+// The builder sends "" for the follow-gate copy when the gate is off, so a
+// blank value means "not set" rather than a too-short message.
+const blankAsUnset = (value: unknown) => (typeof value === "string" && value.trim() === "" ? undefined : value);
 
 const flowV2Schema = z
   .object({
@@ -355,8 +358,8 @@ const flowV2Schema = z
     followGate: z.object({
       required: z.boolean(),
       // Only meaningful when required is true; ungated campaigns may omit both.
-      notFollowingMessage: campaignText.optional(),
-      recheckButtonLabel: quickReplyLabel.optional(),
+      notFollowingMessage: z.preprocess(blankAsUnset, campaignText.optional()),
+      recheckButtonLabel: z.preprocess(blankAsUnset, quickReplyLabel.optional()),
     }),
     delivery: z.object({
       text: campaignText,
@@ -448,7 +451,26 @@ const flowV2Schema = z
     }
   });
 
-const flowSchema = z.discriminatedUnion("version", [flowV1Schema, flowV2Schema]);
+// Public link shorteners are refused when an automation is saved (or switched
+// back on), anywhere a link can be written: button and delivery links and links
+// typed into message text. Nothing re-checks at send time, so automations that
+// are already running keep sending. A post's own caption is Instagram's text,
+// not the customer's, so it is not searched, and neither are trigger words:
+// "bit.ly/" as a word to ignore is how people filter spam comments, not a link.
+const SHORTENER_SKIPPED_KEYS: ReadonlySet<string> = new Set([
+  "mediaSnapshots",
+  "keywords",
+  "negativeKeywords",
+  "exitKeywords",
+]);
+
+const flowSchema = z
+  .discriminatedUnion("version", [flowV1Schema, flowV2Schema])
+  .superRefine((flow, context) => {
+    for (const found of findPublicUrlShortenerLinks(flow, { skipKeys: SHORTENER_SKIPPED_KEYS })) {
+      context.addIssue({ code: "custom", path: found.path, message: publicUrlShortenerMessage(found.host) });
+    }
+  });
 
 function normalizeKeywords(keywords: string[]): string[] {
   return [...new Set(keywords.map((value) => value.trim().toLowerCase()).filter(Boolean))];

@@ -3,9 +3,14 @@ import type { AddressInfo } from "node:net";
 import { describe, expect, it } from "vitest";
 import {
   createPinnedLookup,
+  findPublicUrlShortenerLink,
+  findPublicUrlShortenerLinks,
   isBlockedOutboundAddress,
+  isPublicUrlShortener,
   isSafeOutboundUrl,
   postJsonToSafeOutboundTarget,
+  publicUrlShortenerHost,
+  publicUrlShortenerMessage,
   resolveSafeOutboundTarget,
 } from "./outbound-url";
 
@@ -190,5 +195,110 @@ describe("pinned outbound connections", () => {
     await expect(postJsonToSafeOutboundTarget("https://hooks.example.com/lead", { ok: true }, {
       lookup: async () => [{ address: "64:ff9b::a9fe:a9fe", family: 6 }],
     })).rejects.toThrow(/publicly routable/i);
+  });
+});
+
+describe("public URL shorteners", () => {
+  it.each([
+    "bit.ly",
+    "tinyurl.com",
+    "t.co",
+    "goo.gl",
+    "ow.ly",
+    "is.gd",
+    "buff.ly",
+    "cutt.ly",
+    "rebrand.ly",
+    "shorturl.at",
+    "rb.gy",
+    "tiny.cc",
+  ])("recognises %s as a link shortener", (host) => {
+    expect(isPublicUrlShortener(`https://${host}/abc123`)).toBe(true);
+    expect(publicUrlShortenerHost(`http://${host}/abc123`)).toBe(host);
+  });
+
+  it("matches the host however it is written", () => {
+    for (const url of [
+      "HTTPS://BIT.LY/Abc",
+      "https://www.bit.ly/abc",
+      "https://bit.ly./abc",
+      "https://on.bit.ly/abc",
+      "https://bit.ly:443/abc?utm_source=ig",
+      "  https://bit.ly/abc  ",
+    ]) {
+      expect(publicUrlShortenerHost(url), url).toBe("bit.ly");
+    }
+  });
+
+  it("leaves full links, brand links and look-alike domains alone", () => {
+    for (const url of [
+      "https://example.com/link",
+      "https://shop.example.in/products/kurta?size=m",
+      "https://amzn.to/3xYz",
+      "https://youtu.be/abc",
+      "https://wa.me/919876543210",
+      "https://microsoft.co/offer",
+      "https://notbit.ly/abc",
+      "https://bit.ly.example.com/abc",
+      "https://app.linkar.in/api/t/abc",
+      "mailto:hello@bit.ly",
+      "not a url",
+      "",
+    ]) {
+      expect(isPublicUrlShortener(url), url).toBe(false);
+    }
+  });
+
+  it("finds a short link written inside message text", () => {
+    expect(findPublicUrlShortenerLink("Here’s your guide: https://bit.ly/guide - enjoy!")).toEqual({
+      link: "https://bit.ly/guide",
+      host: "bit.ly",
+    });
+    expect(findPublicUrlShortenerLink("Grab it at tinyurl.com/sale-2026 today")).toEqual({
+      link: "tinyurl.com/sale-2026",
+      host: "tinyurl.com",
+    });
+    expect(findPublicUrlShortenerLink("Full link https://example.com/a, short one t.co/xyz")?.host).toBe("t.co");
+  });
+
+  it("does not flag ordinary text or a full link that only mentions a shortener", () => {
+    for (const text of [
+      "Thanks for the comment! We’ll get back to you shortly.",
+      "The price is.gd friendly, honest.",
+      "Visit https://example.com/link for details.",
+      "https://example.com/redirect?next=https://bit.ly/abc",
+      "https://bit.ly@example.com/abc",
+      "Mail us at hello@example.com.",
+      "Starts 2026-10-16T09:00:00.000Z",
+    ]) {
+      expect(findPublicUrlShortenerLink(text), text).toBeUndefined();
+    }
+  });
+
+  it("reports every short link in a nested value with its path, skipping the keys it is told to", () => {
+    const value = {
+      actions: [
+        { type: "send_text", text: "Hello there" },
+        { type: "send_button", text: "Tap below", buttonLabel: "Open", url: "https://cutt.ly/abc" },
+      ],
+      replies: ["see rb.gy/x"],
+      mediaSnapshots: [{ caption: "Link in bio bit.ly/bio" }],
+      limit: 5,
+      enabled: true,
+      missing: null,
+    };
+    expect(findPublicUrlShortenerLinks(value, { skipKeys: new Set(["mediaSnapshots"]) })).toEqual([
+      { path: ["actions", 1, "url"], link: "https://cutt.ly/abc", host: "cutt.ly" },
+      { path: ["replies", 0], link: "rb.gy/x", host: "rb.gy" },
+    ]);
+    expect(findPublicUrlShortenerLinks(value)).toHaveLength(3);
+    expect(findPublicUrlShortenerLinks({ url: "https://example.com" })).toEqual([]);
+  });
+
+  it("explains the refusal in plain words", () => {
+    const message = publicUrlShortenerMessage("bit.ly");
+    expect(message).toContain("bit.ly");
+    expect(message).toMatch(/full link/i);
+    expect(message).not.toMatch(/\u2014|payload|recipient|webhook/i);
   });
 });

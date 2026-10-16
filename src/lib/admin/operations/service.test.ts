@@ -96,3 +96,27 @@ it("numbers admin edit snapshots after the highest existing snapshot, not the au
   await executeAdminOperation("automation", "a1", { action: "update", version: 3, input: { name: "New" } }, "owner");
   expect(mocks.versionCreate.mock.calls[0][0].data).toMatchObject({ version: 8, provider: "INSTAGRAM" });
 });
+
+const shortLinkAutomation = { id: "a2", workspaceId: "w1", version: 5, provider: "INSTAGRAM", name: "Shop", status: "PAUSED", priority: 0, activatedAt: null, boundMediaId: null, instagramAccountId: "ig", facebookPageId: null, archivedAt: null, definition: { version: 1, trigger: { type: "message", match: "keyword", keywords: ["shop"] }, conditions: [], actions: [{ type: "send_button", text: "Here you go", buttonLabel: "Shop now", url: "https://bit.ly/shop" }] } };
+it("refuses to switch on a paused automation holding a short link with a plain 422, not a 500", async () => {
+  mocks.automation.mockResolvedValue(shortLinkAutomation);
+  mocks.automationUpdate.mockResolvedValue({ count: 1 });
+  const failure = await executeAdminOperation("automation", "a2", { action: "activate", version: 5, input: {} }, "owner").catch((error: unknown) => error);
+  expect(failure).toMatchObject({ status: 422, code: "invalid_definition" });
+  expect((failure as { publicMessage?: string }).publicMessage).toMatch(/^actions 1 url: Short links from bit\.ly are not allowed\. Paste the full link instead/);
+  expect(mocks.automationUpdate).not.toHaveBeenCalled();
+});
+it("still renames a paused automation holding a short link, and refuses a new definition with one", async () => {
+  mocks.automation.mockResolvedValue(shortLinkAutomation);
+  mocks.automationFindFirst.mockResolvedValue(shortLinkAutomation);
+  mocks.automationUpdate.mockResolvedValue({ count: 1 });
+  mocks.versionAggregate.mockResolvedValue({ _max: { version: 1 } });
+  mocks.versionCreate.mockResolvedValue({});
+  await expect(executeAdminOperation("automation", "a2", { action: "update", version: 5, input: { name: "Shop (fixed)" } }, "owner")).resolves.toMatchObject({ version: 6 });
+  expect(mocks.automationUpdate.mock.calls[0][0].data).toMatchObject({ name: "Shop (fixed)", definition: shortLinkAutomation.definition });
+
+  mocks.automationUpdate.mockClear();
+  await expect(executeAdminOperation("automation", "a2", { action: "update", version: 5, input: { definition: shortLinkAutomation.definition } }, "owner"))
+    .rejects.toMatchObject({ status: 422, code: "invalid_definition", publicMessage: expect.stringContaining("bit.ly") });
+  expect(mocks.automationUpdate).not.toHaveBeenCalled();
+});

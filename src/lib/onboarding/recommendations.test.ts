@@ -35,6 +35,16 @@ describe("recommendTemplates", () => {
     expect(first.why).toMatch(/^Fits “Run giveaways”: /);
   });
 
+  it("says the comment link arrives after a tap, the way the template sends it", () => {
+    const pick = rankTemplates({ goals: ["links"] }).find((item) => item.id === "comment-link-dm");
+    expect(pick?.why).toBe("Fits “Send links from comments”: replies to comments with a button, then sends your link.");
+  });
+
+  it("says the free guide arrives after a tap, the way the template sends it", () => {
+    const pick = rankTemplates({ goals: ["leads"] }).find((item) => item.id === "lead-magnet-comment");
+    expect(pick?.why).toMatch(/: replies to comments with a button, then sends your free guide\.$/);
+  });
+
   it("falls back to popular templates with no answers, without inventing a reason", () => {
     const picks = recommendTemplates({});
     expect(picks).toHaveLength(3);

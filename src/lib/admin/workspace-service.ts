@@ -8,7 +8,12 @@ import { Prisma } from "@prisma/client";
 import type { MemberRole } from "@/src/lib/repository";
 
 export class AdminWorkspaceError extends Error {
-  constructor(public readonly status: number, public readonly code: string) {
+  /**
+   * `publicMessage` is an optional plain sentence for the operator, written on
+   * purpose for display (never provider or database text). The route sends it
+   * as `message` next to the code.
+   */
+  constructor(public readonly status: number, public readonly code: string, public readonly publicMessage?: string) {
     super(code);
     this.name = "AdminWorkspaceError";
   }

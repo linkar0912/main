@@ -1,14 +1,33 @@
 import { createId } from "../id";
 import { logger } from "../logger";
 import { MetaApiError } from "../meta/client";
+import {
+  ACCOUNT_RECOVERING_REASON,
+  ACCOUNT_THROTTLED_REASON,
+  isMetaAccountBlock,
+  isMetaRateLimit,
+} from "../meta/errors";
 import { notifyWorkspaceManagers } from "../notifications";
 import { getRepository } from "../repository-provider";
 import type {
   AutomationRepository,
   EnsureOutboundDeliveryInput,
+  OutboundDeliveryKind,
   OutboundDeliveryRecord,
 } from "../repository";
+import {
+  checkAccountSendGate,
+  heldSendReason,
+  pauseAccountAfterBlock,
+  recordAccountThrottle,
+  THROTTLE_BACKOFF_MS,
+  throttleBackoffMs,
+  type AccountSendGate,
+  type RecoveryBudgetMode,
+  type SendPauseTarget,
+} from "./account-pause";
 import type { DeliveryTimingObserver } from "./delivery-timing";
+import { SendDeferredError } from "./send-deferral";
 
 export type ProviderFailureClass =
   | "KNOWN_RETRYABLE"
@@ -33,7 +52,9 @@ export type DeliveryExecutionResult =
   | { status: "SENT"; providerMessageId?: string; reused: boolean; deliveryId?: string }
   // `reused` marks an outcome some earlier attempt already recorded, so a
   // caller keeping per-outcome counters can tell it apart from a fresh one.
-  | { status: "FAILED"; retryable: boolean; error: string; reason?: "QUOTA_REJECTED"; reused?: true }
+  // QUOTA_REJECTED: the plan's monthly allowance. ACCOUNT_PAUSED: Meta
+  // limited the account, so Linkar held the send without calling Meta.
+  | { status: "FAILED"; retryable: boolean; error: string; reason?: "QUOTA_REJECTED" | "ACCOUNT_PAUSED"; reused?: true }
   | { status: "UNKNOWN"; error: string; reused?: true }
   | { status: "BUSY" };
 
@@ -58,6 +79,21 @@ export const deliveryKeys = {
     `automation:${automationId}:event:${eventId}:followup:${index}`,
 };
 
+/**
+ * What Meta's rejection says about the whole account, not just this send: an
+ * account-level block (368 / #2022) or a request to slow down (throttling).
+ */
+export type ProviderAccountSignal = "account_blocked" | "rate_limited" | null;
+
+export function providerAccountSignal(error: unknown): ProviderAccountSignal {
+  // A deferral is Linkar's own wait (it also carries status 429), never Meta's answer.
+  if (!(error instanceof MetaApiError) || error instanceof SendDeferredError) return null;
+  if (!error.responseReceived || error.status === 0) return null;
+  if (isMetaAccountBlock({ code: error.code, subcode: error.subcode, message: error.message })) return "account_blocked";
+  if (isMetaRateLimit({ status: error.status, code: error.code })) return "rate_limited";
+  return null;
+}
+
 export function classifyProviderFailure(
   error: unknown,
   networkFailuresAreRetryable = false,
@@ -67,13 +103,73 @@ export function classifyProviderFailure(
     || !error.responseReceived
     || error.status === 0
   ) return networkFailuresAreRetryable ? "KNOWN_RETRYABLE" : "AMBIGUOUS";
-  // Meta reports throttling (Graph codes 4/17/32/613) and other transient
-  // errors as HTTP 400 with `retryable` set by the client - a rejection we
-  // know was not delivered and may safely try again later.
-  if (error.retryable || error.status === 408 || error.status === 429 || error.status >= 500) {
+  const signal = providerAccountSignal(error);
+  // Retrying into a block only adds refused attempts to the account's record.
+  if (signal === "account_blocked") return "KNOWN_PERMANENT";
+  // Meta reports throttling (Graph codes 4/17/32/613/80002/80006) and other
+  // transient errors as HTTP 400 - a rejection we know was not delivered and
+  // may safely try again later, once the account has cooled down.
+  if (signal === "rate_limited" || error.retryable || error.status === 408 || error.status === 429 || error.status >= 500) {
     return "KNOWN_RETRYABLE";
   }
   return "KNOWN_PERMANENT";
+}
+
+/** Lead emails and lead webhooks never reach Meta, so an account pause does not hold them. */
+const NON_META_KINDS: ReadonlySet<OutboundDeliveryKind> = new Set(["LEAD_EMAIL", "LEAD_WEBHOOK"]);
+
+/**
+ * Kinds whose callers already treat a thrown SendDeferredError as "park this
+ * queue job" after releasing every claim they hold, exactly as for the hourly
+ * send ceiling. A cool-down then waits without spending a retry. Campaign
+ * actions give back their dispatch lease and mark the step pending first, or
+ * skip a public reply instead of parking it (guardedDelivery in
+ * campaign-runner.ts). Sequence steps run in a sweep and manual replies in a
+ * web request, so those get a retryable failure instead and keep their own
+ * retry timing.
+ */
+const DEFERRABLE_KINDS: ReadonlySet<OutboundDeliveryKind> = new Set([
+  "CLASSIC_ACTION",
+  "EMAIL_CAPTURE",
+  "BROADCAST_RECIPIENT",
+  "FLOW_FOLLOWUP",
+  "CAMPAIGN_ACTION",
+]);
+
+/**
+ * How each kind treats the reduced budget after a block pause. A teammate's
+ * typed reply is neither limited by it nor uses it. Every automatic send,
+ * comment-to-DM campaign replies included, uses it and waits once it is
+ * spent: the job is parked, so a DM is delayed, not dropped. (A campaign's
+ * public reply held here is skipped instead, never posted late.)
+ */
+function recoveryModeFor(kind: OutboundDeliveryKind): RecoveryBudgetMode {
+  if (kind === "MANUAL_INBOX") return "ignore";
+  return "enforce";
+}
+
+/**
+ * Sequence steps wait out a block pause instead of being recorded as not
+ * sent: sequence-runner ends the whole enrollment on a final failure, but
+ * backs a retryable one off and tries again on a later sweep (which still
+ * re-checks the messaging window before sending).
+ */
+const WAIT_OUT_BLOCK_KINDS: ReadonlySet<OutboundDeliveryKind> = new Set(["SEQUENCE_STEP"]);
+
+function pauseTargetFor(request: EnsureOutboundDeliveryInput): SendPauseTarget | null {
+  if (!request.instagramAccountId || NON_META_KINDS.has(request.kind)) return null;
+  return { channel: "instagram", accountId: request.instagramAccountId };
+}
+
+/** Holds a send during a throttle cool-down or the reduced post-pause budget. */
+function holdForCoolDown(
+  kind: OutboundDeliveryKind,
+  gate: Extract<AccountSendGate, { status: "throttled" | "recovering" }>,
+): DeliveryExecutionResult {
+  const waitMs = gate.status === "throttled" ? gate.until - Date.now() : gate.retryAfterMs;
+  const reason = gate.status === "throttled" ? ACCOUNT_THROTTLED_REASON : ACCOUNT_RECOVERING_REASON;
+  if (DEFERRABLE_KINDS.has(kind)) throw new SendDeferredError(reason, waitMs);
+  return { status: "FAILED", retryable: true, error: reason };
 }
 
 /** Graph code 190: the access token is invalid, expired or revoked. */
@@ -184,6 +280,27 @@ export async function executeOutboundDelivery<
     ...deliveryInput
   } = request;
   const repository = suppliedRepository ?? getRepository();
+
+  // Every Meta send checks the account's pause first, before any usage is
+  // reserved. A delivery that already has an outcome keeps it: the pause
+  // only holds new attempts.
+  const pauseTarget = pauseTargetFor(request);
+  let blockedUntil: number | undefined;
+  if (pauseTarget) {
+    const gate = await checkAccountSendGate(pauseTarget, { recovery: recoveryModeFor(request.kind) });
+    if (gate.status !== "open") {
+      const existing = await repository.getOutboundDelivery(request.deliveryKey).catch(() => null);
+      const settled = existing ? existingResult(existing) : null;
+      if (settled) return settled;
+      if (gate.status !== "blocked") return holdForCoolDown(request.kind, gate);
+      if (WAIT_OUT_BLOCK_KINDS.has(request.kind)) {
+        // Nothing is recorded: the step stays due and is tried again later.
+        return { status: "FAILED", retryable: true, error: heldSendReason(pauseTarget, gate.until), reason: "ACCOUNT_PAUSED" };
+      }
+      blockedUntil = gate.until;
+    }
+  }
+
   const owner = createId("delivery_claim");
   const leaseUntil = new Date(Date.now() + claimLeaseMs).toISOString();
   const entitlementService = suppliedEntitlementService
@@ -218,6 +335,15 @@ export async function executeOutboundDelivery<
     ).catch(() => undefined);
     return { status: "FAILED", retryable: false, error: "Monthly delivery limit reached", reason: "QUOTA_REJECTED" };
   }
+  if (pauseTarget && blockedUntil !== undefined) {
+    // Recorded like a plan-limit block: not attempted, nothing used, and the
+    // reason says why in plain words. Not retried: a comment or DM answered a
+    // day late would read as spam, and the window has usually closed by then.
+    const reason = heldSendReason(pauseTarget, blockedUntil);
+    await repository.releaseOutboundDeliveryReservation(request.deliveryKey).catch(() => false);
+    await repository.failOutboundDelivery(request.deliveryKey, owner, reason, false, "SUPPRESSED").catch(() => false);
+    return { status: "FAILED", retryable: false, error: reason, reason: "ACCOUNT_PAUSED" };
+  }
 
   let providerResult: { id?: string; message_id?: string };
   let providerAccepted = false;
@@ -238,15 +364,36 @@ export async function executeOutboundDelivery<
     if (isInvalidTokenError(error) && request.instagramAccountId) {
       await expireInvalidInstagramConnection(repository, request.instagramAccountId);
     }
+    const signal = pauseTarget ? providerAccountSignal(error) : null;
+    const reason = signal === "account_blocked"
+      ? (await pauseAccountAfterBlock(repository, pauseTarget!)).reason
+      : message;
+    // Meta's usage headers, when it sent them, can stretch the pause to its
+    // own estimate of when access returns.
+    const throttle = signal === "rate_limited"
+      ? await recordAccountThrottle(pauseTarget!, { usage: error instanceof MetaApiError ? error.usage : null })
+      : undefined;
     await repository.releaseOutboundDeliveryReservation(request.deliveryKey).catch(() => false);
     await repository.failOutboundDelivery(
       request.deliveryKey,
       owner,
-      message,
+      reason,
       retryable,
       retryable ? "RETRYABLE_REJECTION" : "PROVIDER_REJECTED",
     ).catch(() => false);
-    return { status: "FAILED", retryable, error: message };
+    const attempt = preparation.record.attemptCount;
+    if (throttle && retryable && DEFERRABLE_KINDS.has(request.kind) && attempt <= THROTTLE_BACKOFF_MS.length) {
+      // Wait 1, 5, then 15 minutes (or out the account pause) instead of the
+      // queue's own retry, so a throttled send does not go straight back.
+      // After the third wait it falls back to the job's own few attempts, so
+      // a send Meta keeps refusing still ends instead of waiting forever.
+      const waitMs = Math.max(
+        throttleBackoffMs(attempt),
+        (throttle.pausedUntil ?? 0) - Date.now(),
+      );
+      throw new SendDeferredError(ACCOUNT_THROTTLED_REASON, waitMs);
+    }
+    return { status: "FAILED", retryable, error: reason };
   } finally {
     timingObserver?.providerFinished(performance.now() - providerStartedAt, providerAccepted);
   }

@@ -30,6 +30,14 @@ describe("admin request transport", () => {
     expect(adminErrorMessage(failure)).toBe("Stale version");
   });
 
+  it("shows the plain sentence the server wrote for the operator, with the code kept", async () => {
+    const sentence = "actions 1 url: Short links from bit.ly are not allowed. Paste the full link instead, because short links can make messages look like spam.";
+    stubFetch(Response.json({ error: "invalid_definition", message: sentence }, { status: 422 }));
+    const failure = await adminCommand("/api/admin/operations/automation/a1", { method: "PATCH", reason: "switch on" }).catch((error: unknown) => error);
+    expect(failure).toMatchObject({ code: "invalid_definition", status: 422 });
+    expect(adminErrorMessage(failure)).toBe(sentence);
+  });
+
   it("falls back to a safe code when an outage returns a non-JSON page", async () => {
     // A proxy error page used to surface as "Unexpected token '<'" in the console UI.
     stubFetch(new Response("<html>502 Bad Gateway</html>", { status: 502 }));

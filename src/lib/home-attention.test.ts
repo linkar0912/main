@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { deriveAttentionItems, type AttentionInput } from "./home-attention";
+import { activeAccountPause, deriveAttentionItems, type AttentionInput } from "./home-attention";
+import { formatDateParts } from "./format-date";
+import { accountPausedReason, accountSendHeldReason } from "./meta/errors";
 
 const NOW = Date.parse("2026-10-11T10:00:00.000Z");
 const DAY = 24 * 60 * 60 * 1000;
@@ -104,5 +106,69 @@ describe("deriveAttentionItems", () => {
 
   it("ignores automation state while the list is unknown", () => {
     expect(deriveAttentionItems(input({ automationsKnown: false, automations: [{ id: "a1", name: "A", status: "PAUSED" }] }))).toEqual([]);
+  });
+  describe("when Meta limits an account", () => {
+    const HOUR = 60 * 60 * 1000;
+    const restartLabel = (at: number) =>
+      formatDateParts(new Date(at), { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
+
+    it("says plainly that replies are paused, and until when", () => {
+      const blockedAt = NOW - 2 * HOUR;
+      const items = deriveAttentionItems(input({
+        failures: [{ updatedAt: new Date(blockedAt).toISOString(), lastError: accountPausedReason(24 * HOUR), resultCode: "PROVIDER_REJECTED" }],
+      }));
+      expect(items).toEqual([{
+        key: "account-paused",
+        tone: "danger",
+        chip: "Limited",
+        text: `Instagram has limited one of your accounts. Linkar paused its automatic replies until ${restartLabel(blockedAt + 24 * HOUR)}.`,
+        action: { kind: "link", label: "See activity", href: "/activity" },
+      }]);
+      expect(items[0].text).not.toMatch(/\u2014|payload|recipient|webhook/i);
+    });
+
+    it("finds the end from held sends when the refused one has scrolled out of the recent list", () => {
+      const until = NOW + 5 * HOUR + 7 * 60_000;
+      const held = Array.from({ length: 50 }, (_, index) => {
+        const recordedAt = NOW - index * 60_000;
+        return {
+          updatedAt: new Date(recordedAt).toISOString(),
+          lastError: accountSendHeldReason(until - recordedAt),
+          resultCode: "SUPPRESSED",
+        };
+      });
+      // Every record agrees on the real end, to the minute: no hour of rounding.
+      expect(activeAccountPause(held, NOW)).toEqual({ until, platform: "Instagram" });
+      // The held sends are the pause, not 50 separate failures.
+      expect(deriveAttentionItems(input({ failures: held })).map((item) => item.key)).toEqual(["account-paused"]);
+    });
+
+    it("names a Facebook Page as a Page", () => {
+      const [item] = deriveAttentionItems(input({
+        failures: [{ updatedAt: new Date(NOW).toISOString(), lastError: accountPausedReason(3 * HOUR, "Facebook") }],
+      }));
+      expect(item.text).toBe(`Facebook has limited one of your Pages. Linkar paused its automatic replies until ${restartLabel(NOW + 3 * HOUR)}.`);
+    });
+
+    it("drops the notice once the pause has ended, and then counts what was not sent", () => {
+      const failures = [{ updatedAt: new Date(NOW - 25 * HOUR).toISOString(), lastError: accountPausedReason(24 * HOUR) }];
+      expect(activeAccountPause(failures, NOW)).toBeNull();
+      // Gone within a minute of the restart, not up to an hour later.
+      const endingSoon = [{
+        updatedAt: new Date(NOW).toISOString(),
+        lastError: accountSendHeldReason(2 * HOUR + 30 * 60_000),
+      }];
+      expect(activeAccountPause(endingSoon, NOW + 2 * HOUR + 29 * 60_000)).not.toBeNull();
+      expect(activeAccountPause(endingSoon, NOW + 2 * HOUR + 30 * 60_000)).toBeNull();
+      expect(deriveAttentionItems(input({ failures })).map((item) => item.key)).toEqual(["failures"]);
+    });
+
+    it("ignores other reasons and unreadable times", () => {
+      expect(activeAccountPause(null, NOW)).toBeNull();
+      expect(activeAccountPause([
+        { updatedAt: new Date(NOW).toISOString(), lastError: "Instagram has limited this account, so it can't send messages right now." },
+        { updatedAt: "not a date", lastError: accountPausedReason(24 * HOUR) },
+      ], NOW)).toBeNull();
+    });
   });
 });
