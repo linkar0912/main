@@ -2,7 +2,8 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ checkRequestSession: vi.fn(), redirect: vi.fn(), verifyOtp: vi.fn(), signOut: vi.fn(), host: "app.linkar.in" }));
+// signOut answers the way auth-js does: { error }.
+const mocks = vi.hoisted(() => ({ checkRequestSession: vi.fn(), redirect: vi.fn(), verifyOtp: vi.fn(), signOut: vi.fn(async () => ({ error: null })), host: "app.linkar.in" }));
 
 vi.mock("@/src/lib/env", () => ({
   getServerEnv: () => ({ publicSiteUrl: "https://linkar.in", appUrl: "https://app.linkar.in", adminUrl: "https://admin.linkar.in" }),
