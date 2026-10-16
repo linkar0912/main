@@ -85,9 +85,9 @@ then take the service down.
   `0` turns it off), it logs "Worker stopped consuming jobs; exiting so it
   restarts", waits up to 30 s for running jobs and connections to close, and
   exits with code 1 (`startLivenessWatchdog` in `src/lib/worker-health.ts`).
-  Checks run every 10 to 20 s, so a stuck worker is gone five to six
-  minutes after it stopped (the window, plus up to two check gaps and the
-  30 s close).
+  Checks run every 10 to 20 s, so a stuck worker is gone five to seven
+  minutes after it stopped (up to a minute after its last job, then the
+  window, up to two check gaps and the 30 s close).
   The restart policy then starts a fresh worker with new connections. At
   startup the worker logs "Worker liveness watchdog" with the window in
   effect (or `disabled`), and warns when the configured value was not usable
@@ -129,8 +129,9 @@ What each liveness endpoint checks:
   about 2 minutes of that. A stuck one never recovers by itself and a new
   worker connects afresh, so it exits five to seven minutes after it stopped
   (up to a minute after its last job, then the window, up to two check gaps
-  and the 30 s close) and its restart policy brings it back (see the `linkar-worker` note above).
-  A slow or unreachable database does not fail it.
+  and the 30 s close) and its restart policy brings it back (see the
+  `linkar-worker` note above). A slow or unreachable database does not fail
+  it.
 
 Dependency state is readiness and stays on `/api/health` (web) and the
 worker's `/health`, which the release script and monitoring read. Each probe
@@ -155,14 +156,25 @@ A push to `main` is a production deployment once CI passes. Do not push
    never publishes or deploys.
 3. Its deploy job skips a commit that is no longer the tip of `main` (CI runs
    can finish out of order), then connects to the deployment host as
-   `deploybot`. Its SSH key is restricted to `ops/dokploy/forced-deploy.sh`,
-   which accepts only `deploy <40-character-lowercase-sha>`. The deploy job is
+   `deploybot`. Its SSH key is restricted (`restrict`, forced command) to
+   `/usr/local/libexec/dokploy-forced-deploy linkar` (template:
+   `ops/dokploy/forced-deploy.sh`), which accepts only
+   `deploy <40-character-lowercase-sha>` and runs the release script through
+   `sudo -n`. The deploy job is
    in a non-cancelling concurrency group: a newer release queues behind a
    running one instead of killing it mid-SSH.
-4. The host release script (template: `ops/dokploy/release-linkar.sh`)
-   deploys the exact image SHA to `linkar-web`, waits for `/api/health` to
-   report that SHA, then updates the singleton worker and waits for a live
-   worker heartbeat on the same SHA.
+4. The host release script (template: `ops/dokploy/release-linkar.sh`), one
+   release at a time:
+   1. applies committed database migrations with the release image (the
+      Compose's `migrate` service, on `DIRECT_URL`); a failed migration stops
+      the release before anything moves, with the previous release serving;
+   2. points `linkar-web` at the exact image SHA, deploys it, and waits until
+      public `/api/health` reports that SHA with the database and Redis up,
+      three checks in a row (up to 10 minutes);
+   3. only then sets `LINKAR_IMAGE_TAG` in the Compose (in Dokploy and in its
+      `.env` on disk), recreates just the `worker` service
+      (`docker compose up -d --no-deps worker`, so Valkey is not touched),
+      and waits for the worker container to report healthy.
 5. The workflow re-checks production from outside with
    `scripts/check-production-health.mjs` and `EXPECTED_RELEASE` set to the
    commit.
@@ -182,30 +194,28 @@ Required GitHub Actions secrets:
 `ops/dokploy/release-linkar.sh` is the reviewed template of
 `/usr/local/libexec/dokploy-release-linkar`. **The installed host copy must
 match it.** Change the template, run `sh ops/dokploy/release-linkar.test.sh`,
-then install it (root-owned, mode 755). Before the first install, diff it
-against the copy already on the host and confirm its Dokploy API calls match
-the Dokploy version in use. It reads, all root-owned and mode 600:
+install it (root-owned, mode 755), and compare checksums:
 
-- `/etc/dokploy-release/api-key` - the Dokploy API key shared with the other
-  release commands;
-- `/etc/dokploy-release/linkar-health-token` - the `HEALTH_DETAIL_TOKEN`
-  configured on `linkar-web`;
-- `/etc/dokploy-release/linkar.env` - `LINKAR_WEB_APPLICATION_ID` and
-  `LINKAR_WORKER_APPLICATION_ID`.
+```bash
+sha256sum ops/dokploy/release-linkar.sh
+ssh root@<host> sha256sum /usr/local/libexec/dokploy-release-linkar
+```
 
-**Known drift (16 Oct 2026): the template does not match production.** Its
-worker step calls `application.saveDockerProvider` and `application.deploy`
-on `LINKAR_WORKER_APPLICATION_ID`, but there is no worker Application: the
-worker is a service of the "Linkar Production" Compose (see "Production
-topology"). Releases still move the worker, so the installed host copy must
-do it differently. After the 6330420 release the Compose environment's
-`LINKAR_IMAGE_TAG` carried that commit and the worker container had been
-recreated on it, while Dokploy had recorded no Compose deployment since
-6 Sep. **Owner action:** copy the installed
-`/usr/local/libexec/dokploy-release-linkar` back over this template so the two
-match again, then run `sh ops/dokploy/release-linkar.test.sh`. Until then, do
-not install the template on the host: its worker step targets an Application
-that does not exist, so it would not move the worker.
+The two matched on 16 Oct 2026, when the migration step was added; the copy
+it replaced is kept on the host as
+`/usr/local/libexec/dokploy-release-linkar.bak-20261016`. Likewise
+`ops/dokploy/forced-deploy.sh` matches `/usr/local/libexec/dokploy-forced-deploy`.
+
+The script carries the production identifiers as defaults (the Linkar Web
+Application and Linkar Production Compose ids, the Compose directory
+`/etc/dokploy/compose/linkar-production-dkirew/code`, the worker container
+name and the lock file `/run/lock/dokploy-release-linkar.lock`); the
+environment overrides exist only for its test, and sudo resets the
+environment in production anyway. The Compose's project name comes from
+`COMPOSE_PROJECT_NAME` in that directory's `.env`, so every `docker compose`
+call must pass `--env-file` with it. The only secret it reads is the Dokploy
+API key in `/etc/dokploy-release/api-key` (root-owned, mode 600, shared with
+the TrackParcel release command).
 
 The deploy key must not provide an interactive shell, port forwarding, agent
 forwarding, or access to another application's release command.
@@ -297,23 +307,35 @@ checks the public site.
 
 ## Database migrations
 
-Schema migrations are a separate, operator-run release step; CI proves the
-chain applies cleanly and matches `schema.prisma` but never touches the
-production database. Back up PostgreSQL first, run only committed migrations
-through `prisma migrate deploy` using `DIRECT_URL`, and keep migrations
-backward-compatible with both web versions during a start-first rollout. Never
-use `prisma migrate dev` or `db:seed` in production.
+Every release applies the committed migrations itself, as the first step of
+the host release script (see "Release flow"), with `prisma migrate deploy` on
+`DIRECT_URL` from the release image, while the previous release is still
+serving. CI proves the chain applies cleanly and matches `schema.prisma` but
+never touches the production database. So every migration must work with the
+previous release still running: additive changes, nullable columns, and
+`CREATE INDEX CONCURRENTLY` alone in its file. A migration that drops, renames
+or rewrites data, or that would hold locks for long, must not ride a release:
+back up PostgreSQL, apply it by hand first (commands below), and the release
+then finds nothing pending. Never use `prisma migrate dev` or `db:seed` in
+production.
 
 If a migration fails, stop the release and inspect `_prisma_migrations` before
 retrying. Do not edit or delete migration history to force a deployment.
 
-The "Linkar Production" Compose also defines a one-shot `migrate` service
-(`prisma migrate deploy` on the release image). Whether a release runs it
-depends on how the installed host release script brings the worker up, which
-is not confirmed (see "Known drift" under "Host release script"). A Dokploy
-Compose redeploy brings up the whole Compose. Until that is settled, keep
-running the step below yourself, and check `_prisma_migrations` after a
-release that adds migrations.
+Releases before 16 Oct 2026 did not run migrations (the old release script
+recreated only the worker), and the two migrations of the 6330420 release
+were applied by hand that day. If a release ever stops at its migration
+step, read its log in the deploy job, fix the cause, and push again.
+
+To apply migrations by hand on the host, with the image of the release they
+belong to (the `migrate` service sits in the `migration` profile and never
+starts on its own):
+
+```bash
+cd /etc/dokploy/compose/linkar-production-dkirew/code
+LINKAR_IMAGE_TAG=sha-<commit> docker compose --project-directory . --env-file .env \
+  -f docker-compose.yml --profile migration run --rm -T migrate
+```
 
 Run migrations on the **direct** connection (port 5432), not the pooled one:
 `DATABASE_URL` in production points at the transaction pooler, which cannot run
@@ -358,7 +380,9 @@ example):
 Release order when new code reads the new column:
 
 1. Back up PostgreSQL.
-2. Apply the migrations with the command above, before pushing `main`.
+2. Apply the migrations with one of the commands above, before pushing
+   `main`, so the backfill below can run first (the release then finds them
+   applied).
 3. Run the backfill so existing rows are ready before the code that reads them:
 
    ```bash
@@ -391,6 +415,8 @@ host operator runs the installed release script with that SHA:
 sudo -n /usr/local/libexec/dokploy-release-linkar <40-character-commit>
 ```
 
+It runs the migration step first; with an older image that has nothing to
+apply (`prisma migrate deploy` ignores migrations the image does not know).
 Verify public and worker health report the rollback SHA. Do not reverse an
 additive database migration during an application rollback. If the failed
 release contained an incompatible migration, stop and restore through the
@@ -399,6 +425,42 @@ database recovery procedure instead of guessing.
 Keep Valkey and its named volume running during web or worker rollback. Never
 start a second worker concurrently. Prefer the release script over a Dokploy
 redeploy of the "Linkar Production" Compose, which restarts Valkey as well.
+
+## Server access and host
+
+As checked on 16 Oct 2026, the Netcup host (Debian 13, 4 vCPU, 8 GB RAM, 4 GB
+swap, 157 GB disk) runs Dokploy for both Linkar and TrackParcel.
+
+- **SSH is key-only.** `/etc/ssh/sshd_config.d/00-key-only.conf` sets
+  `PasswordAuthentication no`, `KbdInteractiveAuthentication no` and
+  `PermitRootLogin prohibit-password` (the file is read before the main
+  config, so it wins). Password attempts get `Permission denied (publickey)`;
+  until then the host saw well over a thousand failed password logins a day.
+  fail2ban runs an `sshd` jail. Keep the administrator key backed up: if
+  every key is lost, the way in is the provider's VNC console or rescue
+  system. Deleting that file and `systemctl reload ssh` brings passwords back.
+- **Deploys** use `deploybot`, whose only key is restricted (`restrict` and a
+  forced command) to `/usr/local/libexec/dokploy-forced-deploy linkar` or
+  `trackparcel`.
+- **Firewall.** ufw allows only SSH. The `DOCKER-USER` chain drops 80, 443 and
+  3000 on the public interface, so Traefik and the Dokploy panel are not
+  reachable directly (IPv6 checked closed as well). Public traffic arrives
+  only through the Cloudflare Tunnels, which run outside Docker as the
+  systemd services `cloudflared-linkar` and `cloudflared-trackparcel`.
+- **Docker logs.** `/etc/docker/daemon.json` defaults new containers to
+  `json-file` with `max-size 10m` and `max-file 3`. It took effect at the
+  16 Oct Docker restart for the Swarm services (both web apps, Dokploy and
+  its database); containers that were restarted rather than recreated
+  (Traefik, the Valkeys, the Linkar worker) keep their old setting until they
+  are recreated. The Linkar Compose sets the same cap on its own services.
+- **Restarting Docker** (`systemctl restart docker`, needed for daemon.json
+  changes) stops every app on the host; on 16 Oct everything was back in
+  42 s. Traefik has `restart: always`, the Compose services
+  `restart: unless-stopped`, and Swarm reschedules its services.
+- **Resource limits:** Linkar Web 1 CPU / 1 GB, Linkar worker 1 CPU / 768 MB,
+  Linkar Valkey 0.5 CPU / 512 MB, TrackParcel web 2 CPU / 2 GB. Dokploy has
+  none.
+- **Updates.** unattended-upgrades applies security updates.
 
 ## Production configuration
 
