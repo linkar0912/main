@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildOnboardingPlan } from "@/src/lib/onboarding/build-plan";
 import type { OnboardingView } from "@/src/lib/onboarding/view";
-import type { OnboardingClient } from "./onboarding-client";
-import { OnboardingFlow } from "./onboarding-flow";
+import { onboardingKnownNotRequired, readOnboardingDeferral } from "@/src/lib/onboarding/redirect";
+import type { OnboardingClient, OnboardingSave } from "./onboarding-client";
+import { createSaveQueue, OnboardingFlow, SAVE_MAX_ATTEMPTS } from "./onboarding-flow";
 
 function ownerView(patch: Partial<OnboardingView> = {}): OnboardingView {
   return {
@@ -162,5 +163,292 @@ describe("OnboardingFlow (team member)", () => {
     expect(client.save).toHaveBeenLastCalledWith({ answers: { focus: "inbox" }, action: "complete" });
     fireEvent.click(screen.getByRole("button", { name: "Open the inbox" }));
     expect(client.navigate).toHaveBeenCalledWith("/activity");
+  });
+});
+
+describe("OnboardingFlow when a save fails", () => {
+  beforeEach(() => {
+    window.sessionStorage.clear();
+    vi.spyOn(Math, "random").mockReturnValue(0.5);
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+    window.sessionStorage.clear();
+  });
+
+  // Fake time that only moves when told to: the automatic resend waits at
+  // least 800 ms, so these steps never race it on a slow machine.
+  const flush = (ms = 20) => act(async () => { await vi.advanceTimersByTimeAsync(ms); });
+
+  it("sends a failed step's answers with the next save and keeps the warning until it is through", async () => {
+    vi.useFakeTimers();
+    const view = ownerView();
+    const client = fakeClient(view);
+    let finishSecond: ((value: OnboardingView) => void) | undefined;
+    client.save
+      .mockRejectedValueOnce(new Error("Bad gateway"))
+      .mockImplementationOnce(() => new Promise<OnboardingView>((resolve) => { finishSecond = resolve; }));
+    render(<OnboardingFlow view={view} client={client} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await flush();
+    expect(screen.getByRole("heading", { level: 1, name: "What best describes you, Priya?" })).toBeTruthy();
+    expect(screen.getByRole("alert").textContent).toContain("Your answers didn’t save.");
+
+    fireEvent.click(screen.getByRole("button", { name: /Brand or shop/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await flush();
+    expect(screen.getByRole("heading", { level: 1, name: "What’s your space?" })).toBeTruthy();
+    expect(client.save).toHaveBeenCalledTimes(2);
+    expect(client.save).toHaveBeenNthCalledWith(1, { step: 2, answers: { name: "Priya" } });
+    expect(client.save).toHaveBeenNthCalledWith(2, { step: 3, answers: { name: "Priya", accountType: "brand" } });
+    // Still on screen while the save carrying the lost answers is in flight.
+    expect(screen.getByText("Your answers didn’t save.", { exact: false })).toBeTruthy();
+
+    await act(async () => { finishSecond?.(view); });
+    await flush();
+    expect(screen.queryByText("Your answers didn’t save.", { exact: false })).toBeNull();
+    expect(client.save).toHaveBeenCalledTimes(2);
+  });
+
+  it("resends a failed step save by itself after a short wait", async () => {
+    vi.useFakeTimers();
+    const view = ownerView();
+    const client = fakeClient(view);
+    client.save.mockRejectedValueOnce(new Error("Bad gateway"));
+    render(<OnboardingFlow view={view} client={client} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await flush();
+    expect(screen.getByRole("alert").textContent).toContain("Your answers didn’t save.");
+    expect(client.save).toHaveBeenCalledTimes(1);
+
+    await flush(1_000);
+    expect(client.save).toHaveBeenCalledTimes(2);
+    expect(client.save).toHaveBeenLastCalledWith({ step: 2, answers: { name: "Priya" } });
+    await flush();
+    expect(screen.queryByText("Your answers didn’t save.", { exact: false })).toBeNull();
+  });
+
+  it("Try again resends at once instead of waiting out the backoff", async () => {
+    vi.useFakeTimers();
+    const view = ownerView();
+    const client = fakeClient(view);
+    client.save.mockRejectedValueOnce(new Error("Bad gateway"));
+    render(<OnboardingFlow view={view} client={client} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await flush();
+    fireEvent.click(within(screen.getByRole("alert")).getByRole("button", { name: "Try again" }));
+    await flush();
+    expect(client.save).toHaveBeenCalledTimes(2);
+    expect(client.save).toHaveBeenLastCalledWith({ step: 2, answers: { name: "Priya" } });
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("tells them to sign in again when the session has ended, and does not resend", async () => {
+    vi.useFakeTimers();
+    const view = ownerView();
+    const client = fakeClient(view);
+    client.save.mockRejectedValue(Object.assign(new Error("Unauthorized"), { status: 401 }));
+    render(<OnboardingFlow view={view} client={client} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await flush();
+    const alert = screen.getByRole("alert");
+    expect(alert.textContent).toContain("You’ve been signed out, so your answers can’t save.");
+    expect(within(alert).getByRole("link", { name: "Sign in again" }).getAttribute("href")).toBe("/login?next=/onboarding");
+    expect(within(alert).queryByRole("button", { name: "Try again" })).toBeNull();
+
+    await flush(10 * 60_000);
+    expect(client.save).toHaveBeenCalledTimes(1);
+  });
+
+  it("saves the step after a connect return in turn with the other saves", async () => {
+    const view = ownerView({ step: 7 });
+    const client = fakeClient(view);
+    let finishFirst: ((value: OnboardingView) => void) | undefined;
+    client.save.mockImplementationOnce(() => new Promise<OnboardingView>((resolve) => { finishFirst = resolve; }));
+    render(<OnboardingFlow view={view} client={client} connectReturn={{ meta: "connected" }} />);
+    await waitFor(() => expect(client.save).toHaveBeenCalledWith({ step: 8 }));
+
+    // Back to step 7 while the step 8 save is still in flight: it waits its turn.
+    fireEvent.click(await screen.findByRole("button", { name: "Back" }));
+    await act(async () => { await Promise.resolve(); });
+    expect(client.save).toHaveBeenCalledTimes(1);
+    await act(async () => { finishFirst?.(view); });
+    await waitFor(() => expect(client.save).toHaveBeenCalledTimes(2));
+    expect(client.save).toHaveBeenLastCalledWith({ step: 7 });
+  });
+
+  it("still leaves for Home when a skip cannot be saved, and holds the redirect back off", async () => {
+    const view = ownerView({ step: 4 });
+    const client = fakeClient(view);
+    client.save.mockRejectedValueOnce(new Error("Bad gateway"));
+    render(<OnboardingFlow view={view} client={client} />);
+    expect(readOnboardingDeferral()).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Skip for now" }));
+    await waitFor(() => expect(client.navigate).toHaveBeenCalledWith("/dashboard"));
+    expect(readOnboardingDeferral()).not.toBeNull();
+    expect(onboardingKnownNotRequired()).toBe(false);
+  });
+
+  it("does not hold the redirect off when the skip saved, and lets Home show at once", async () => {
+    const view = ownerView({ step: 4 });
+    const client = fakeClient(view);
+    render(<OnboardingFlow view={view} client={client} />);
+    fireEvent.click(screen.getByRole("button", { name: "Skip for now" }));
+    await waitFor(() => expect(client.navigate).toHaveBeenCalledWith("/dashboard"));
+    expect(readOnboardingDeferral()).toBeNull();
+    expect(onboardingKnownNotRequired()).toBe(true);
+  });
+});
+
+describe("createSaveQueue", () => {
+  function deferred() {
+    let resolve!: (value: OnboardingView) => void;
+    let reject!: (error: Error) => void;
+    const promise = new Promise<OnboardingView>((res, rej) => { resolve = res; reject = rej; });
+    return { promise, resolve, reject };
+  }
+
+  it("sends one save at a time and clears only the answers a save carried", async () => {
+    const calls: Array<{ body: OnboardingSave; result: ReturnType<typeof deferred> }> = [];
+    const save = vi.fn((body: OnboardingSave) => {
+      const result = deferred();
+      calls.push({ body, result });
+      return result.promise;
+    });
+    const onFailing = vi.fn();
+    const queue = createSaveQueue({ save, onSaved: () => undefined, onFailing, retryDelay: () => 0 });
+
+    const first = queue.enqueue({ step: 2, answers: { name: "Priya" } });
+    const second = queue.enqueue({ step: 3, answers: { accountType: "brand" } });
+    await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    expect(calls[0].body).toEqual({ step: 2, answers: { name: "Priya", accountType: "brand" } });
+
+    calls[0].result.resolve(ownerView());
+    await expect(first).resolves.toBe(true);
+    await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(2));
+    // Both answers went with the first save, so the second carries only its step.
+    expect(calls[1].body).toEqual({ step: 3 });
+    calls[1].result.resolve(ownerView());
+    await expect(second).resolves.toBe(true);
+    expect(onFailing).toHaveBeenLastCalledWith(false);
+  });
+
+  it("keeps a failed save's answers for the next one and reports the failure", async () => {
+    const save = vi.fn<(body: OnboardingSave) => Promise<OnboardingView>>()
+      .mockRejectedValueOnce(new Error("Bad gateway"))
+      .mockResolvedValue(ownerView());
+    const onFailing = vi.fn();
+    const queue = createSaveQueue({ save, onSaved: () => undefined, onFailing });
+
+    await expect(queue.enqueue({ answers: { name: "Priya" }, action: "complete" })).resolves.toBe(false);
+    expect(onFailing).toHaveBeenLastCalledWith(true);
+    await expect(queue.enqueue({ step: 3, answers: { niches: ["fashion"] } })).resolves.toBe(true);
+    expect(save).toHaveBeenLastCalledWith({ step: 3, answers: { name: "Priya", niches: ["fashion"] } });
+    expect(onFailing).toHaveBeenLastCalledWith(false);
+  });
+
+  it("never resends a save the server refused, and reports a sign-out", async () => {
+    vi.useFakeTimers();
+    try {
+      for (const status of [400, 401, 403]) {
+        const save = vi.fn<(body: OnboardingSave) => Promise<OnboardingView>>().mockRejectedValue(Object.assign(new Error("Refused"), { status }));
+        const onFailing = vi.fn();
+        const onSignedOut = vi.fn();
+        const queue = createSaveQueue({ save, onSaved: () => undefined, onFailing, onSignedOut, retryDelay: () => 1_000 });
+        await expect(queue.enqueue({ step: 2, answers: { name: "Priya" } }, { retry: true })).resolves.toBe(false);
+        await vi.advanceTimersByTimeAsync(60_000);
+        expect(save).toHaveBeenCalledTimes(1);
+        expect(onFailing).toHaveBeenLastCalledWith(true);
+        expect(onSignedOut).toHaveBeenCalledTimes(status === 401 ? 1 : 0);
+      }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("still resends after a timeout or a rate limit", async () => {
+    vi.useFakeTimers();
+    try {
+      const save = vi.fn<(body: OnboardingSave) => Promise<OnboardingView>>()
+        .mockRejectedValueOnce(Object.assign(new Error("Too many"), { status: 429 }))
+        .mockRejectedValueOnce(Object.assign(new Error("Timeout"), { status: 408 }))
+        .mockResolvedValue(ownerView());
+      const queue = createSaveQueue({ save, onSaved: () => undefined, onFailing: () => undefined, retryDelay: () => 1_000 });
+      const pending = queue.enqueue({ step: 2 }, { retry: true });
+      await vi.advanceTimersByTimeAsync(2_500);
+      await expect(pending).resolves.toBe(true);
+      expect(save).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("stops resending on its own after a while, keeping the answers for Try again", async () => {
+    vi.useFakeTimers();
+    try {
+      const save = vi.fn<(body: OnboardingSave) => Promise<OnboardingView>>().mockRejectedValue(Object.assign(new Error("Bad gateway"), { status: 502 }));
+      const onFailing = vi.fn();
+      const queue = createSaveQueue({ save, onSaved: () => undefined, onFailing, retryDelay: () => 30_000 });
+      const pending = queue.enqueue({ step: 2, answers: { name: "Priya" } }, { retry: true });
+      await vi.advanceTimersByTimeAsync(24 * 60 * 60_000);
+      await expect(pending).resolves.toBe(false);
+      expect(save).toHaveBeenCalledTimes(SAVE_MAX_ATTEMPTS);
+      expect(onFailing).toHaveBeenLastCalledWith(true);
+
+      save.mockResolvedValue(ownerView());
+      queue.retryNow();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(save).toHaveBeenLastCalledWith({ step: 2, answers: { name: "Priya" } });
+      expect(onFailing).toHaveBeenLastCalledWith(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("waits for a hidden tab to be visible again before resending", async () => {
+    vi.useFakeTimers();
+    let hidden = false;
+    const visibility = vi.spyOn(document, "hidden", "get").mockImplementation(() => hidden);
+    try {
+      const save = vi.fn<(body: OnboardingSave) => Promise<OnboardingView>>()
+        .mockRejectedValueOnce(new Error("Bad gateway"))
+        .mockResolvedValue(ownerView());
+      const queue = createSaveQueue({ save, onSaved: () => undefined, onFailing: () => undefined, retryDelay: () => 1_000 });
+      hidden = true;
+      const pending = queue.enqueue({ step: 2 }, { retry: true });
+      await vi.advanceTimersByTimeAsync(60 * 60_000);
+      expect(save).toHaveBeenCalledTimes(1);
+
+      hidden = false;
+      document.dispatchEvent(new Event("visibilitychange"));
+      await expect(pending).resolves.toBe(true);
+      expect(save).toHaveBeenCalledTimes(2);
+    } finally {
+      visibility.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it("stops retrying once closed", async () => {
+    vi.useFakeTimers();
+    try {
+      const save = vi.fn<(body: OnboardingSave) => Promise<OnboardingView>>().mockRejectedValue(new Error("Bad gateway"));
+      const queue = createSaveQueue({ save, onSaved: () => undefined, onFailing: () => undefined, retryDelay: () => 1_000 });
+      const pending = queue.enqueue({ step: 2 }, { retry: true });
+      await vi.advanceTimersByTimeAsync(2_500);
+      expect(save).toHaveBeenCalledTimes(3);
+      queue.close();
+      await expect(pending).resolves.toBe(false);
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(save).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

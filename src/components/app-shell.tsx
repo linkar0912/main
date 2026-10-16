@@ -3,7 +3,7 @@
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { usePathname, useRouter } from "next/navigation";
-import { createContext, Fragment, useContext, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
+import { createContext, Fragment, useContext, useEffect, useEffectEvent, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
   ChartNoAxesCombined,
   UserRound,
@@ -23,13 +23,21 @@ import {
 import { PRODUCT_NAME } from "@/src/lib/branding";
 import { friendlyFirstName } from "@/src/lib/display-name";
 import { LinkarMark } from "@/src/components/linkar-mark";
-import { getWorkspaceBootstrap, refreshWorkspaceBootstrap, WORKSPACE_CHANGE_EVENT, type WorkspaceBootstrap } from "@/src/lib/client/workspace-data";
-import { shouldRedirectToOnboarding } from "@/src/lib/onboarding/redirect";
+import { getWorkspaceBootstrap, peekWorkspaceBootstrap, refreshWorkspaceBootstrap, WORKSPACE_CHANGE_EVENT, type WorkspaceBootstrap } from "@/src/lib/client/workspace-data";
+import {
+  adoptOnboardingIdentity,
+  mayRedirectToOnboarding,
+  onboardingKnownNotRequired,
+  readOnboardingDeferral,
+  rememberOnboardingNotRequired,
+  shouldRedirectToOnboarding,
+} from "@/src/lib/onboarding/redirect";
 import { planIntentRedirectPath } from "@/src/lib/billing/plan-intent";
 import type { OnboardingSummary } from "@/src/lib/onboarding/status";
 import { WORKSPACE_RECENT_KEY, workspaceActions, workspacePages } from "./command-palette-items";
 import { workspaceSources } from "./command-palette-sources";
 import { SidebarAccountsSection } from "./sidebar-accounts";
+import { DashboardSkeleton, ScreenSkeleton } from "./skeleton";
 import { AccountMenuButton, AccountMenuHead, MenuDivider, NewMenu, SearchTrigger, menuItemProps, usePaletteHotkey } from "./top-bar";
 import { Presence, usePresence } from "./ui/use-presence";
 import { slidingThumbRef } from "./ui/use-sliding-thumb";
@@ -123,8 +131,37 @@ function routePathname(pathname: string): string {
   return pathname.startsWith(DEV_PREVIEW_PREFIX) ? pathname.slice(DEV_PREVIEW_PREFIX.length) || "/" : pathname;
 }
 
+/** Window focus re-reads the shell payload at most once a minute. */
+const FOCUS_REFRESH_MIN_AGE_MS = 60_000;
+
+const subscribeNever = () => () => undefined;
+
+/**
+ * Whether page content should wait for the onboarding decision when the
+ * shell mounts on a client-side navigation into the app (leaving
+ * /onboarding, say): with no bootstrap in memory and nothing remembered for
+ * this tab, a page could start its own requests only to be replaced by
+ * /onboarding. Full page loads never get here: they hydrate the server HTML
+ * as it is (Home itself skips the requests a new workspace has no use for).
+ *
+ * `pathname` is the router's (usePathname, with any dev-preview prefix, as
+ * routeOnboarding sees it), not window.location: Next commits the new URL
+ * only after this first render, so window.location still shows the page
+ * being left. Its query string is trusted only once the URL matches; until
+ * then it counts as empty, which can only hold the page a little longer,
+ * never skip a redirect.
+ */
+function onboardingUndecided(pathname: string): boolean {
+  const search = window.location.pathname === pathname ? window.location.search : "";
+  const deferredAt = readOnboardingDeferral();
+  const cached = peekWorkspaceBootstrap();
+  if (cached) return shouldRedirectToOnboarding(cached.onboarding, pathname, search, deferredAt);
+  return !onboardingKnownNotRequired() && mayRedirectToOnboarding(pathname, search, deferredAt);
+}
+
 export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) {
-  const pathname = routePathname(usePathname());
+  const routerPathname = usePathname();
+  const pathname = routePathname(routerPathname);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<AccountIdentity["role"] | "">("");
@@ -136,6 +173,11 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
   const [identityError, setIdentityError] = useState("");
   const [onboarding, setOnboarding] = useState<OnboardingSummary | null>(null);
   const [toOnboarding, setToOnboarding] = useState(false);
+  // True only while hydrating server HTML. Server-rendered content always
+  // hydrates as it is (holding it back would mismatch the HTML); a shell
+  // mounted in the browser holds the page until the onboarding decision.
+  const hydrating = useSyncExternalStore(subscribeNever, () => false, () => true);
+  const [holdContent, setHoldContent] = useState(() => !hydrating && onboardingUndecided(routerPathname));
   const router = useRouter();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [templateOpen, setTemplateOpen] = useState(false);
@@ -194,11 +236,18 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
   // payload, so this costs no extra request.
   const routeOnboarding = useEffectEvent((data: WorkspaceBootstrap) => {
     setOnboarding(data.onboarding ?? null);
-    if (shouldRedirectToOnboarding(data.onboarding, window.location.pathname, window.location.search)) {
+    // A different account signed in on this tab: the deferral and the
+    // "not required" flag were someone else's.
+    adoptOnboardingIdentity(data.email ?? "");
+    if (data.onboarding) rememberOnboardingNotRequired(!data.onboarding.required);
+    // A deferral (onboarding could not load, or a skip could not be saved)
+    // lets people use the app instead of bouncing them straight back.
+    if (shouldRedirectToOnboarding(data.onboarding, window.location.pathname, window.location.search, readOnboardingDeferral())) {
       setToOnboarding(true);
       router.replace("/onboarding");
       return;
     }
+    setHoldContent(false);
     // A plan picked on /pricing: after sign-in (and onboarding) Home hands
     // over to that plan's checkout in Billing, once per page load.
     const billing = planIntentHandedOver.current ? null : planIntentRedirectPath(data.planIntent, data.onboarding, window.location.pathname);
@@ -228,20 +277,23 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
         // Surface a recoverable error so the top bar can say so instead of
         // silently rendering the empty default identity forever.
         setIdentityError(caught instanceof Error ? caught.message : "Could not load the workspace session");
+        // Never redirect on an error: show the page.
+        setHoldContent(false);
       });
     return () => {
       mounted = false;
     };
   }, []);
 
-  // Refresh on focus + reconnect so role / plan / avatar updates from a
-  // sibling tab or a flaky network are picked up without a full reload, and
-  // right away when this tab changes billing or a channel connection
-  // (notifyWorkspaceChanged in workspace-data.ts).
+  // Refresh on focus so role / plan / avatar updates from a sibling tab are
+  // picked up without a full reload (at most once a minute, sharing a request
+  // already in flight, and never for a hidden tab), and right away when this
+  // tab changes billing or a channel connection (notifyWorkspaceChanged in
+  // workspace-data.ts).
   useEffect(() => {
     let active = true;
-    function onFocus() {
-      void refreshWorkspaceBootstrap()
+    function refresh(request: Promise<WorkspaceBootstrap>) {
+      void request
         .then((data) => {
           if (!active) return;
           setEmail(data.email ?? "");
@@ -256,12 +308,19 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
         })
         .catch(() => undefined);
     }
+    function onFocus() {
+      if (document.hidden) return;
+      refresh(refreshWorkspaceBootstrap({ minAgeMs: FOCUS_REFRESH_MIN_AGE_MS }));
+    }
+    function onWorkspaceChange() {
+      refresh(refreshWorkspaceBootstrap());
+    }
     window.addEventListener("focus", onFocus);
-    window.addEventListener(WORKSPACE_CHANGE_EVENT, onFocus);
+    window.addEventListener(WORKSPACE_CHANGE_EVENT, onWorkspaceChange);
     return () => {
       active = false;
       window.removeEventListener("focus", onFocus);
-      window.removeEventListener(WORKSPACE_CHANGE_EVENT, onFocus);
+      window.removeEventListener(WORKSPACE_CHANGE_EVENT, onWorkspaceChange);
     };
   }, []);
 
@@ -367,12 +426,13 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
             row spacing, instead of floating in a block of its own. */}
         <nav ref={slidingThumbRef} className="sidebar-nav" aria-label="Account">
           {platformOwner ? (
-            // No prefetch: /admin redirects to the admin host, and a
-            // cross-origin prefetch is blocked by connect-src.
-            <Link className="sidebar-link" href="/admin" prefetch={false} onClick={closeDrawer}>
+            // A plain link, not next/link: /admin redirects to the admin
+            // host, and a prefetch or client-side fetch of it is blocked by
+            // connect-src. The browser just navigates there.
+            <a className="sidebar-link" href="/admin" onClick={closeDrawer}>
               <ShieldCheck size={17} strokeWidth={1.9} />
               Admin
-            </Link>
+            </a>
           ) : null}
           {accountNavigation.map(({ href, label, icon: Icon }) => (
             <Link
@@ -456,7 +516,9 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
 
           {/* The one landmark for page content; screens render plain wrappers
               inside it. tabIndex lets the skip link move focus here. */}
-          <main id="main-content" className="app-content-slot" tabIndex={-1} aria-busy={toOnboarding || undefined}>{toOnboarding ? null : children}</main>
+          <main id="main-content" className="app-content-slot" tabIndex={-1} aria-busy={toOnboarding || undefined}>
+            {toOnboarding ? null : holdContent ? (pathname === "/dashboard" ? <DashboardSkeleton /> : <ScreenSkeleton />) : children}
+          </main>
         </div>
       </div>
 

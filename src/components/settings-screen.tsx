@@ -37,6 +37,7 @@ import { PrefsGroupHead, PrefsRow, PrefsSectionHead } from "./settings/prefs";
 import type { ConnectionStatus } from "@/src/lib/repository";
 import { PRODUCT_NAME } from "@/src/lib/branding";
 import { parsePlanIntent } from "@/src/lib/billing/plan-intent";
+import { isMarketingPath } from "@/src/lib/site-routing";
 import { formatDate } from "@/src/lib/format-date";
 import { toReadableApiError } from "@/src/lib/api-error-message";
 import { Skeleton } from "./skeleton";
@@ -187,6 +188,9 @@ export function SettingsScreen() {
   const [facebookChoices, setFacebookChoices] = useState<Array<{ id: string; name: string; category?: string }>>([]);
   const [selectedFacebookPageId, setSelectedFacebookPageId] = useState("");
   const [facebookSelectionBusy, setFacebookSelectionBusy] = useState(false);
+  // The Page list for ?facebook=select-page: a failed load offers Retry.
+  const [facebookChoicesAttempt, setFacebookChoicesAttempt] = useState(0);
+  const [facebookChoicesFailed, setFacebookChoicesFailed] = useState(false);
   // The open section lives in the URL (?section=billing) so a refresh, the back
   // button and links from Help land on the right section.
   const requestedSection = searchParams.get("section");
@@ -287,18 +291,27 @@ export function SettingsScreen() {
     const controller = new AbortController();
     void fetch("/api/facebook/oauth/pages", { signal: controller.signal })
       .then(async (response) => {
-        const payload = await response.json() as { data?: Array<{ id: string; name: string; category?: string }>; error?: string };
-        if (!response.ok) throw new Error(payload.error ?? "Could not load Facebook Pages");
+        // A 502 from the edge is an HTML page, not JSON: never show a parse error.
+        const payload = (await response.json().catch(() => ({}))) as { data?: Array<{ id: string; name: string; category?: string }>; error?: string };
+        if (!response.ok) throw new Error(facebookPagesError(response.status, payload.error, "Could not load your Facebook Pages. Try again in a moment."));
         const choices = payload.data ?? [];
         setFacebookChoices(choices);
         setSelectedFacebookPageId(choices[0]?.id ?? "");
+        setFacebookChoicesFailed(false);
       })
       .catch((error) => {
         if (error instanceof DOMException && error.name === "AbortError") return;
-        setFacebookError(error instanceof Error ? error.message : "Could not load Facebook Pages");
+        setFacebookError(error instanceof Error && !(error instanceof TypeError) ? error.message : "Could not reach Linkar to load your Facebook Pages. Check your connection and try again.");
+        setFacebookChoicesFailed(true);
       });
     return () => controller.abort();
-  }, [facebookState]);
+  }, [facebookState, facebookChoicesAttempt]);
+
+  function retryFacebookChoices() {
+    setFacebookError("");
+    setFacebookChoicesFailed(false);
+    setFacebookChoicesAttempt((attempt) => attempt + 1);
+  }
 
   async function connectSelectedFacebookPage() {
     if (!selectedFacebookPageId || facebookSelectionBusy) return;
@@ -311,25 +324,32 @@ export function SettingsScreen() {
         body: JSON.stringify({ pageId: selectedFacebookPageId }),
       });
       const payload = await response.json().catch(() => ({})) as { error?: string };
-      if (!response.ok) throw new Error(toReadableApiError(payload.error, "Could not connect Facebook Page"));
-      // router.push only swaps the URL - it doesn't remount this component, so
-      // the connections/health fetched on initial mount would otherwise stay
-      // stale and still show "No Page connected" until a manual reload.
-      clearWorkspaceDataCache("connections");
-      notifyWorkspaceChanged();
+      if (!response.ok) throw new Error(facebookPagesError(response.status, payload.error, "Could not connect that Facebook Page. Try again in a moment."));
+    } catch (error) {
+      setFacebookError(error instanceof Error && !(error instanceof TypeError) ? error.message : "Could not reach Linkar to connect the Page. Check your connection and try again.");
+      setFacebookSelectionBusy(false);
+      return;
+    }
+    // The Page is connected from here on: a refresh that fails below only
+    // means the list catches up on the next visit, never a failed connect.
+    // router.push only swaps the URL - it doesn't remount this component, so
+    // the connections/health fetched on initial mount would otherwise stay
+    // stale and still show "No Page connected" until a manual reload.
+    clearWorkspaceDataCache("connections");
+    notifyWorkspaceChanged();
+    try {
       const [fbPages, fbHealthResponse] = await Promise.all([
         getFacebookPages(),
         fetch("/api/facebook/connection/health"),
       ]);
       const fbHealthPayload = (await fbHealthResponse.json().catch(() => ({ data: [] }))) as { data?: FacebookHealth[] };
       setFacebookPages(fbPages);
-      setFacebookHealth(fbHealthPayload.data ?? []);
-      router.push("/settings?facebook=connected");
-    } catch (error) {
-      setFacebookError(error instanceof Error ? error.message : "Could not connect Facebook Page");
-    } finally {
-      setFacebookSelectionBusy(false);
+      setFacebookHealth(fbHealthResponse.ok ? fbHealthPayload.data ?? [] : []);
+    } catch {
+      // Keep what is on screen; the connected banner below still shows.
     }
+    setFacebookSelectionBusy(false);
+    router.push("/settings?facebook=connected");
   }
 
   async function saveMessagingWindow(enabled: boolean) {
@@ -907,7 +927,12 @@ export function SettingsScreen() {
                         </ul>
                       )}
                     </div>
-                    {facebookError && <p className="form-error prefs-group-error" role="alert">{facebookError}</p>}
+                    {facebookError && (
+                      <p className="form-error prefs-group-error" role="alert">
+                        {facebookError}
+                        {facebookChoicesFailed ? <> <button className="text-link" type="button" onClick={retryFacebookChoices}>Retry</button></> : null}
+                      </p>
+                    )}
                   </section>
 
                   {connectedChannelCount > 0 ? (
@@ -994,7 +1019,8 @@ export function SettingsScreen() {
                     label={<><span className="prefs-dot" data-tone={mode === "demo" ? "warning" : "ok"} aria-hidden="true" /> {mode === "demo" ? "Demo mode" : "Live"}</>}
                     helper={mode === "demo" ? "Live delivery isn't set up for this workspace yet, so it runs on sample data." : "This workspace delivers live replies through Instagram and Facebook."}
                   >
-                    <Link className="text-link" href="/support">Setup guidance <ExternalLink size={13} aria-hidden="true" /></Link>
+                    {/* /support lives on the marketing host: a plain link, never fetched cross-origin. */}
+                    <a className="text-link" href="/support">Setup guidance <ExternalLink size={13} aria-hidden="true" /></a>
                   </PrefsRow>
                 </div>
               </aside>
@@ -1216,6 +1242,18 @@ export function SettingsScreen() {
   );
 }
 
+/**
+ * A sentence for a failed Facebook Page list or Page connect. Our own
+ * messages are shown as they are; an edge error page (a 502 with no JSON) or
+ * a technical message gets a plain one instead.
+ */
+function facebookPagesError(status: number, error: string | undefined, fallback: string): string {
+  if (status === 401) return "Your session has ended. Sign in again, then connect Facebook.";
+  if (status === 410) return "Choosing a Page took too long. Connect Facebook again to pick one.";
+  if (typeof error === "string" && error.trim() && !/webhook|subscription/i.test(error)) return toReadableApiError(error, fallback);
+  return fallback;
+}
+
 function roleLabel(role: string): string {
   return role.charAt(0) + role.slice(1).toLowerCase();
 }
@@ -1236,20 +1274,31 @@ function roleErrorMessage(code: string | undefined, email: string): string {
   }
 }
 
-/** A group of chevron rows that each open another page. */
+/**
+ * A group of chevron rows that each open another page. Pages on the
+ * marketing host (policies, /support) are plain links: next/link would
+ * prefetch or fetch them across origins, which connect-src blocks.
+ */
 function LinkGroup({ id, title, links }: { id: string; title: string; links: Array<[label: string, href: string, hint: string]> }) {
   return (
     <section className="prefs-group" aria-labelledby={id}>
       <PrefsGroupHead id={id} title={title} />
       <ul className="prefs-card prefs-list">
-        {links.map(([label, href, hint]) => (
-          <li key={href}>
-            <Link className="prefs-row prefs-link-row" href={href}>
+        {links.map(([label, href, hint]) => {
+          const content = (
+            <>
               <span className="prefs-row-copy"><strong>{label}</strong><small>{hint}</small></span>
               <ChevronRight size={16} aria-hidden="true" />
-            </Link>
-          </li>
-        ))}
+            </>
+          );
+          return (
+            <li key={href}>
+              {isMarketingPath(href)
+                ? <a className="prefs-row prefs-link-row" href={href}>{content}</a>
+                : <Link className="prefs-row prefs-link-row" href={href}>{content}</Link>}
+            </li>
+          );
+        })}
       </ul>
     </section>
   );

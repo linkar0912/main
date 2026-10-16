@@ -68,7 +68,9 @@ export class LoginRateLimitStore {
     private readonly namespace = "login",
   ) {
     this.fallback = createLoginAttemptLimiter(maxAttempts, windowMs);
-    this.redis = redisUrl ? new Redis(redisUrl, { maxRetriesPerRequest: 1, connectTimeout: 3_000 }) : undefined;
+    // commandTimeout: a connected but silent Valkey must reject quickly so the
+    // in-process fallback runs; otherwise sign-in waits on it forever.
+    this.redis = redisUrl ? new Redis(redisUrl, { maxRetriesPerRequest: 1, connectTimeout: 3_000, commandTimeout: 1_500 }) : undefined;
   }
 
   private redisKey(key: string): string {

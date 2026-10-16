@@ -1,8 +1,30 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { createServer, type AddressInfo, type Server, type Socket } from "node:net";
 import { GET } from "./route";
+import { GET as GET_LIVE } from "./live/route";
 
-afterEach(() => {
-  delete (globalThis as { linkarWebHealth?: unknown }).linkarWebHealth;
+const healthGlobals = globalThis as unknown as {
+  linkarWebHealth?: unknown;
+  linkarHealthRedis?: { disconnect(): void };
+  linkarHealthRedisUrl?: string;
+  linkarHealthRedisPending?: unknown;
+};
+
+let silentServer: Server | undefined;
+const silentSockets = new Set<Socket>();
+let silentConnections = 0;
+
+afterEach(async () => {
+  delete healthGlobals.linkarWebHealth;
+  healthGlobals.linkarHealthRedis?.disconnect();
+  delete healthGlobals.linkarHealthRedis;
+  delete healthGlobals.linkarHealthRedisUrl;
+  delete healthGlobals.linkarHealthRedisPending;
+  for (const socket of silentSockets) socket.destroy();
+  silentSockets.clear();
+  await new Promise<void>((resolve) => (silentServer ? silentServer.close(() => resolve()) : resolve()));
+  silentServer = undefined;
+  silentConnections = 0;
   vi.unstubAllEnvs();
 });
 
@@ -16,6 +38,17 @@ function stubDemoProduction() {
   vi.stubEnv("AUTH_SESSION_SECRET", "route-test-session-secret-at-least-32");
   vi.stubEnv("BUILD_COMMIT", "0123456789abcdef0123456789abcdef01234567");
   vi.stubEnv("HEALTH_DETAIL_TOKEN", "operator-health-token");
+}
+
+/** A Valkey that accepts connections and then never replies, like a SIGSTOPped one. */
+async function silentRedisUrl(): Promise<string> {
+  silentServer = createServer((socket) => {
+    silentConnections += 1;
+    silentSockets.add(socket);
+    socket.on("data", () => undefined);
+  });
+  await new Promise<void>((resolve) => silentServer!.listen(0, "127.0.0.1", resolve));
+  return `redis://127.0.0.1:${(silentServer!.address() as AddressInfo).port}`;
 }
 
 describe("GET /api/health", () => {
@@ -32,7 +65,7 @@ describe("GET /api/health", () => {
       release: "0123456789abcdef0123456789abcdef01234567",
       dependencies: { database: "not_configured", redis: "not_configured" },
     });
-    expect(text).toContain('"release":"0123456789abcdef0123456789abcdef01234567"');
+    expect(text).toContain('"release":"0123456789abcdef0123456789abcdef01234567","dependencies"');
   });
 
   it("returns the release and dependency detail to the release tooling", async () => {
@@ -47,5 +80,56 @@ describe("GET /api/health", () => {
       dependencies: { database: "not_configured", redis: "not_configured" },
       worker: { heartbeat: "not_configured" },
     });
+  });
+
+  it("answers inside the probe budget, reporting redis as an error, when Valkey stops replying", async () => {
+    stubDemoProduction();
+    vi.stubEnv("REDIS_URL", await silentRedisUrl());
+    const started = Date.now();
+
+    const response = await GET(new Request("http://localhost/api/health"));
+
+    expect(Date.now() - started).toBeLessThan(4_000);
+    expect(response.status).toBe(503);
+    const text = await response.text();
+    expect(JSON.parse(text)).toEqual({
+      status: "degraded",
+      release: "0123456789abcdef0123456789abcdef01234567",
+      dependencies: { database: "not_configured", redis: "error" },
+    });
+    // Key order is what ops/dokploy/release-linkar.sh matches on.
+    expect(text).toContain('"release":"0123456789abcdef0123456789abcdef01234567","dependencies"');
+  });
+});
+
+describe("GET /api/health/live", () => {
+  it("answers 200 with the baked release and no caching", async () => {
+    stubDemoProduction();
+    const response = GET_LIVE();
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    await expect(response.json()).resolves.toEqual({
+      status: "ok",
+      release: "0123456789abcdef0123456789abcdef01234567",
+    });
+  });
+
+  it("stays 200 without touching Redis or the database while both are unreachable", async () => {
+    stubDemoProduction();
+    vi.stubEnv("DATABASE_URL", "postgresql://user:secret@127.0.0.1:1/linkar");
+    vi.stubEnv("REDIS_URL", await silentRedisUrl());
+
+    const response = GET_LIVE();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(response.status).toBe(200);
+    expect(silentConnections).toBe(0);
+    expect(await response.text()).not.toContain("secret");
+  });
+
+  it("reports no release when the image has no baked commit", async () => {
+    stubDemoProduction();
+    vi.stubEnv("BUILD_COMMIT", "");
+    await expect(GET_LIVE().json()).resolves.toEqual({ status: "ok", release: null });
   });
 });

@@ -14,5 +14,8 @@ export async function POST(request: Request) {
   // /api/account instead.
   await supabase.auth.signOut({ scope: "local" });
   const hostname = resolveRequestHostname(request.headers, new URL(request.url).hostname).toLowerCase().replace(/:\d+$/, "");
-  return NextResponse.redirect(new URL("/login", hostname === ADMIN_HOST ? env.adminUrl : env.appUrl), 303);
+  // Signing out of the owner console comes back to its own sign-in page, with
+  // next=/admin so signing in again returns to the console on this host.
+  const login = hostname === ADMIN_HOST ? new URL("/login?next=%2Fadmin", env.adminUrl) : new URL("/login", env.appUrl);
+  return NextResponse.redirect(login, 303);
 }

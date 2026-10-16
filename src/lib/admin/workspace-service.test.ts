@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   transaction: vi.fn(), lookup: vi.fn(), findWorkspace: vi.fn(), findMember: vi.fn(), createMember: vi.fn(), deleteMembers: vi.fn(),
   findOwnerMember: vi.fn(), findAudit: vi.fn(), updateWorkspaces: vi.fn(), countWorkspaces: vi.fn(), findAutomations: vi.fn(), updateAutomations: vi.fn(),
-  findExport: vi.fn(),
+  findExport: vi.fn(), queryRaw: vi.fn(),
 }));
 vi.mock("server-only", () => ({}));
 vi.mock("@/src/lib/env", () => ({ getServerEnv: () => ({ platformOwnerUserIds: ["11111111-1111-4111-8111-111111111111"] }) }));
@@ -12,6 +12,7 @@ const transactionClient = {
   workspace: { findUnique: mocks.findWorkspace, updateMany: mocks.updateWorkspaces, count: mocks.countWorkspaces },
   workspaceMember: { findFirst: mocks.findMember, create: mocks.createMember, deleteMany: mocks.deleteMembers },
   automation: { findMany: mocks.findAutomations, updateMany: mocks.updateAutomations },
+  $queryRaw: mocks.queryRaw,
 };
 vi.mock("@/src/lib/prisma", () => ({ prisma: {
   $transaction: mocks.transaction,
@@ -68,18 +69,52 @@ describe("workspace membership guard", () => {
 });
 
 describe("pause and resume automations", () => {
-  it("records each paused automation with its post-pause version", async () => {
+  // The SQL text of a tagged $queryRaw call, with each value as "?".
+  const sqlOf = (call: unknown[]) => (call[0] as TemplateStringsArray).join("?").replace(/\s+/g, " ").trim();
+
+  it("pauses every active automation in one statement and records each with its post-pause version", async () => {
     mocks.updateWorkspaces.mockResolvedValue({ count: 1 });
-    mocks.findAutomations.mockResolvedValue([{ id: "a1", version: 2 }, { id: "a2", version: 5 }]);
-    mocks.updateAutomations.mockResolvedValue({ count: 1 });
-    await expect(pauseAdminWorkspaceAutomations("w1", 7)).resolves.toEqual({ paused: 2, automationIds: [["a1@3", "a2@6"]], version: 8 });
+    const automations = Array.from({ length: 30 }, (_, index) => ({ id: `a${String(index).padStart(2, "0")}`, version: index + 2 }));
+    // RETURNING order is not defined; the record is sorted by id.
+    mocks.queryRaw.mockResolvedValue([...automations].reverse());
+    const result = await pauseAdminWorkspaceAutomations("w1", 7);
+    expect(mocks.queryRaw).toHaveBeenCalledTimes(1);
+    expect(mocks.findAutomations).not.toHaveBeenCalled();
+    expect(mocks.updateAutomations).not.toHaveBeenCalled();
+    const call = mocks.queryRaw.mock.calls[0];
+    expect(sqlOf(call)).toBe(`UPDATE "Automation" SET "status" = 'PAUSED', "version" = "version" + 1, "updatedAt" = NOW() WHERE "workspaceId" = ? AND "status" = 'ACTIVE' RETURNING "id", "version"`);
+    expect(call.slice(1)).toEqual(["w1"]);
+    expect(result).toEqual({ paused: 30, automationIds: [automations.map((item) => `${item.id}@${item.version}`)], version: 8 });
+    expect(mocks.transaction).toHaveBeenCalledWith(expect.any(Function), { maxWait: 5_000, timeout: 15_000 });
   });
-  it("resumes only automations unchanged since the last pause", async () => {
-    mocks.findAudit.mockResolvedValue({ requestId: "req", after: { automationIds: [["a1@3", "a2@6"]] } });
+  it("keeps the audit record in chunks of 100", async () => {
     mocks.updateWorkspaces.mockResolvedValue({ count: 1 });
-    mocks.updateAutomations.mockResolvedValueOnce({ count: 1 }).mockResolvedValueOnce({ count: 0 });
-    await expect(resumeAdminWorkspaceAutomations("w1", 8)).resolves.toMatchObject({ resumed: 1, skipped: 1, automationIds: [["a1"]], version: 9 });
-    expect(mocks.updateAutomations.mock.calls[0][0].where).toEqual({ id: "a1", workspaceId: "w1", version: 3, status: "PAUSED", archivedAt: null });
+    mocks.queryRaw.mockResolvedValue(Array.from({ length: 150 }, (_, index) => ({ id: `a${String(index).padStart(3, "0")}`, version: 2 })));
+    const result = await pauseAdminWorkspaceAutomations("w1", 7);
+    expect(result.automationIds.map((chunk) => chunk.length)).toEqual([100, 50]);
+    expect(result.automationIds[0][0]).toBe("a000@2");
+  });
+  it("pauses nothing when the workspace version is stale", async () => {
+    mocks.updateWorkspaces.mockResolvedValue({ count: 0 });
+    await expect(pauseAdminWorkspaceAutomations("w1", 7)).rejects.toMatchObject({ status: 409, code: "stale_version" });
+    expect(mocks.queryRaw).not.toHaveBeenCalled();
+  });
+  it("resumes, in one statement, only automations unchanged since the last pause", async () => {
+    mocks.findAudit.mockResolvedValue({ requestId: "req", after: { automationIds: [["a1@3", "a2@6"], ["a3@9"]] } });
+    mocks.updateWorkspaces.mockResolvedValue({ count: 1 });
+    mocks.queryRaw.mockResolvedValue([{ id: "a3" }, { id: "a1" }]);
+    await expect(resumeAdminWorkspaceAutomations("w1", 8)).resolves.toEqual({ resumed: 2, skipped: 1, automationIds: [["a1", "a3"]], pausedBy: "req", version: 9 });
+    expect(mocks.queryRaw).toHaveBeenCalledTimes(1);
+    expect(mocks.updateAutomations).not.toHaveBeenCalled();
+    const call = mocks.queryRaw.mock.calls[0];
+    const sql = sqlOf(call);
+    expect(sql).toContain(`SET "status" = 'ACTIVE', "version" = automation."version" + 1, "updatedAt" = NOW()`);
+    expect(sql).toContain(`FROM unnest(?::text[], ?::integer[]) AS entry("id", "version")`);
+    for (const guard of [`automation."id" = entry."id"`, `automation."workspaceId" = ?`, `automation."version" = entry."version"`, `automation."status" = 'PAUSED'`, `automation."archivedAt" IS NULL`]) {
+      expect(sql).toContain(guard);
+    }
+    expect(call.slice(1)).toEqual([["a1", "a2", "a3"], [3, 6, 9], "w1"]);
+    expect(mocks.transaction).toHaveBeenCalledWith(expect.any(Function), { maxWait: 5_000, timeout: 15_000 });
   });
   it("reports when no pause was recorded", async () => {
     mocks.findAudit.mockResolvedValue(null);

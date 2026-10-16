@@ -4,9 +4,13 @@ import { canViewHealthDetail, getCachedWebHealth, HEALTH_DETAIL_HEADER, isWebSer
 export const runtime = "nodejs";
 
 export async function GET(request: Request) {
+  // Each probe has its own deadline (5 s for the database, 2 s for Redis; see
+  // src/lib/health.ts), so this answers even when a dependency does not.
   const health = await getCachedWebHealth();
-  // The HTTP status is what the container healthcheck reads, so it follows
-  // this container's own dependencies; a stale worker shows in `status` only.
+  // This is readiness: the HTTP status follows this container's own
+  // dependencies, and a stale worker shows in `status` only. The image's
+  // HEALTHCHECK probes /api/health/live, so a dependency outage does not get
+  // the only web task replaced.
   const serving = isWebServing(health);
   const httpStatus = serving ? 200 : 503;
   // The public body carries only this container's own state, its database

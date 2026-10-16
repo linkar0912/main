@@ -28,6 +28,7 @@ import type {
   InvitationRecord,
   AutomationContactRecord,
   CapturedContactSummary,
+  ContactReconcileCandidate,
   LeadStatus,
   ContactTimelineEntry,
   VariantPerformance,
@@ -182,7 +183,15 @@ const workerUrl = workerDatabaseUrl({
   workerUrl: process.env.WORKER_DATABASE_URL,
   connections: process.env.WORKER_DATABASE_CONNECTIONS,
 });
-export const prisma = globalForPrisma.prisma ?? new PrismaClient(workerUrl ? { datasourceUrl: workerUrl } : undefined);
+// Prisma's own interactive-transaction defaults (2 s to get a connection, 5 s
+// to finish) are shorter than a busy pool or a few cross-region round trips,
+// and a transaction that runs out rolls back with P2028. Every $transaction
+// gets these unless it passes its own.
+export const TRANSACTION_DEFAULTS = { maxWait: 5_000, timeout: 15_000 } as const;
+export const prisma = globalForPrisma.prisma ?? new PrismaClient({
+  ...(workerUrl ? { datasourceUrl: workerUrl } : {}),
+  transactionOptions: TRANSACTION_DEFAULTS,
+});
 if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
 
 function mapAutomation(record: {
@@ -700,6 +709,16 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
 
   /** Rows per statement for the hourly retention sweeps. */
   const SWEEP_BATCH_SIZE = 1_000;
+
+  /** Rows per insert and per read in ensureOutboundDeliveries. */
+  const DELIVERY_BATCH_SIZE = 500;
+
+  /**
+   * Meta's data-deletion callbacks run 10 to 20 statements in one transaction
+   * and must finish, or Meta retries the whole request. Give them far more
+   * room than TRANSACTION_DEFAULTS.
+   */
+  const DATA_DELETION_TRANSACTION = { maxWait: 10_000, timeout: 60_000 } as const;
 
   /** Reads one contact under SELECT ... FOR UPDATE inside the caller's transaction. */
   async function lockContact(
@@ -1549,7 +1568,7 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
             status: "PENDING",
           },
         });
-      });
+      }, DATA_DELETION_TRANSACTION);
       return mapDeletionRequest(record);
     },
 
@@ -1749,7 +1768,7 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
         return transaction.dataDeletionRequest.create({
           data: { id: createId("deletion"), confirmationCode, signedRequestHash, status: "PENDING" },
         });
-      });
+      }, DATA_DELETION_TRANSACTION);
       return mapDeletionRequest(record);
     },
     async listAutomationsForFacebookPage(workspaceId, pageId) {
@@ -2030,6 +2049,34 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
         });
         return mapOutboundDelivery(winner);
       }
+    },
+
+    async ensureOutboundDeliveries(inputs: EnsureOutboundDeliveryInput[]) {
+      // Two statements per 500 rows instead of a read and an insert per row:
+      // a 500-person broadcast used to fire about 500 statements at once and
+      // drain the web pool for everyone else.
+      const records: OutboundDeliveryRecord[] = [];
+      for (let index = 0; index < inputs.length; index += DELIVERY_BATCH_SIZE) {
+        const batch = inputs.slice(index, index + DELIVERY_BATCH_SIZE);
+        await client.outboundDelivery.createMany({
+          data: batch.map((input) => ({
+            id: createId("delivery"),
+            ...input,
+            payload: input.payload as Prisma.InputJsonValue,
+          })),
+          skipDuplicates: true,
+        });
+        const stored = await client.outboundDelivery.findMany({
+          where: { deliveryKey: { in: [...new Set(batch.map((input) => input.deliveryKey))] } },
+        });
+        const byKey = new Map(stored.map((record) => [record.deliveryKey, record]));
+        for (const input of batch) {
+          const record = byKey.get(input.deliveryKey);
+          if (!record) throw new Error(`Outbound delivery ${input.deliveryKey} was not stored`);
+          records.push(mapOutboundDelivery(record));
+        }
+      }
+      return records;
     },
 
     async getOutboundDelivery(deliveryKey) {
@@ -2382,10 +2429,15 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
       return records.map(mapParticipant);
     },
 
-    async countExecutionsByStatusPerAutomation(workspaceId, sinceIso) {
+    async countExecutionsByStatusPerAutomation(workspaceId, sinceIso, automationId) {
       const grouped = await client.automationExecution.groupBy({
         by: ["automationId", "status"],
-        where: { workspaceId, createdAt: { gte: new Date(sinceIso) }, status: { in: ["SENT", "FAILED", "SKIPPED"] } },
+        where: {
+          workspaceId,
+          ...(automationId ? { automationId } : {}),
+          createdAt: { gte: new Date(sinceIso) },
+          status: { in: ["SENT", "FAILED", "SKIPPED"] },
+        },
         _count: { _all: true },
       });
       const tallies = new Map<string, { automationId: string; sent: number; failed: number; skipped: number }>();
@@ -2512,6 +2564,51 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
         });
         return { created: false, record: mapContact(record) };
       }
+    },
+
+    async reconcileContacts(workspaceId, candidates: ContactReconcileCandidate[]) {
+      // One row per sender: ON CONFLICT DO UPDATE refuses to touch the same
+      // row twice in one statement.
+      const merged = new Map<string, ContactReconcileCandidate>();
+      for (const candidate of candidates) {
+        const key = `${candidate.instagramAccountId}:${candidate.igScopedUserId}`;
+        const current = merged.get(key);
+        merged.set(key, current ? {
+          ...current,
+          firstSeenAt: candidate.firstSeenAt < current.firstSeenAt ? candidate.firstSeenAt : current.firstSeenAt,
+          lastSeenAt: candidate.lastSeenAt > current.lastSeenAt ? candidate.lastSeenAt : current.lastSeenAt,
+        } : candidate);
+      }
+      const rows = [...merged.values()];
+      if (rows.length === 0) return 0;
+      const iso = (value: string) => new Date(value).toISOString();
+      // One statement for the whole backfill. The conflict branch only widens
+      // the two dates: unlike touchContact it never reopens a conversation
+      // someone closed, and it leaves updatedAt alone. It skips rows whose
+      // dates already cover the candidate, so a repeat run writes nothing.
+      // xmax = 0 marks the rows this statement inserted.
+      const result = await client.$queryRaw<Array<{ inserted: boolean }>>(Prisma.sql`
+        INSERT INTO "AutomationContact" (
+          "id", "workspaceId", "instagramAccountId", "igScopedUserId", "createdAt", "lastSeenAt", "updatedAt"
+        )
+        SELECT candidate."id", ${workspaceId}, candidate."instagramAccountId", candidate."igScopedUserId",
+               (candidate."firstSeenAt" AT TIME ZONE 'UTC'), (candidate."lastSeenAt" AT TIME ZONE 'UTC'),
+               (NOW() AT TIME ZONE 'UTC')
+        FROM unnest(
+          ${rows.map(() => createId("contact"))}::text[],
+          ${rows.map((row) => row.instagramAccountId)}::text[],
+          ${rows.map((row) => row.igScopedUserId)}::text[],
+          ${rows.map((row) => iso(row.firstSeenAt))}::timestamptz[],
+          ${rows.map((row) => iso(row.lastSeenAt))}::timestamptz[]
+        ) AS candidate("id", "instagramAccountId", "igScopedUserId", "firstSeenAt", "lastSeenAt")
+        ON CONFLICT ("workspaceId", "instagramAccountId", "igScopedUserId") DO UPDATE
+          SET "createdAt" = LEAST("AutomationContact"."createdAt", EXCLUDED."createdAt"),
+              "lastSeenAt" = GREATEST("AutomationContact"."lastSeenAt", EXCLUDED."lastSeenAt")
+          WHERE "AutomationContact"."createdAt" > EXCLUDED."createdAt"
+             OR "AutomationContact"."lastSeenAt" < EXCLUDED."lastSeenAt"
+        RETURNING (xmax = 0) AS "inserted"
+      `);
+      return result.filter((row) => row.inserted).length;
     },
 
     async getContact(workspaceId, instagramAccountId, igScopedUserId) {
@@ -2730,7 +2827,9 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
         id: record.id,
         email: record.email!,
         instagramAccountId: record.instagramAccountId,
-        capturedAt: record.updatedAt.toISOString(),
+        // updatedAt moves on every later edit; it is only the fallback for
+        // addresses captured before emailCapturedAt existed.
+        capturedAt: (record.emailCapturedAt ?? record.updatedAt).toISOString(),
       }));
     },
 
@@ -2830,7 +2929,7 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
         });
       }
       if (contact.email) {
-        entries.push({ id: "milestone:email", kind: "email_captured", at: contact.updatedAt.toISOString(), label: "Email captured", detail: contact.email });
+        entries.push({ id: "milestone:email", kind: "email_captured", at: (contact.emailCapturedAt ?? contact.updatedAt).toISOString(), label: "Email captured", detail: contact.email });
       }
       if (contact.suppressedAt) {
         entries.push({ id: "milestone:optout", kind: "opted_out", at: contact.suppressedAt.toISOString(), label: "Opted out" });
@@ -3655,6 +3754,30 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
         where: { workspaceId },
         create: { workspaceId, ...data },
         update: data,
+      });
+      return mapWorkspaceOnboarding(row);
+    },
+
+    async updateWorkspaceOnboarding(workspaceId, change) {
+      const row = await client.$transaction(async (transaction) => {
+        const lock = () => transaction.$queryRaw<WorkspaceOnboardingRow[]>(Prisma.sql`
+          SELECT * FROM "WorkspaceOnboarding" WHERE "workspaceId" = ${workspaceId} FOR UPDATE
+        `);
+        let [current] = await lock();
+        let created = false;
+        if (!current) {
+          // First save: create the row with its column defaults, then lock
+          // it. A second first save waits on this insert and then reads the
+          // answers this one stored, instead of overwriting them.
+          created = await transaction.$executeRaw(Prisma.sql`
+            INSERT INTO "WorkspaceOnboarding" ("workspaceId", "createdAt", "updatedAt")
+            VALUES (${workspaceId}, (NOW() AT TIME ZONE 'UTC'), (NOW() AT TIME ZONE 'UTC'))
+            ON CONFLICT ("workspaceId") DO NOTHING
+          `) === 1;
+          [current] = await lock();
+        }
+        const patch = change(current && !created ? mapWorkspaceOnboarding(current) : null);
+        return transaction.workspaceOnboarding.update({ where: { workspaceId }, data: workspaceOnboardingData(patch) });
       });
       return mapWorkspaceOnboarding(row);
     },

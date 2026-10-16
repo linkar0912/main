@@ -362,4 +362,100 @@ describe("validateFlowDefinition", () => {
     expect(flow.emailCapture.fields[0].exitKeywords).toEqual(["no", "skip"]);
     expect(flow.emailCapture.exitText).toBe("No worries!");
   });
+
+  describe("keyword and media bounds", () => {
+    const commentFlow = (trigger: Record<string, unknown>, extra: Record<string, unknown> = {}) => ({
+      version: 1,
+      trigger: { type: "comment", match: "keyword", keywords: ["guide"], mediaIds: [], ...trigger },
+      conditions: [],
+      actions: [{ type: "private_reply", text: "Sent" }],
+      ...extra,
+    });
+    const keywords = (count: number) => Array.from({ length: count }, (_, index) => `keyword ${index}`);
+    const mediaIds = (count: number) => Array.from({ length: count }, (_, index) => `media_${index}`);
+
+    it("rejects a 5,000-keyword definition and accepts up to 50 keywords", () => {
+      expect(() => validateFlowDefinition(commentFlow({ keywords: keywords(5_000) }))).toThrow("Use 50 keywords or fewer");
+      expect(() => validateFlowDefinition(commentFlow({ keywords: keywords(51) }))).toThrow("Use 50 keywords or fewer");
+      expect(validateFlowDefinition(commentFlow({ keywords: keywords(50) })).trigger).toMatchObject({
+        keywords: keywords(50),
+      });
+      expect(() => validateFlowDefinition({
+        version: 1,
+        trigger: { type: "message", match: "keyword", keywords: keywords(51) },
+        conditions: [],
+        actions: [{ type: "send_text", text: "Hi" }],
+      })).toThrow("Use 50 keywords or fewer");
+      expect(() => validateFlowDefinition({
+        ...campaign,
+        trigger: { ...campaign.trigger, keywords: keywords(51) },
+      })).toThrow("Use 50 keywords or fewer");
+    });
+
+    it("rejects a 101-character keyword and accepts 100 characters", () => {
+      expect(() => validateFlowDefinition(commentFlow({ keywords: ["a".repeat(101)] })))
+        .toThrow("Keep each keyword to 100 characters or fewer");
+      expect(validateFlowDefinition(commentFlow({ keywords: ["a".repeat(100)] })).trigger)
+        .toMatchObject({ keywords: ["a".repeat(100)] });
+      expect(() => validateFlowDefinition(commentFlow({ keywords: [`a${" ".repeat(10)}${"b".repeat(100)}`] })))
+        .toThrow("Keep each keyword to 100 characters or fewer");
+    });
+
+    it("caps media ids, condition keywords and conditions", () => {
+      expect(() => validateFlowDefinition(commentFlow({ mediaIds: mediaIds(101) }))).toThrow("Choose 100 posts or fewer");
+      expect(validateFlowDefinition(commentFlow({ mediaIds: mediaIds(100) })).trigger).toMatchObject({
+        mediaIds: mediaIds(100),
+      });
+      expect(() => validateFlowDefinition(commentFlow({}, {
+        conditions: [{ type: "media_is", mediaIds: mediaIds(101) }],
+      }))).toThrow("Choose 100 posts or fewer");
+      expect(() => validateFlowDefinition(commentFlow({}, {
+        conditions: [{ type: "contains_keyword", keywords: keywords(51) }],
+      }))).toThrow("Use 50 keywords or fewer");
+      expect(() => validateFlowDefinition(commentFlow({}, {
+        conditions: Array.from({ length: 11 }, () => ({ type: "contains_keyword", keywords: ["pdf"] })),
+      }))).toThrow("Use 10 conditions or fewer");
+
+      const snapshots = mediaIds(101).map((id) => ({ ...campaign.trigger.mediaSnapshots[0], id }));
+      expect(() => validateFlowDefinition({
+        ...campaign,
+        trigger: { ...campaign.trigger, mediaIds: mediaIds(101), mediaSnapshots: snapshots },
+      })).toThrow("Choose 100 posts or fewer");
+    });
+
+    it("accepts regex keywords the linear-time matcher compiles, including former ReDoS patterns", () => {
+      const patterns = [
+        "^size\\s*\\d+$", "(a|a)+$", "((a+))+$", "(a+){2,}$", "(.*a){12}$", "(\\w|\\d)*$",
+        // Groups holding only assertions may be repeated, as in JavaScript.
+        "(?:^)+price", "(\\b)*guide", "guide($){1,}",
+      ];
+      for (const pattern of patterns) {
+        expect(validateFlowDefinition(commentFlow({ mode: "regex", keywords: [pattern] })).trigger)
+          .toMatchObject({ keywords: [pattern] });
+      }
+    });
+
+    it("rejects regex keywords the matcher cannot compile or that exceed 100 characters", () => {
+      for (const pattern of ["(", "(?=price)p", "(a)\\1", "\\p{L}+", "a{5000}"]) {
+        expect(() => validateFlowDefinition(commentFlow({ mode: "regex", keywords: ["ok", pattern] })), pattern)
+          .toThrow("This pattern is not valid or uses something the matcher does not support");
+      }
+      expect(() => validateFlowDefinition(commentFlow({ mode: "regex", keywords: [`${"a".repeat(99)}+$`] })))
+        .toThrow("Keep each keyword to 100 characters or fewer");
+      expect(() => validateFlowDefinition({
+        version: 1,
+        trigger: { type: "story_reply", match: "keyword", mode: "regex", keywords: ["(?<=x)y"] },
+        conditions: [],
+        actions: [{ type: "send_text", text: "Hi" }],
+      })).toThrow("This pattern is not valid");
+    });
+
+    it("keeps the case of regex keywords so escapes like \\D keep their meaning", () => {
+      expect(validateFlowDefinition(commentFlow({ mode: "regex", keywords: [" \\D+\\S ", "\\D+\\S"] })).trigger)
+        .toMatchObject({ keywords: ["\\D+\\S"] });
+      expect(validateFlowDefinition(commentFlow({ mode: "any", keywords: [" GUIDE "] })).trigger)
+        .toMatchObject({ keywords: ["guide"] });
+    });
+  });
 });
+

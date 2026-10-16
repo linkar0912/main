@@ -123,6 +123,8 @@ type ClientCache<T> = {
   value?: T;
   pending?: Promise<T>;
   fetchedAt?: number;
+  /** When the last request started, whether it then worked or failed. */
+  attemptedAt?: number;
   fetcher?: typeof fetch;
 };
 
@@ -131,6 +133,7 @@ type ClientCache<T> = {
 // only cuts repeat request volume - the UI never blocks on a stale value.
 const FRESH_FOR_MS = 120_000;
 
+const BOOTSTRAP_URL = "/api/workspace/bootstrap";
 const bootstrapCache: ClientCache<WorkspaceBootstrap> = {};
 const accountProfileCache: ClientCache<AccountProfile> = {};
 const connectionsCache: ClientCache<InstagramConnectionSummary[]> = {};
@@ -169,6 +172,7 @@ function wrappedData<T>(url: string): (payload: unknown) => T {
 }
 
 function startRequest<T>(cache: ClientCache<T>, url: string, select: (payload: unknown) => T): Promise<T> {
+  cache.attemptedAt = Date.now();
   const pending = requestJson(url, select)
     .then((value) => {
       cache.value = value;
@@ -184,15 +188,19 @@ function startRequest<T>(cache: ClientCache<T>, url: string, select: (payload: u
   return pending;
 }
 
+/**
+ * A replaced fetch implementation indicates a new test/runtime boundary, so
+ * the entry starts over. In the browser the native fetch reference stays
+ * stable for the session.
+ */
+function adoptFetcher(cache: ClientCache<unknown>): void {
+  if (cache.fetcher === fetch) return;
+  resetCache(cache);
+  cache.fetcher = fetch;
+}
+
 function sharedRequest<T>(cache: ClientCache<T>, url: string, select: (payload: unknown) => T, waitForStaleRefresh = false): Promise<T> {
-  // A replaced fetch implementation indicates a new test/runtime boundary.
-  // In the browser the native fetch reference stays stable for the session.
-  if (cache.fetcher !== fetch) {
-    cache.value = undefined;
-    cache.pending = undefined;
-    cache.fetchedAt = undefined;
-    cache.fetcher = fetch;
-  }
+  adoptFetcher(cache);
   if (cache.value !== undefined && cache.fetchedAt !== undefined) {
     if (Date.now() - cache.fetchedAt < FRESH_FOR_MS) return Promise.resolve(cache.value);
     if (!cache.pending) {
@@ -257,7 +265,12 @@ export function seedWorkspaceData(seed: {
 }
 
 export function getWorkspaceBootstrap(): Promise<WorkspaceBootstrap> {
-  return cachedRequest(bootstrapCache, "/api/workspace/bootstrap");
+  return cachedRequest(bootstrapCache, BOOTSTRAP_URL);
+}
+
+/** The bootstrap already confirmed in memory, without a request. */
+export function peekWorkspaceBootstrap(): WorkspaceBootstrap | undefined {
+  return bootstrapCache.fetcher === fetch ? bootstrapCache.value : undefined;
 }
 
 export function getAccountProfile(): Promise<AccountProfile> {
@@ -311,6 +324,7 @@ function resetCache(cache: ClientCache<unknown>): void {
   cache.value = undefined;
   cache.pending = undefined;
   cache.fetchedAt = undefined;
+  cache.attemptedAt = undefined;
   cache.fetcher = undefined;
 }
 
@@ -335,10 +349,42 @@ export function invalidateWorkspaceResource(key: WorkspaceResourceKey): void {
  * Force a fresh fetch of the workspace bootstrap, bypassing the in-memory
  * cache. Use after a role change, plan upgrade, or avatar update so the
  * sidebar reflects server state without a full page reload.
+ *
+ * With `minAgeMs` (the shell's window-focus refresh) it is a throttled
+ * refresh instead, so switching windows back and forth never sends a burst
+ * of identical requests, even while the server is failing:
+ * - a request already in flight is shared;
+ * - within `minAgeMs` of the last attempt, worked or failed, nothing is
+ *   sent: the confirmed value comes back as it is, or the call rejects when
+ *   there is none;
+ * - otherwise the value is revalidated in place: the last confirmed one
+ *   stays cached meanwhile and survives a failed refresh.
  */
-export function refreshWorkspaceBootstrap(): Promise<WorkspaceBootstrap> {
-  invalidateWorkspaceResource("bootstrap");
-  return getWorkspaceBootstrap();
+export function refreshWorkspaceBootstrap({ minAgeMs }: { minAgeMs?: number } = {}): Promise<WorkspaceBootstrap> {
+  if (minAgeMs === undefined) {
+    invalidateWorkspaceResource("bootstrap");
+    return getWorkspaceBootstrap();
+  }
+  adoptFetcher(bootstrapCache);
+  if (bootstrapCache.pending) return bootstrapCache.pending;
+  const lastAttempt = bootstrapCache.attemptedAt ?? bootstrapCache.fetchedAt;
+  if (lastAttempt !== undefined && Date.now() - lastAttempt < minAgeMs) {
+    return bootstrapCache.value !== undefined
+      ? Promise.resolve(bootstrapCache.value)
+      : Promise.reject(new Error(`Not refreshing ${BOOTSTRAP_URL}: the last attempt was too recent`));
+  }
+  return startRequest(bootstrapCache, BOOTSTRAP_URL, wrappedData<WorkspaceBootstrap>(BOOTSTRAP_URL));
+}
+
+/**
+ * Delay before retry number `attempt` (1 for the first retry): `baseMs`
+ * doubling each time up to `capMs`, spread by up to a fifth either way so
+ * many open tabs do not retry in step. Never above `capMs`.
+ */
+export function backoffDelay(attempt: number, { baseMs, capMs, random = Math.random }: { baseMs: number; capMs: number; random?: () => number }): number {
+  const exponent = Math.max(0, Math.floor(attempt) - 1);
+  const base = Math.min(capMs, baseMs * 2 ** Math.min(exponent, 30));
+  return Math.round(Math.min(capMs, base * (0.8 + random() * 0.4)));
 }
 
 /** Window event the app shell listens for to re-read the bootstrap. */

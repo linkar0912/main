@@ -2,7 +2,26 @@ import { z } from "zod";
 import type { FlowDefinition, FlowDefinitionV1, FlowDefinitionV2, FlowSchedule } from "./types";
 import { isSafeOutboundUrl } from "../security/outbound-url";
 import { validateDefinitionForTarget, type ChannelDescriptor, type ChannelValidationIssue } from "./channels/registry";
-const keyword = z.string().trim().min(1);
+import { compileRegexKeyword, MAX_REGEX_KEYWORD_LENGTH } from "./match";
+
+// Save-time bounds. They keep one automation from costing the shared worker
+// seconds of CPU per event. Stored definitions are never re-parsed on the
+// worker or dashboard read paths, so automations saved before these bounds
+// keep running; they only have to fit when they are next saved or switched on.
+export const MAX_KEYWORD_LENGTH = 100;
+export const MAX_KEYWORDS = 50;
+export const MAX_MEDIA_IDS = 100;
+const MAX_CONDITIONS = 10;
+
+const keyword = z
+  .string()
+  .trim()
+  .min(1)
+  .max(MAX_KEYWORD_LENGTH, `Keep each keyword to ${MAX_KEYWORD_LENGTH} characters or fewer`);
+const keywordList = z.array(keyword).max(MAX_KEYWORDS, `Use ${MAX_KEYWORDS} keywords or fewer`);
+const mediaIdList = <T extends z.ZodType>(item: T) =>
+  z.array(item).max(MAX_MEDIA_IDS, `Choose ${MAX_MEDIA_IDS} posts or fewer`);
+const keywordMode = z.enum(["any", "all", "exact", "regex", "contains"]).optional();
 const link = z
   .string()
   .url()
@@ -41,9 +60,9 @@ function normalizeSchedule(schedule: FlowSchedule | undefined): FlowSchedule | u
 const commentTrigger = z.object({
   type: z.literal("comment"),
   match: z.enum(["keyword", "any"]),
-  keywords: z.array(keyword),
-  mediaIds: z.array(z.string().trim()),
-  mode: z.enum(["any", "all", "exact", "regex", "contains"]).optional(),
+  keywords: keywordList,
+  mediaIds: mediaIdList(z.string().trim()),
+  mode: keywordMode,
   // Each negative keyword is bounded to 80 chars; total list capped at 20 entries.
   negativeKeywords: z.array(z.string().trim().max(80)).max(20).optional(),
   // Reply override per media id; key capped to 120, value to 500 chars.
@@ -56,8 +75,8 @@ const commentTrigger = z.object({
 const messageTrigger = z.object({
   type: z.literal("message"),
   match: z.enum(["keyword", "any"]),
-  keywords: z.array(keyword),
-  mode: z.enum(["any", "all", "exact", "regex", "contains"]).optional(),
+  keywords: keywordList,
+  mode: keywordMode,
 });
 
 const referralTrigger = z.object({ type: z.literal("referral") });
@@ -67,8 +86,8 @@ const storyMentionTrigger = z.object({ type: z.literal("story_mention") });
 const storyReplyTrigger = z.object({
   type: z.literal("story_reply"),
   match: z.enum(["keyword", "any"]),
-  keywords: z.array(keyword),
-  mode: z.enum(["any", "all", "exact", "regex", "contains"]).optional(),
+  keywords: keywordList,
+  mode: keywordMode,
 });
 
 // DM email collection: the runner sends `promptText` after the flow's actions, waits
@@ -124,8 +143,8 @@ const emailCaptureSchema = z.object({
 });
 
 const condition = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("contains_keyword"), keywords: z.array(keyword).min(1) }),
-  z.object({ type: z.literal("media_is"), mediaIds: z.array(z.string().trim()).min(1) }),
+  z.object({ type: z.literal("contains_keyword"), keywords: keywordList.min(1) }),
+  z.object({ type: z.literal("media_is"), mediaIds: mediaIdList(z.string().trim()).min(1) }),
 ]);
 
 const action = z.discriminatedUnion("type", [
@@ -195,7 +214,7 @@ const flowV1Schema = z
       storyMentionTrigger,
       storyReplyTrigger,
     ]),
-    conditions: z.array(condition),
+    conditions: z.array(condition).max(MAX_CONDITIONS, `Use ${MAX_CONDITIONS} conditions or fewer`),
     actions: z.array(action).min(1).max(3),
     dailySendLimit: z.number().int().min(1).max(1_000).optional(),
     schedule: scheduleSchema.optional(),
@@ -221,6 +240,21 @@ const flowV1Schema = z
             : "Any-message triggers cannot include keywords",
         });
       }
+    }
+
+    if (
+      (flow.trigger.type === "comment" || flow.trigger.type === "message" || flow.trigger.type === "story_reply")
+      && flow.trigger.mode === "regex"
+    ) {
+      flow.trigger.keywords.forEach((pattern, index) => {
+        // Over-long patterns already fail the keyword length check above.
+        if (pattern.length > MAX_REGEX_KEYWORD_LENGTH || compileRegexKeyword(pattern)) return;
+        context.addIssue({
+          code: "custom",
+          path: ["trigger", "keywords", index],
+          message: "This pattern is not valid or uses something the matcher does not support, such as lookarounds or backreferences",
+        });
+      });
     }
 
     if (flow.trigger.type === "comment") {
@@ -307,10 +341,10 @@ const flowV2Schema = z
     trigger: z.object({
       type: z.literal("comment"),
       source: z.enum(["specific_media", "all_media", "next_media"]),
-      mediaIds: z.array(z.string().trim().min(1)),
-      mediaSnapshots: z.array(mediaSnapshot),
+      mediaIds: mediaIdList(z.string().trim().min(1)),
+      mediaSnapshots: mediaIdList(mediaSnapshot),
       match: z.enum(["keyword", "any"]),
-      keywords: z.array(keyword),
+      keywords: keywordList,
     }),
     publicReplies: z.array(campaignText).max(5),
     openingMessage: z.object({
@@ -420,6 +454,15 @@ function normalizeKeywords(keywords: string[]): string[] {
   return [...new Set(keywords.map((value) => value.trim().toLowerCase()).filter(Boolean))];
 }
 
+/**
+ * Regex patterns keep their case: matching ignores case anyway, and
+ * lower-casing would turn \D, \S, \W and \B into their opposites.
+ */
+function normalizeTriggerKeywords(keywords: string[], mode: string | undefined): string[] {
+  if (mode !== "regex") return normalizeKeywords(keywords);
+  return [...new Set(keywords.map((value) => value.trim()).filter(Boolean))];
+}
+
 function normalizeTextVariants(variants: string[] | undefined): string[] | undefined {
   if (!variants) return undefined;
   const normalized = [...new Set(variants.map((value) => value.trim()).filter(Boolean))];
@@ -432,7 +475,7 @@ function normalizeV1(parsed: z.output<typeof flowV1Schema>): FlowDefinitionV1 {
       ? {
           type: "comment" as const,
           match: parsed.trigger.match,
-          keywords: normalizeKeywords(parsed.trigger.keywords),
+          keywords: normalizeTriggerKeywords(parsed.trigger.keywords, parsed.trigger.mode),
           mediaIds: parsed.trigger.mediaIds.map((mediaId) => mediaId.trim()).filter(Boolean),
           ...(parsed.trigger.mode ? { mode: parsed.trigger.mode } : {}),
           ...(parsed.trigger.negativeKeywords && parsed.trigger.negativeKeywords.length > 0
@@ -445,7 +488,7 @@ function normalizeV1(parsed: z.output<typeof flowV1Schema>): FlowDefinitionV1 {
         ? {
             type: parsed.trigger.type,
             match: parsed.trigger.match,
-            keywords: normalizeKeywords(parsed.trigger.keywords),
+            keywords: normalizeTriggerKeywords(parsed.trigger.keywords, parsed.trigger.mode),
             ...(parsed.trigger.mode ? { mode: parsed.trigger.mode } : {}),
           }
         : { type: parsed.trigger.type };

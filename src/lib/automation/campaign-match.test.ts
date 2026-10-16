@@ -84,6 +84,30 @@ describe("matchCampaign", () => {
     });
   });
 
+  it("returns the first keyword in list order that matches, normalized", () => {
+    const definition: FlowDefinitionV2 = {
+      ...campaignDefinition,
+      trigger: { ...campaignDefinition.trigger, keywords: ["link", "pdf", "guide"] },
+    };
+
+    expect(matchCampaign(definition, { ...commentEvent, text: "GUIDE or PDF please" })).toEqual({
+      matched: true,
+      keyword: "pdf",
+    });
+  });
+
+  it("ignores keywords that only appear after the first 2,200 characters", () => {
+    const padding = "x ".repeat(1_100);
+    expect(matchCampaign(campaignDefinition, { ...commentEvent, text: `${padding}guide` })).toEqual({
+      matched: false,
+      reason: "keyword did not match",
+    });
+    expect(matchCampaign(campaignDefinition, { ...commentEvent, text: `${padding.slice(0, -10)}guide` })).toEqual({
+      matched: true,
+      keyword: "guide",
+    });
+  });
+
   it("defers next-media matching until a runner binds media", () => {
     const definition: FlowDefinitionV2 = {
       ...campaignDefinition,

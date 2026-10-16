@@ -741,6 +741,8 @@ model AutomationContact {
   @@index([workspaceId, leadStatus, lastSeenAt(sort: Desc), id], map: "AutomationContact_leadStatus_lastSeenAt_idx")
   @@index([workspaceId, emailRequestedBy, emailRequestedAt], map: "AutomationContact_emailRequestedBy_idx")
   @@index([workspaceId, emailCapturedBy, emailCapturedAt], map: "AutomationContact_emailCapturedBy_idx")
+  // Meta data deletion removes one Instagram account's contacts across every workspace.
+  @@index([instagramAccountId])
 }
 
 // A timed drip campaign: ordered steps, each sent to enrolled contacts after a delay.
@@ -861,6 +863,8 @@ model OutboundDelivery {
   @@index([updatedAt, id], map: "OutboundDelivery_updatedAt_id_idx")
   // Delivery problems list: FAILED/UNKNOWN rows for one workspace, newest first.
   @@index([workspaceId, state, updatedAt])
+  // Meta data deletion removes one Instagram account's deliveries across every workspace.
+  @@index([instagramAccountId])
 }
 
 model AutomationDailySendCounter {

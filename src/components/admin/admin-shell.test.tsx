@@ -1,10 +1,18 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const navigation = vi.hoisted(() => ({ pathname: "/admin" }));
+const navigation = vi.hoisted(() => ({ pathname: "/admin", push: vi.fn(), assign: vi.fn() }));
 
-vi.mock("next/navigation", () => ({ usePathname: () => navigation.pathname, useRouter: () => ({ push: vi.fn() }) }));
+vi.mock("next/navigation", () => ({ usePathname: () => navigation.pathname, useRouter: () => ({ push: navigation.push }) }));
+// Marks every next/link anchor, so a test can tell it from a plain <a>.
+vi.mock("next/link", () => ({
+  default: ({ href, children, ...rest }: { href: string; children?: ReactNode } & Record<string, unknown>) => {
+    const anchorProps = Object.fromEntries(Object.entries(rest).filter(([key]) => !["prefetch", "scroll", "replace"].includes(key)));
+    return <a data-next-link="" href={String(href)} {...anchorProps}>{children}</a>;
+  },
+}));
 
 const { AdminShell } = await import("./admin-shell");
 
@@ -12,6 +20,8 @@ describe("AdminShell", () => {
   afterEach(() => {
     cleanup();
     navigation.pathname = "/admin";
+    navigation.push.mockReset();
+    window.localStorage.clear();
     document.body.style.overflow = "";
   });
 
@@ -24,6 +34,36 @@ describe("AdminShell", () => {
     expect(screen.getByRole("link", { name: "Back to workspace" }).getAttribute("href")).toBe("/dashboard");
     expect(screen.queryByRole("link", { name: "Broadcasts" })).toBeNull();
     expect(screen.getByRole("link", { name: "Overview" }).getAttribute("aria-current")).toBe("page");
+  });
+
+  it("leaves the console for the workspace with a full page load, never a client fetch", () => {
+    // /dashboard is on app.linkar.in. A next/link would prefetch or fetch it
+    // from admin.linkar.in, follow the redirect and trip connect-src.
+    render(<AdminShell owner={{ email: "owner@linkar.in" }}><main>Overview</main></AdminShell>);
+    const sidebarLink = within(screen.getByLabelText("Operator sidebar")).getByRole("link", { name: "Back to workspace" });
+    expect(sidebarLink.getAttribute("href")).toBe("/dashboard");
+    expect(sidebarLink.hasAttribute("data-next-link")).toBe(false);
+
+    fireEvent.click(screen.getByRole("button", { name: "Owner menu" }));
+    const menuLink = within(document.getElementById("owner-menu") as HTMLElement).getByRole("menuitem", { name: "Back to workspace" });
+    expect(menuLink.tagName).toBe("A");
+    expect(menuLink.getAttribute("href")).toBe("/dashboard");
+    expect(menuLink.hasAttribute("data-next-link")).toBe(false);
+
+    // The console's own pages keep client navigation.
+    expect(screen.getByRole("link", { name: "Workspaces" }).hasAttribute("data-next-link")).toBe(true);
+  });
+
+  it("opens the workspace from the palette with a full page load", () => {
+    const assign = vi.fn();
+    vi.stubGlobal("location", { ...window.location, assign });
+    render(<AdminShell owner={{ email: "owner@linkar.in" }}><main>Overview</main></AdminShell>);
+    fireEvent.keyDown(window, { key: "k", metaKey: true });
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "Back to workspace" } });
+    fireEvent.click(screen.getByRole("option", { name: /Back to workspace/ }));
+    expect(assign).toHaveBeenCalledWith("/dashboard");
+    expect(navigation.push).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
   });
 
   it("uses exact active state for overview and prefix state for modules", () => {

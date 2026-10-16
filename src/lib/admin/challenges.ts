@@ -3,6 +3,7 @@ import { createHash, randomBytes } from "node:crypto";
 import Redis from "ioredis";
 
 import { getServerEnv } from "@/src/lib/env";
+import { logger } from "@/src/lib/logger";
 
 const CHALLENGE_TTL_SECONDS = 600;
 const KEY_PREFIX = "linkar:admin-challenge:";
@@ -42,28 +43,43 @@ export class RedisAdminChallengeStore implements AdminChallengeStore {
   constructor(private readonly redis: RedisChallengeClient) {}
 
   async put(tokenHash: string, record: AdminChallengeRecord, ttlSeconds: number): Promise<boolean> {
-    const result = await this.redis.set(
+    const result = await this.unavailableOnFailure("put", () => this.redis.set(
       `${KEY_PREFIX}${tokenHash}`,
       JSON.stringify(record),
       "EX",
       ttlSeconds,
       "NX",
-    );
+    ));
     return result === "OK";
   }
 
   async consume(tokenHash: string, expected: AdminChallengeRecord): Promise<AdminChallengeConsumeResult> {
     const result = Number(
-      await this.redis.eval(
+      await this.unavailableOnFailure("consume", () => this.redis.eval(
         COMPARE_AND_DELETE,
         1,
         `${KEY_PREFIX}${tokenHash}`,
         JSON.stringify(expected),
-      ),
+      )),
     );
     if (result === 1) return "consumed";
     if (result === -1) return "mismatch";
     return "missing";
+  }
+
+  // A Redis outage or a timed-out command is "try again later" (503), not an
+  // unexplained 500. There is no fallback: a challenge must be single-use
+  // across processes, so the action is refused.
+  private async unavailableOnFailure<T>(operation: "put" | "consume", command: () => Promise<T>): Promise<T> {
+    try {
+      return await command();
+    } catch (error) {
+      logger.warn("Admin challenge store unavailable", {
+        operation,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw new AdminChallengeError(503, "challenge_unavailable");
+    }
   }
 }
 
@@ -95,8 +111,10 @@ function challengeStore(): AdminChallengeStore {
   if (defaultStore) return defaultStore;
   const redisUrl = getServerEnv().redisUrl;
   if (!redisUrl) throw new AdminChallengeError(503, "challenge_unavailable");
+  // commandTimeout: a connected but silent Valkey must reject quickly instead
+  // of holding the owner's request open.
   defaultStore = new RedisAdminChallengeStore(
-    new Redis(redisUrl, { maxRetriesPerRequest: 1, connectTimeout: 3_000 }),
+    new Redis(redisUrl, { maxRetriesPerRequest: 1, connectTimeout: 3_000, commandTimeout: 1_500 }),
   );
   return defaultStore;
 }

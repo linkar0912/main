@@ -47,6 +47,19 @@ FROM base AS runtime
 ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
+# libuv's thread pool (default 4) is shared by dns.lookup, file reads and
+# sharp, the image optimizer. libuv lets getaddrinfo use at most half of it,
+# so 8 doubles the concurrent DNS lookups and a few slow tenant nameservers
+# hold up Supabase, Meta and Razorpay lookups less easily.
+# The pool size also caps parallel image encodes: sharp runs one encode per
+# slot, with one libvips thread each (imgOptConcurrency in next.config.ts).
+# At 8 the peak is 8 encode threads, no more than the 4 encodes x half the
+# cores Next ran before on any host with 4 or more cores; lower it on a
+# smaller host. A burst of 8 or more uncached images still fills every slot
+# and can keep every core busy. The hard bound on image CPU is the Cloudflare
+# cache and rate rule on /_next/image
+# (docs/ops/app-admin-inspection-2026-10-15.md, section 9).
+ENV UV_THREADPOOL_SIZE=8
 
 # Identifies the build itself. This cannot drift from the image it is baked into.
 ARG BUILD_COMMIT=unknown
@@ -81,6 +94,7 @@ EXPOSE 3000
 
 # Works for both the web (`next start`) and worker (`node dist/worker.js`)
 # containers built from this image; see scripts/container-healthcheck.mjs.
+# It probes the liveness endpoints, which do no database or Redis I/O.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
   CMD ["node", "scripts/container-healthcheck.mjs"]
 

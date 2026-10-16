@@ -1,10 +1,15 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   enqueueFacebookEvents: vi.fn(),
   processNormalizedFacebookEvent: vi.fn(),
   findWorkspaceByFacebookPage: vi.fn(),
   getWorkspaceStatus: vi.fn(),
+  logError: vi.fn(),
+}));
+
+vi.mock("@/src/lib/logger", () => ({
+  logger: { error: mocks.logError, warn: vi.fn(), info: vi.fn(), debug: vi.fn() },
 }));
 
 vi.mock("@/src/lib/env", () => ({ getServerEnv: () => ({
@@ -59,6 +64,43 @@ describe("POST /api/facebook/webhook", () => {
     mocks.processNormalizedFacebookEvent.mockReset().mockResolvedValue({ sent: 1, matched: 1, skipped: 0, failed: 0 });
     mocks.findWorkspaceByFacebookPage.mockReset().mockResolvedValue({ workspaceId: "workspace_1" });
     mocks.getWorkspaceStatus.mockReset().mockResolvedValue("ACTIVE");
+    mocks.logError.mockReset();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("asks Meta to redeliver with a 503 when the enqueue fails", async () => {
+    mocks.enqueueFacebookEvents.mockRejectedValue(new Error("Command timed out"));
+
+    const response = await POST(new Request("http://localhost/api/facebook/webhook", { method: "POST", body: "{}" }));
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toEqual({ received: false, retryable: true });
+    expect(mocks.processNormalizedFacebookEvent).not.toHaveBeenCalled();
+    expect(mocks.logError).toHaveBeenCalledWith(
+      expect.stringContaining("enqueue failed"),
+      expect.objectContaining({ channel: "facebook", events: 1, error: "Command timed out" }),
+    );
+  });
+
+  it("gives up on an enqueue that hangs after 5 s and asks Meta to redeliver", async () => {
+    vi.useFakeTimers();
+    mocks.enqueueFacebookEvents.mockReturnValue(new Promise(() => undefined));
+
+    let settled = false;
+    const pending = POST(new Request("http://localhost/api/facebook/webhook", { method: "POST", body: "{}" }))
+      .finally(() => { settled = true; });
+    await vi.advanceTimersByTimeAsync(4_999);
+    expect(settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    const response = await pending;
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toEqual({ received: false, retryable: true });
+    expect(mocks.processNormalizedFacebookEvent).not.toHaveBeenCalled();
+    expect(mocks.logError).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ channel: "facebook", events: 1 }));
   });
 
   it("returns 503 when the inline runner has a retryable failure", async () => {

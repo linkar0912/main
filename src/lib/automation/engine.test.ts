@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { FlowDefinition, NormalizedEvent } from "./types";
+import type { FlowDefinition, FlowDefinitionV1, NormalizedEvent } from "./types";
 import { evaluateFlow } from "./engine";
 
 const commentEvent: NormalizedEvent = {
@@ -73,4 +73,52 @@ describe("evaluateFlow", () => {
       ],
     });
   });
+
+  it("reports the keyword the trigger check matched for each match mode", () => {
+    const flow = (mode: "all" | "contains" | "regex", keywords: string[]): FlowDefinitionV1 => ({
+      version: 1,
+      trigger: { type: "comment", match: "keyword", mode, keywords, mediaIds: [] },
+      conditions: [],
+      actions: [{ type: "private_reply", text: "Here is the guide" }],
+    });
+    const event = { ...commentEvent, text: "Send the GUIDE please" };
+
+    expect(evaluateFlow(flow("regex", ["^price", "guide\\s+please$"]), event)).toMatchObject({
+      status: "matched",
+      matchedKeyword: "guide\\s+please$",
+    });
+    expect(evaluateFlow(flow("all", ["guide", "please"]), event)).toMatchObject({ status: "matched", matchedKeyword: "guide" });
+    expect(evaluateFlow(flow("contains", ["uid"]), event)).toMatchObject({ status: "matched", matchedKeyword: "uid" });
+  });
+
+  it("leaves matchedKeyword out for triggers that do not use keywords", () => {
+    const flow: FlowDefinition = {
+      version: 1,
+      trigger: { type: "comment", match: "any", keywords: [], mediaIds: [] },
+      conditions: [],
+      actions: [{ type: "private_reply", text: "Thanks" }],
+    };
+
+    expect(evaluateFlow(flow, commentEvent)).toEqual({
+      status: "matched",
+      actions: [{ type: "private_reply", commentId: "comment_1", text: "Thanks" }],
+    });
+  });
+
+  it("skips a regex flow without stalling on a catastrophic-backtracking pattern", () => {
+    const flow: FlowDefinition = {
+      version: 1,
+      trigger: { type: "comment", match: "keyword", mode: "regex", keywords: ["(a|a)+$"], mediaIds: [] },
+      conditions: [],
+      actions: [{ type: "private_reply", text: "Sent" }],
+    };
+    const started = performance.now();
+    expect(evaluateFlow(flow, { ...commentEvent, text: `${"a".repeat(40)}!` })).toEqual({
+      status: "skipped",
+      reason: "trigger did not match",
+      actions: [],
+    });
+    expect(performance.now() - started).toBeLessThan(50);
+  });
 });
+

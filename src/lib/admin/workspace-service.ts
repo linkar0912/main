@@ -204,6 +204,15 @@ function chunked<T>(values: T[]): T[][] {
   return chunks;
 }
 
+// Pause-all is the per-workspace kill switch, used mid-incident. It pauses
+// every automation in one statement, so its cost does not grow with the
+// number of automations, and it gets more than Prisma's 5 s default.
+const BULK_AUTOMATION_TRANSACTION = { maxWait: 5_000, timeout: 15_000 } as const;
+
+function byId(left: { id: string }, right: { id: string }): number {
+  return left.id < right.id ? -1 : left.id > right.id ? 1 : 0;
+}
+
 export async function pauseAdminWorkspaceAutomations(workspaceId: string, version: number) {
   const protectedMember = await prisma.workspaceMember.findFirst({ where: { workspaceId, userId: { in: getServerEnv().platformOwnerUserIds } }, select: { userId: true } });
   protectPlatformOwner(protectedMember?.userId);
@@ -213,19 +222,18 @@ export async function pauseAdminWorkspaceAutomations(workspaceId: string, versio
       data: { version: { increment: 1 } },
     });
     if (workspace.count !== 1) throw new AdminWorkspaceError(409, "stale_version");
-    const active = await transaction.automation.findMany({ where: { workspaceId, status: "ACTIVE" }, select: { id: true, version: true }, orderBy: { id: "asc" } });
-    const paused: Array<{ id: string; version: number }> = [];
-    for (const automation of active) {
-      const changed = await transaction.automation.updateMany({
-        where: { id: automation.id, version: automation.version, status: "ACTIVE" },
-        data: { status: "PAUSED", version: { increment: 1 } },
-      });
-      if (changed.count === 1) paused.push({ id: automation.id, version: automation.version + 1 });
-    }
+    // RETURNING gives each automation's version after the pause. The order of
+    // returned rows is not defined, so sort for a stable audit record.
+    const paused = (await transaction.$queryRaw<Array<{ id: string; version: number }>>`
+      UPDATE "Automation"
+      SET "status" = 'PAUSED', "version" = "version" + 1, "updatedAt" = NOW()
+      WHERE "workspaceId" = ${workspaceId} AND "status" = 'ACTIVE'
+      RETURNING "id", "version"
+    `).sort(byId);
     // Each entry is "<id>@<version after pause>" so a later resume only touches
     // automations nobody has changed since this pause.
     return { paused: paused.length, automationIds: chunked(paused.map((item) => `${item.id}@${item.version}`)), version: version + 1 };
-  });
+  }, BULK_AUTOMATION_TRANSACTION);
 }
 
 function pausedEntries(after: unknown): Array<{ id: string; version: number }> {
@@ -260,16 +268,24 @@ export async function resumeAdminWorkspaceAutomations(workspaceId: string, versi
       const exists = await transaction.workspace.count({ where: { id: workspaceId } });
       throw new AdminWorkspaceError(exists ? 409 : 404, exists ? "stale_version" : "workspace_not_found");
     }
-    const resumed: string[] = [];
-    for (const entry of entries) {
-      const changed = await transaction.automation.updateMany({
-        where: { id: entry.id, workspaceId, version: entry.version, status: "PAUSED", archivedAt: null },
-        data: { status: "ACTIVE", version: { increment: 1 } },
-      });
-      if (changed.count === 1) resumed.push(entry.id);
-    }
+    // One statement for every recorded automation. Each row must still be in
+    // this workspace, at the version the pause left it, paused and not archived.
+    const rows = await transaction.$queryRaw<Array<{ id: string }>>`
+      UPDATE "Automation" AS automation
+      SET "status" = 'ACTIVE', "version" = automation."version" + 1, "updatedAt" = NOW()
+      FROM unnest(${entries.map((entry) => entry.id)}::text[], ${entries.map((entry) => entry.version)}::integer[]) AS entry("id", "version")
+      WHERE automation."id" = entry."id"
+        AND automation."workspaceId" = ${workspaceId}
+        AND automation."version" = entry."version"
+        AND automation."status" = 'PAUSED'
+        AND automation."archivedAt" IS NULL
+      RETURNING automation."id"
+    `;
+    // Keep the order the pause recorded them in.
+    const changed = new Set(rows.map((row) => row.id));
+    const resumed = [...new Set(entries.map((entry) => entry.id))].filter((id) => changed.has(id));
     return { resumed: resumed.length, skipped: entries.length - resumed.length, automationIds: chunked(resumed), pausedBy: lastPause.requestId, version: version + 1 };
-  });
+  }, BULK_AUTOMATION_TRANSACTION);
 }
 
 function formulaSafe(value: unknown): string {

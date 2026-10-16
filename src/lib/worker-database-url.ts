@@ -6,12 +6,21 @@
  * BEGIN / DEALLOCATE ALL / prepare / execute / COMMIT - about five extra
  * round trips per query, and each round trip from the server to the database
  * region costs ~165 ms. The worker sits on the reply hot path, so it uses the
- * session pooler instead (the same `DIRECT_URL` migrations use, port 5432,
- * no pgbouncer flag) with a small fixed connection cap.
+ * session pooler instead (WORKER_DATABASE_URL, else the same `DIRECT_URL`
+ * migrations use: port 5432, no pgbouncer flag).
  *
- * Returns undefined - keep Prisma's default `DATABASE_URL` - outside the
- * worker, when no direct URL is configured, or when WORKER_DATABASE_MODE is
- * "pooled" (the escape hatch if the session pool ever runs short).
+ * Pool size: the WORKER_DATABASE_CONNECTIONS env var (1 to 20, default 5 from
+ * the constant below; a `connection_limit` already in the URL wins), with a
+ * 10 s pool_timeout. DATABASE_URL's `connection_limit` does not apply here. This
+ * one pool serves every WORKER_CONCURRENCY job, the bulk worker, the periodic
+ * sweeps and the health check's `SELECT 1`, so jobs beyond it queue for a
+ * connection. Session-pooler connections are held for the whole session:
+ * check the Supabase session pool size before raising it.
+ *
+ * Returns undefined - keep Prisma's default `DATABASE_URL` and its
+ * `connection_limit` - outside the worker, when no direct URL is configured,
+ * or when WORKER_DATABASE_MODE is "pooled" (the escape hatch if the session
+ * pool ever runs short).
  */
 export type WorkerDatabaseEnv = {
   role: string | undefined;

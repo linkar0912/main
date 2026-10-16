@@ -56,6 +56,26 @@ const CLOUDFLARE_WEB_ANALYTICS: Sources = {
   connect: ["https://cloudflareinsights.com"],
 };
 
+// The production app and owner-console hosts. These mirror APP_HOST and
+// ADMIN_HOST in src/lib/site-routing.ts (a test keeps them equal). They are
+// not imported from there because next.config.ts loads this file in the
+// runtime container, and only the files the Dockerfile copies can be imported.
+const PRODUCTION_APP_HOST = "app.linkar.in";
+const PRODUCTION_ADMIN_HOST = "admin.linkar.in";
+
+/**
+ * Where a form on this origin may submit, redirects included. The login,
+ * logout and auth routes answer with a 303 to the app or the owner console
+ * (applicationOriginForPath), so on admin.linkar.in a sign-in that lands on
+ * app.linkar.in, or the reverse, must be allowed or the browser blocks it.
+ * Outside production both resolve to the dev server's own origin.
+ */
+export function formActionSources(production: boolean): string[] {
+  return production
+    ? ["'self'", `https://${PRODUCTION_APP_HOST}`, `https://${PRODUCTION_ADMIN_HOST}`]
+    : ["'self'"];
+}
+
 function merge(...sets: Sources[]): Required<Sources> {
   const out: Required<Sources> = { script: [], connect: [], img: [], frame: [] };
   for (const set of sets) {
@@ -79,7 +99,7 @@ export function contentSecurityPolicy({ production, publicSite }: { production: 
     "object-src 'none'",
     "frame-ancestors 'none'",
     "base-uri 'self'",
-    "form-action 'self'",
+    `form-action ${list(...formActionSources(production))}`,
   ].join("; ");
 }
 

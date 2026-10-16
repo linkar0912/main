@@ -86,9 +86,31 @@ type ContactsSnapshot = {
 const CONTACTS_FRESH_FOR_MS = 120_000;
 const contactsCache: { snapshot?: ContactsSnapshot } = {};
 const RECONCILE_FRESH_FOR_MS = 15 * 60_000;
+/** sessionStorage key for the last backfill attempt, so a reload does not repeat it. */
+export const CONTACTS_RECONCILED_AT_KEY = "linkar.contacts.reconciledAt";
 let lastReconciledAt = 0;
 let reconciliationPending = false;
 let reconciliationFetcher: typeof fetch | undefined;
+
+/** The latest backfill attempt in this tab, in memory or from an earlier page load. */
+function lastReconcileAttempt(): number {
+  let stored = 0;
+  try {
+    stored = Number(window.sessionStorage.getItem(CONTACTS_RECONCILED_AT_KEY)) || 0;
+  } catch {
+    // Storage can be blocked; the in-memory time still applies.
+  }
+  return Math.max(lastReconciledAt, stored);
+}
+
+function recordReconcileAttempt(at: number) {
+  lastReconciledAt = at;
+  try {
+    window.sessionStorage.setItem(CONTACTS_RECONCILED_AT_KEY, String(at));
+  } catch {
+    // Storage can be blocked or full; the in-memory time still applies.
+  }
+}
 
 function readContactsCache(): ContactsSnapshot | undefined {
   const snapshot = contactsCache.snapshot;
@@ -332,19 +354,23 @@ export function ContactsScreen() {
           if (!cached) setError(caught instanceof Error ? caught.message : "Could not load contacts");
           setLoaded(true);
         }
+        // The server is struggling; a backfill now would only add load.
+        return;
       }
       // Backfill older participants only occasionally and after the visible
       // list has loaded. This operation can touch hundreds of contacts, so
       // running it beside every list request made the first paint slower.
-      if (cancelled || reconciliationPending || Date.now() - lastReconciledAt < RECONCILE_FRESH_FOR_MS) return;
+      if (cancelled || reconciliationPending || Date.now() - lastReconcileAttempt() < RECONCILE_FRESH_FOR_MS) return;
       reconciliationPending = true;
+      // Every attempt counts, failed ones too, and it survives a reload: a
+      // backfill that timed out must not be resent on the very next visit.
+      recordReconcileAttempt(Date.now());
       let reconciled = 0;
       try {
         const response = await fetch("/api/contacts", { method: "POST" });
         if (response.ok) {
           const result = (await response.json().catch(() => ({}))) as { data?: { reconciled?: number } };
           reconciled = result.data?.reconciled ?? 0;
-          lastReconciledAt = Date.now();
         }
       } catch {
         // The confirmed list remains usable if background backfill fails.

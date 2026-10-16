@@ -21,8 +21,32 @@ const nextConfig: NextConfig = {
     // the source URL and cannot be purged, so give a replaced image in
     // public/ a new file name rather than overwriting the old one.
     minimumCacheTTL: 2678400,
+    // Only the marketing photos are optimised (the /brand marks use
+    // `unoptimized`). Without this, /_next/image runs any local path through
+    // an internal request, API routes included, and skips their limiters.
+    // `search: ""` refuses query strings, so one photo has one cache key.
+    localPatterns: [{ pathname: "/marketing/**", search: "" }],
+    // No source is wider than 1536 px, so the default widths up to 3840 only
+    // added encodes that no screen needs. deviceSizes serve `sizes`/`fill`
+    // photos; imageSizes cover the fixed-size ones (the 68 px proof rail
+    // portraits get 128 for 1x and 256 for 2x).
+    deviceSizes: [640, 828, 1080, 1200, 1536],
+    imageSizes: [64, 128, 256, 384],
   },
   experimental: {
+    // One libvips thread per encode instead of half the cores each. Encodes
+    // still run in parallel, one per libuv pool slot (UV_THREADPOOL_SIZE=8 in
+    // the Dockerfile), so a burst peaks at 8 encode threads and can still
+    // keep a small host's cores busy. The hard bound is the Cloudflare cache
+    // and rate rule on /_next/image (docs/ops/app-admin-inspection-2026-10-15.md,
+    // section 9).
+    imgOptConcurrency: 1,
+    // The proxy (proxy.ts matches /api/:path*) buffers each request body
+    // before any route runs, 10 MB by default. No route takes more than 1 MB:
+    // there are no uploads, and the Meta and Facebook callbacks cap at 1 MB
+    // themselves. Past this, Next passes a truncated body on, which fails the
+    // signature or JSON parse instead of holding memory.
+    proxyClientMaxBodySize: "1mb",
     // Turbopack's default CSS chunking merged the catalogue's section styles
     // into chunks the homepage and /pricing link, adding about 20 KB gzip of
     // render-blocking CSS neither page uses. 'graph' groups CSS by which

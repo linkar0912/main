@@ -2,7 +2,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { InboxContact } from "./types";
-import { INBOX_LIVE_REFRESH_MS, InstagramInbox, mergeLiveContacts, mergeLiveMessages } from "./instagram-inbox";
+import { INBOX_LIVE_REFRESH_MAX_MS, INBOX_LIVE_REFRESH_MS, InstagramInbox, liveRefreshDelay, mergeLiveContacts, mergeLiveMessages } from "./instagram-inbox";
 
 const aanya = {
   id: "contact_1", username: "aanya", avatarUrl: "/api/contacts/contact_1/avatar", preview: "Need the guide",
@@ -111,6 +111,67 @@ describe("InstagramInbox", () => {
       visibility.mockRestore();
       vi.useRealTimers();
     }
+  });
+
+  it("backs off live checks while the server answers 502, skips the thread, and recovers", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const random = vi.spyOn(Math, "random").mockReturnValue(0.5);
+    let failing = false;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (failing && !init?.method) return new Response("<html>Bad gateway</html>", { status: 502 });
+      if (url === "/api/inbox") return new Response(JSON.stringify({ data: { contacts: [{ ...aanya, unread: false }], members: [] } }), { status: 200 });
+      if (url === "/api/inbox/contact_1" && !init?.method) return new Response(JSON.stringify({ data: { messages: [] } }), { status: 200 });
+      return new Response(JSON.stringify({ data: {} }), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const listCalls = () => fetchMock.mock.calls.filter(([url, init]) => String(url) === "/api/inbox" && !init?.method).length;
+    const threadCalls = () => fetchMock.mock.calls.filter(([url, init]) => String(url) === "/api/inbox/contact_1" && !init?.method).length;
+    const advance = (ms: number) => act(async () => { await vi.advanceTimersByTimeAsync(ms); });
+    try {
+      render(<InstagramInbox />);
+      fireEvent.click(await screen.findByRole("button", { name: /open conversation with @aanya/i }));
+      await screen.findByText("No messages with this contact yet.");
+      // Line the timer up: one healthy check, then the outage starts.
+      await advance(INBOX_LIVE_REFRESH_MS);
+      failing = true;
+      const lists = listCalls();
+      const threads = threadCalls();
+
+      await advance(INBOX_LIVE_REFRESH_MS);
+      expect(listCalls()).toBe(lists + 1);
+      // The list failed, so the open thread is not asked for.
+      expect(threadCalls()).toBe(threads);
+
+      // The next check waits 16 s, then 32 s.
+      await advance(15_000);
+      expect(listCalls()).toBe(lists + 1);
+      await advance(2_000);
+      expect(listCalls()).toBe(lists + 2);
+      await advance(30_000);
+      expect(listCalls()).toBe(lists + 2);
+      await advance(3_000);
+      expect(listCalls()).toBe(lists + 3);
+      expect(threadCalls()).toBe(threads);
+
+      // Back to health: the next check (64 s on) works and the pace resets to 8 s.
+      failing = false;
+      await advance(65_000);
+      expect(listCalls()).toBe(lists + 4);
+      expect(threadCalls()).toBe(threads + 1);
+      await advance(INBOX_LIVE_REFRESH_MS + 500);
+      expect(listCalls()).toBe(lists + 5);
+    } finally {
+      random.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it("spaces failed live checks 16 s, 32 s, 64 s, then every 2 minutes", () => {
+    const middle = () => 0.5;
+    expect([0, 1, 2, 3, 4, 9].map((failures) => liveRefreshDelay(failures, middle))).toEqual([
+      INBOX_LIVE_REFRESH_MS, 16_000, 32_000, 64_000, INBOX_LIVE_REFRESH_MAX_MS, INBOX_LIVE_REFRESH_MAX_MS,
+    ]);
   });
 
   it("merges live pages without duplicating an in-flight send or dropping older pages", () => {

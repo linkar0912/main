@@ -92,15 +92,18 @@ export async function PUT(request: Request) {
   if (role === "OWNER") {
     const patch = answers ? OnboardingAnswersSchema.safeParse(answers) : null;
     if (patch && !patch.success) return NextResponse.json({ error: "invalid_onboarding" }, { status: 400 });
-    const current = await repository.getWorkspaceOnboarding(session.workspaceId);
-    const merged = patch ? mergeAnswers(readStoredAnswers(current?.answers), patch.data) : undefined;
-    await repository.saveWorkspaceOnboarding(session.workspaceId, {
-      ...(merged ? { answers: merged } : {}),
-      ...(step !== undefined ? { step } : {}),
-      ...(action === "complete" ? { completedAt: now, skippedAt: null, step: OWNER_STEP_COUNT } : {}),
-      ...(action === "skip" && !current?.completedAt ? { skippedAt: now } : {}),
-      ...(action === "dismiss-invite" ? { inviteDismissedAt: now } : {}),
-      ...(action === "dismiss-plan" ? { planDismissedAt: now } : {}),
+    // Read, merge and write under one row lock: each step saves on its own,
+    // and two saves in flight at once used to drop the earlier step's answers.
+    await repository.updateWorkspaceOnboarding(session.workspaceId, (current) => {
+      const merged = patch ? mergeAnswers(readStoredAnswers(current?.answers), patch.data) : undefined;
+      return {
+        ...(merged ? { answers: merged } : {}),
+        ...(step !== undefined ? { step } : {}),
+        ...(action === "complete" ? { completedAt: now, skippedAt: null, step: OWNER_STEP_COUNT } : {}),
+        ...(action === "skip" && !current?.completedAt ? { skippedAt: now } : {}),
+        ...(action === "dismiss-invite" ? { inviteDismissedAt: now } : {}),
+        ...(action === "dismiss-plan" ? { planDismissedAt: now } : {}),
+      };
     });
     // The name is the person's own, so it also lives on their member row
     // where the greeting reads it for owners and members alike.

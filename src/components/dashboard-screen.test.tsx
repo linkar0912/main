@@ -96,6 +96,50 @@ describe("DashboardScreen", () => {
     expect(screen.queryByRole("region", { name: "Needs you" })).toBeNull();
   });
 
+  function failConnections() {
+    const healthy = vi.mocked(fetch).getMockImplementation() as (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+    const state = { failing: true };
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (state.failing && String(input).includes("/api/meta/connection")) {
+        return { ok: false, status: 502, json: async () => { throw new SyntaxError("Unexpected token <"); } } as unknown as Response;
+      }
+      return healthy(input, init);
+    }));
+    return state;
+  }
+
+  it("says it could not check the accounts, not Not connected, when the connections request fails", async () => {
+    automationState.automations = [automation()];
+    stubDashboardFetch({ instagram: [], facebook: [] });
+    const state = failConnections();
+    render(<DashboardScreen />);
+
+    expect(await screen.findByText("Could not check your accounts.")).toBeTruthy();
+    expect(screen.queryByText("No account connected yet.")).toBeNull();
+    await screen.findByRole("img", { name: /daily replies sent and people reached/i });
+    expect(screen.queryByText("Not connected")).toBeNull();
+    expect(screen.queryByText(/Connect Instagram or a Facebook Page so your automations can reply/)).toBeNull();
+    expect(screen.queryByText("Nothing needs you right now.")).toBeNull();
+
+    // Retry asks again; with both answers in, the real state shows.
+    state.failing = false;
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    const needs = await screen.findByRole("region", { name: "Needs you" });
+    expect(within(needs).getByText("Not connected")).toBeTruthy();
+    expect(screen.queryByText("Could not check your accounts.")).toBeNull();
+  });
+
+  it("shows the same in the guided start of a new workspace", async () => {
+    stubDashboardFetch({ instagram: [], facebook: [] });
+    failConnections();
+    render(<DashboardScreen />);
+
+    const start = await screen.findByRole("region", { name: "Start here" });
+    expect(await within(start).findByText("Could not check your accounts.", { exact: false })).toBeTruthy();
+    expect(within(start).getByRole("button", { name: "Retry" })).toBeTruthy();
+    expect(within(start).queryByRole("link", { name: "Connect an account" })).toBeNull();
+  });
+
   it("reuses warm overview data when the window regains focus", async () => {
     automationState.automations = [automation()];
     stubDashboardFetch();
@@ -415,6 +459,50 @@ describe("DashboardScreen", () => {
 
     const links = screen.getByRole("region", { name: "Tracked links" });
     expect(within(links).getByRole("link", { name: "Manage links" }).getAttribute("href")).toBe("/insights#tracked-links");
+  });
+
+  describe("a new workspace", () => {
+    const requestedPaths = () => vi.mocked(fetch).mock.calls.map(([url]) => String(url));
+
+    it("asks only for the connected accounts, since the guided start shows nothing else", async () => {
+      stubDashboardFetch({ instagram: [], facebook: [] });
+      render(<DashboardScreen initialAutomations={[]} />);
+      expect(await screen.findByRole("region", { name: "Start here" })).toBeTruthy();
+      await waitFor(() => expect(requestedPaths()).toContain("/api/facebook/connection"));
+      window.dispatchEvent(new Event("focus"));
+      await act(async () => { await Promise.resolve(); });
+      expect(requestedPaths().filter((url) => url.startsWith("/api/insights"))).toEqual([]);
+    });
+
+    it("loads the numbers and what needs attention once the first automation exists", async () => {
+      stubDashboardFetch();
+      const view = render(<DashboardScreen initialAutomations={[]} />);
+      await screen.findByRole("region", { name: "Start here" });
+      automationState.automations = [automation()];
+      view.rerender(<DashboardScreen initialAutomations={[automation()]} />);
+      await screen.findByRole("img", { name: /daily replies sent and people reached/i });
+      await waitFor(() => expect(requestedPaths()).toEqual(expect.arrayContaining([
+        "/api/insights?include=overview",
+        "/api/insights?include=usage",
+      ])));
+      expect(requestedPaths().some((url) => url.startsWith("/api/insights/failures"))).toBe(true);
+    });
+
+    it("costs only the shell's own requests on a new owner's first full load, before onboarding takes over", async () => {
+      router.replace.mockClear();
+      stubDashboardFetch({ instagram: [], facebook: [], onboarding: { required: true, flow: "owner", invite: false, planCard: false, goals: [], displayName: null } });
+      const { renderToString } = await import("react-dom/server");
+      const page = () => <AppShell><DashboardScreen initialEmail="new.owner@example.com" initialAutomations={[]} /></AppShell>;
+      const container = document.createElement("div");
+      container.innerHTML = renderToString(page());
+      document.body.appendChild(container);
+      vi.mocked(fetch).mockClear();
+      render(page(), { container, hydrate: true });
+
+      await waitFor(() => expect(router.replace).toHaveBeenCalledWith("/onboarding"));
+      await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
+      expect([...new Set(requestedPaths())].sort()).toEqual(["/api/facebook/connection", "/api/meta/connection", "/api/workspace/bootstrap"]);
+    });
   });
 
   describe("after onboarding", () => {

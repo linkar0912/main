@@ -3,7 +3,8 @@ import { dirname, join, relative, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { getSeoPages, seoPagePath, seoPages } from "@/src/content/seo";
 import { ANALYTICS_PAGE_PATHS } from "../analytics-path";
-import { contentSecurityPolicy, securityHeaderRules, securityHeaders } from "./headers";
+import { ADMIN_HOST, APP_HOST, applicationOriginForPath } from "../site-routing";
+import { contentSecurityPolicy, formActionSources, securityHeaderRules, securityHeaders } from "./headers";
 
 function directives(policy: string): Map<string, string[]> {
   return new Map(policy.split(";").map((part) => {
@@ -61,9 +62,44 @@ describe("security headers", () => {
     expect(csp.get("frame-ancestors")).toEqual(["'none'"]);
     expect(csp.get("object-src")).toEqual(["'none'"]);
     expect(csp.get("base-uri")).toEqual(["'self'"]);
-    expect(csp.get("form-action")).toEqual(["'self'"]);
+    expect(csp.get("form-action")).toEqual(["'self'", "https://app.linkar.in", "https://admin.linkar.in"]);
+    expect(directives(contentSecurityPolicy({ production: false, publicSite: false })).get("form-action")).toEqual(["'self'"]);
     expect(csp.get("script-src")).not.toContain("'unsafe-eval'");
     expect(directives(contentSecurityPolicy({ production: false, publicSite: false })).get("script-src")).toContain("'unsafe-eval'");
+  });
+
+  it("lets every sign-in and sign-out redirect land, from the app host and the owner console", () => {
+    // The auth routes answer a form POST with a 303 to applicationOriginForPath
+    // (or straight to appUrl / adminUrl), and the browser checks form-action
+    // against the redirect target too. A sign-in on admin.linkar.in that
+    // lands on app.linkar.in used to be blocked, which left the button stuck.
+    const root = resolve(__dirname, "../../..");
+    const example = readFileSync(join(root, ".env.production.example"), "utf8");
+    const exampleValue = (name: string) => new RegExp(`^${name}=(.+)$`, "m").exec(example)?.[1]?.trim() ?? "";
+    const deployments = [
+      { appUrl: `https://${APP_HOST}`, adminUrl: `https://${ADMIN_HOST}` },
+      { appUrl: exampleValue("APP_URL"), adminUrl: exampleValue("ADMIN_URL") },
+    ];
+    const paths = ["/dashboard", "/onboarding", "/automations/new", "/settings?section=billing", "/admin", "/admin/security", "/admin/system"];
+    const sources = directives(contentSecurityPolicy({ production: true, publicSite: false })).get("form-action") ?? [];
+    expect(sources).toEqual(formActionSources(true));
+    const allows = (documentOrigin: string, target: string) => {
+      const origin = new URL(target).origin;
+      return (origin === documentOrigin && sources.includes("'self'")) || sources.includes(origin);
+    };
+    for (const env of deployments) {
+      const targets = [env.appUrl, env.adminUrl, ...paths.map((path) => applicationOriginForPath(path, env))];
+      for (const documentOrigin of [new URL(env.appUrl).origin, new URL(env.adminUrl).origin]) {
+        for (const target of targets) expect(allows(documentOrigin, target), `${documentOrigin} -> ${target}`).toBe(true);
+      }
+    }
+    // The public-site policy keeps the same form targets.
+    expect(directives(contentSecurityPolicy({ production: true, publicSite: true })).get("form-action")).toEqual(sources);
+  });
+
+  it("keeps the form-action hosts equal to the routing hosts", () => {
+    expect(formActionSources(true)).toEqual(["'self'", `https://${APP_HOST}`, `https://${ADMIN_HOST}`]);
+    expect(formActionSources(false)).toEqual(["'self'"]);
   });
 
   it("lets Razorpay Checkout load on every page, so billing works after client-side navigation", () => {

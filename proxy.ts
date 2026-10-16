@@ -1,8 +1,11 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
+import { isAuthRetryableFetchError } from "@supabase/supabase-js";
 import { assertApplicationAccess, safeNextPath } from "@/src/lib/auth/session";
 import { getServerEnv } from "@/src/lib/env";
+import { logger } from "@/src/lib/logger";
+import { supabaseFetchWithTimeout } from "@/src/lib/supabase/server";
 import { ADMIN_HOST, isAdminRoutePath, isProtectedAppPath, resolveHostRedirect, resolveRequestHostname } from "@/src/lib/site-routing";
 import { supabaseAuthCookieOptions } from "@/src/lib/auth/cookie-domain";
 import { isCrossSiteRequest } from "@/src/lib/security/same-origin";
@@ -24,6 +27,107 @@ const PROVIDER_CALLBACK_PATHS = [
 
 function isProviderCallbackPath(pathname: string): boolean {
   return PROVIDER_CALLBACK_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`));
+}
+
+// Each Supabase call already gives up after 8 s, but auth-js retries a failed
+// token refresh for up to 30 s, so the whole session check gets its own cap.
+const SESSION_CHECK_DEADLINE_MS = 10_000;
+const SESSION_CHECK_RETRY_AFTER_SECONDS = "5";
+
+class SessionCheckDeadlineError extends Error {
+  constructor() {
+    super(`Session check took longer than ${SESSION_CHECK_DEADLINE_MS} ms`);
+    this.name = "SessionCheckDeadlineError";
+  }
+}
+
+/**
+ * Settles with `work`, or rejects with SessionCheckDeadlineError once
+ * SESSION_CHECK_DEADLINE_MS passes. `onDeadline` cancels the abandoned work so
+ * auth-js stops sending refresh attempts nobody is waiting for.
+ */
+async function withSessionCheckDeadline<T>(work: Promise<T>, onDeadline: () => void): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      onDeadline();
+      reject(new SessionCheckDeadlineError());
+    }, SESSION_CHECK_DEADLINE_MS);
+  });
+  try {
+    return await Promise.race([work, deadline]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function errorDetails(error: unknown): Record<string, unknown> {
+  const code = typeof error === "object" && error !== null && "code" in error && typeof error.code === "string" ? error.code : undefined;
+  return {
+    error: error instanceof Error ? error.message : String(error),
+    ...(code ? { code } : {}),
+  };
+}
+
+// The Fetch Metadata header is the reliable signal: Next strips its own RSC
+// headers before Proxy runs, and a client-side navigation or prefetch is a
+// fetch() with sec-fetch-dest "empty". Older clients without it fall back to
+// whether they asked for HTML.
+function isDocumentRequest(request: NextRequest): boolean {
+  const destination = request.headers.get("sec-fetch-dest");
+  if (destination) return destination === "document";
+  return request.headers.get("sec-fetch-mode") === "navigate" || (request.headers.get("accept") ?? "").includes("text/html");
+}
+
+const SESSION_CHECK_UNAVAILABLE_PAGE = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Linkar is briefly unavailable</title>
+<style>
+:root{color-scheme:light dark}
+body{margin:0;min-height:100vh;display:grid;place-items:center;padding:16px;box-sizing:border-box;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:Canvas;color:CanvasText}
+main{max-width:28rem;text-align:center}
+h1{font-size:1.25rem;margin:0 0 8px}
+p{margin:0 0 20px;line-height:1.5}
+a{display:inline-block;padding:10px 18px;border-radius:8px;background:CanvasText;color:Canvas;text-decoration:none}
+</style>
+</head>
+<body>
+<main>
+<h1>We could not check your sign-in</h1>
+<p>This is a brief problem on our side, and you have not been signed out. Please try again in a few seconds.</p>
+<a href="">Try again</a>
+</main>
+</body>
+</html>
+`;
+
+/**
+ * "Could not check" is not "signed out": when Supabase Auth or the database is
+ * failing, a redirect to /login would look like a mass logout and send
+ * everyone into a sign-in loop that adds load. Answer 503 with Retry-After
+ * instead, keeping any refreshed session cookies the check already set.
+ */
+function sessionCheckUnavailable(request: NextRequest, checked: NextResponse, stage: "claims" | "access", error: unknown): NextResponse {
+  logger.error("Proxy could not check the session; answering 503", {
+    stage,
+    path: request.nextUrl.pathname,
+    ...errorDetails(error),
+  });
+  const headers = { "Retry-After": SESSION_CHECK_RETRY_AFTER_SECONDS, "Cache-Control": "no-store" };
+  const unavailable = request.nextUrl.pathname.startsWith("/api/")
+    ? NextResponse.json({ error: "session_check_unavailable", retryable: true }, { status: 503, headers })
+    : isDocumentRequest(request)
+      ? new NextResponse(SESSION_CHECK_UNAVAILABLE_PAGE, { status: 503, headers: { ...headers, "Content-Type": "text/html; charset=utf-8" } })
+      // RSC fetches: on a non-OK answer a client-side navigation falls back
+      // to a full page load, which gets the page above, and a prefetch is
+      // simply dropped.
+      : new NextResponse(null, { status: 503, headers });
+  for (const cookie of checked.cookies.getAll()) unavailable.cookies.set(cookie);
+  return unavailable;
 }
 
 // Canonicalizes the marketing and app hosts, then applies an optimistic gate
@@ -74,8 +178,10 @@ export async function proxy(request: NextRequest) {
 
   const response = NextResponse.next();
   const isAdminRoute = isAdminRoutePath(request.nextUrl.pathname);
+  const sessionCheck = new AbortController();
   const supabase = createServerClient(env.supabaseUrl, env.supabasePublishableKey, {
     cookieOptions: supabaseAuthCookieOptions(env),
+    global: { fetch: supabaseFetchWithTimeout(undefined, sessionCheck.signal) },
     cookies: {
       getAll: () => request.cookies.getAll(),
       setAll: (cookiesToSet) => {
@@ -87,18 +193,37 @@ export async function proxy(request: NextRequest) {
     },
   });
 
-  const { data, error } = await supabase.auth.getClaims();
+  let claims: Awaited<ReturnType<typeof supabase.auth.getClaims>>;
+  try {
+    claims = await withSessionCheckDeadline(supabase.auth.getClaims(), () => sessionCheck.abort());
+  } catch (error) {
+    if (error instanceof SessionCheckDeadlineError || isAuthRetryableFetchError(error)) {
+      return sessionCheckUnavailable(request, response, "claims", error);
+    }
+    throw error;
+  }
+  const { data, error } = claims;
+  // A network failure or a 5xx from Supabase Auth says nothing about the
+  // session. Only a definite answer (no session, a bad token) means sign in.
+  if (error && isAuthRetryableFetchError(error)) return sessionCheckUnavailable(request, response, "claims", error);
   if (!error && data?.claims?.sub && data.claims.email) {
     // Admin authorization is intentionally separate from workspace access:
     // the platform owner may have no workspace membership at all. Let the
     // owner-console DAL perform the authoritative allowlist/MFA checks.
     if (isAdminRoute) return response;
 
-    const access = await assertApplicationAccess(
-      String(data.claims.sub),
-      String(data.claims.email),
-      typeof data.claims.iat === "number" ? data.claims.iat : null,
-    ).catch(() => null);
+    let access: Awaited<ReturnType<typeof assertApplicationAccess>>;
+    try {
+      access = await assertApplicationAccess(
+        String(data.claims.sub),
+        String(data.claims.email),
+        typeof data.claims.iat === "number" ? data.claims.iat : null,
+      );
+    } catch (accessError) {
+      // A database error (a pool timeout, an outage) is "could not check".
+      // A null result is a definite "no access" and still goes to /login.
+      return sessionCheckUnavailable(request, response, "access", accessError);
+    }
     if (access) return response;
   }
 

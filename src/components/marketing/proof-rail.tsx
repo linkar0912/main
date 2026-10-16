@@ -70,9 +70,8 @@ function UseCaseCard({
           className={styles.portrait}
           src={example.image}
           alt={duplicate ? "" : example.alt}
-          width={136}
-          height={136}
-          sizes="68px"
+          width={68}
+          height={68}
         />
       </div>
       <div className={styles.body}>

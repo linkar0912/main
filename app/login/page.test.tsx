@@ -2,10 +2,10 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ getRequestSession: vi.fn(), redirect: vi.fn(), verifyOtp: vi.fn() }));
+const mocks = vi.hoisted(() => ({ getRequestSession: vi.fn(), redirect: vi.fn(), verifyOtp: vi.fn(), signOut: vi.fn(), host: "app.linkar.in" }));
 
 vi.mock("@/src/lib/env", () => ({
-  getServerEnv: () => ({ publicSiteUrl: "https://linkar.in", appUrl: "https://app.linkar.in" }),
+  getServerEnv: () => ({ publicSiteUrl: "https://linkar.in", appUrl: "https://app.linkar.in", adminUrl: "https://admin.linkar.in" }),
 }));
 vi.mock("@/src/lib/auth/session", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/src/lib/auth/session")>()),
@@ -18,14 +18,21 @@ vi.mock("next/navigation", () => ({
   },
   // The marketing header marks the current page.
   usePathname: () => "/login",
+  unstable_rethrow: () => {},
 }));
 // No remembered plan intent unless a test sets the pricing query itself.
-vi.mock("next/headers", () => ({ cookies: async () => ({ get: () => undefined }) }));
+vi.mock("next/headers", () => ({
+  cookies: async () => ({ get: () => undefined }),
+  headers: async () => new Headers({ host: mocks.host }),
+}));
 vi.mock("@/src/lib/supabase/server", () => ({
-  createSupabaseServerClient: async () => ({ auth: { verifyOtp: mocks.verifyOtp } }),
+  createSupabaseServerClient: async () => ({ auth: { verifyOtp: mocks.verifyOtp, signOut: mocks.signOut } }),
 }));
 
 const { default: LoginPage, metadata: loginMetadata } = await import("./page");
+const { POST: logout } = await import("@/app/api/auth/logout/route");
+const { applicationOriginForPath } = await import("@/src/lib/site-routing");
+const { contentSecurityPolicy } = await import("@/src/lib/security/headers");
 const { default: SignupPage, metadata: signupMetadata } = await import("@/app/signup/page");
 const { default: ConfirmPage } = await import("@/app/auth/confirm/page");
 
@@ -43,12 +50,66 @@ describe("auth pages", () => {
   afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
+    mocks.host = "app.linkar.in";
   });
 
   it("sends an already signed-in visitor on to their destination", async () => {
     mocks.getRequestSession.mockResolvedValue({ userId: "u1", email: "a@example.com", workspaceId: "w1" });
     await expect(LoginPage({ searchParams: Promise.resolve({ next: "/automations" }) })).rejects.toThrow("NEXT_REDIRECT");
     expect(mocks.redirect).toHaveBeenCalledWith("/automations");
+  });
+
+  it("keeps owner-console sign-in on the console host, whatever next it was given", async () => {
+    mocks.host = "admin.linkar.in";
+    for (const next of [undefined, "/dashboard", "/onboarding", "/administrator"]) {
+      render(await LoginPage({ searchParams: Promise.resolve(next === undefined ? {} : { next }) }));
+      const form = screen.getByRole("form", { name: "Sign in to Linkar" });
+      expect(form.querySelector<HTMLInputElement>('input[name="next"]')?.value, String(next)).toBe("/admin");
+      cleanup();
+    }
+    render(await LoginPage({ searchParams: Promise.resolve({ next: "/admin/system?tab=jobs" }) }));
+    expect(screen.getByRole("form", { name: "Sign in to Linkar" }).querySelector<HTMLInputElement>('input[name="next"]')?.value)
+      .toBe("/admin/system?tab=jobs");
+  });
+
+  it("sends a signed-in owner on the console host to the console, not the workspace", async () => {
+    mocks.host = "admin.linkar.in";
+    mocks.getRequestSession.mockResolvedValue({ userId: "u1", email: "owner@example.com", workspaceId: "w1" });
+    await expect(LoginPage({ searchParams: Promise.resolve({ next: "/dashboard" }) })).rejects.toThrow("NEXT_REDIRECT");
+    expect(mocks.redirect).toHaveBeenCalledWith("/admin");
+  });
+
+  it("leaves next alone on the app host", async () => {
+    render(await LoginPage({ searchParams: Promise.resolve({}) }));
+    expect(screen.getByRole("form", { name: "Sign in to Linkar" }).querySelector<HTMLInputElement>('input[name="next"]')?.value).toBe("/dashboard");
+  });
+
+  it("signs the owner out and back in without leaving the console origin", async () => {
+    // Sign out on admin.linkar.in lands on its own login page, carrying next=/admin.
+    const response = await logout(new Request("http://127.0.0.1:3000/api/auth/logout", { method: "POST", headers: { "x-forwarded-host": "admin.linkar.in" } }));
+    expect(mocks.signOut).toHaveBeenCalledWith({ scope: "local" });
+    expect(response.status).toBe(303);
+    const login = new URL(response.headers.get("location") ?? "");
+    expect(login.href).toBe("https://admin.linkar.in/login?next=%2Fadmin");
+
+    // That page, and a bookmarked one with no next or a workspace next, post a
+    // next the login route answers on the console origin, success or error.
+    mocks.host = login.host;
+    const env = { appUrl: "https://app.linkar.in", adminUrl: "https://admin.linkar.in" };
+    const formAction = contentSecurityPolicy({ production: true, publicSite: false }).split(";").map((part) => part.trim().split(/\s+/)).find(([name]) => name === "form-action")?.slice(1) ?? [];
+    for (const params of [Object.fromEntries(login.searchParams), {}, { next: "/dashboard" }]) {
+      render(await LoginPage({ searchParams: Promise.resolve(params) }));
+      const next = screen.getByRole("form", { name: "Sign in to Linkar" }).querySelector<HTMLInputElement>('input[name="next"]')?.value ?? "";
+      const destination = applicationOriginForPath(next, env);
+      expect(destination, JSON.stringify(params)).toBe(login.origin);
+      expect(formAction).toContain("'self'");
+      cleanup();
+    }
+  });
+
+  it("signs a workspace member out to the app host's login page", async () => {
+    const response = await logout(new Request("http://127.0.0.1:3000/api/auth/logout", { method: "POST", headers: { "x-forwarded-host": "app.linkar.in" } }));
+    expect(response.headers.get("location")).toBe("https://app.linkar.in/login");
   });
 
   it("explains an expired confirmation link and offers to resend it", async () => {

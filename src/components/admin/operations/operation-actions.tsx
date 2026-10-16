@@ -4,7 +4,7 @@ import { Presence } from "@/src/components/ui/use-presence";
 import { useLayoutEffect, useState } from "react";
 
 import type { AdminOperationDetail } from "@/src/lib/admin/operations/types";
-import { adminCommand, adminErrorMessage, downloadAdminFile } from "../shared/admin-request";
+import { adminCommand, adminCommandResponse, adminErrorMessage, downloadAdminFile } from "../shared/admin-request";
 import { ReasonDialog } from "../shared/reason-dialog";
 import { actionLabel } from "./labels";
 
@@ -19,7 +19,7 @@ const warning: Record<string, string> = {
 
 const destructiveActions = new Set(["delete", "archive", "cancel_pending", "suppress", "disable"]);
 
-type CommandResult = { csv?: string; retried?: number; rejected?: number };
+type CommandResult = { retried?: number; rejected?: number };
 
 export function OperationActions({
   detail,
@@ -53,15 +53,16 @@ export function OperationActions({
       const input = action === "update_destination"
         ? { destination }
         : action === "restore_version" ? { versionNumber: Number(versionNumber) } : {};
-      const data = await adminCommand<CommandResult>(`/api/admin/operations/${detail.kind}/${detail.id}`, {
-        method: "PATCH",
-        body: { action, version: detail.version, input },
-        reason,
-        fallback: "operation_failed",
-      });
+      const url = `/api/admin/operations/${detail.kind}/${detail.id}`;
+      const command = { method: "PATCH" as const, body: { action, version: detail.version, input }, reason, fallback: "operation_failed" };
+      let data: CommandResult | undefined;
       if (action === "export_one") {
-        if (typeof data?.csv !== "string") throw new Error("export_unavailable");
-        downloadAdminFile(new Blob([data.csv], { type: "text/csv;charset=utf-8" }), "linkar-contact.csv");
+        // The export answers with the CSV file itself, not JSON, like the
+        // workspace and audit exports.
+        const response = await adminCommandResponse(url, command);
+        downloadAdminFile(await response.blob(), `linkar-contact-${detail.id}.csv`);
+      } else {
+        data = await adminCommand<CommandResult>(url, command);
       }
       setAction(null);
       onComplete(action === "retry_failed"

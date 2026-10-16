@@ -1,10 +1,15 @@
+import { createServer, type AddressInfo, type Socket } from "node:net";
+import type Redis from "ioredis";
 import { describe, expect, it, vi } from "vitest";
 
 // A Redis stand-in with real INCR/PEXPIRE semantics for the consume script,
-// whose round trips yield to the event loop like a network call would.
+// whose round trips yield to the event loop like a network call would. A URL
+// on any other host gets the real ioredis client, for the timeout test.
 const store = vi.hoisted(() => new Map<string, number>());
-vi.mock("ioredis", () => ({
-  default: class FakeRedis {
+const constructed = vi.hoisted(() => [] as Array<{ url: string; options: Record<string, unknown> }>);
+vi.mock("ioredis", async () => {
+  const actual = await vi.importActual<typeof import("ioredis")>("ioredis");
+  class FakeRedis {
     async get(key: string) {
       await new Promise((resolve) => setTimeout(resolve, 0));
       return store.has(key) ? String(store.get(key)) : null;
@@ -19,8 +24,16 @@ vi.mock("ioredis", () => ({
       store.delete(key);
       return 1;
     }
-  },
-}));
+  }
+  return {
+    default: class RedisSwitch {
+      constructor(url: string, options: Record<string, unknown>) {
+        constructed.push({ url, options });
+        return url.includes("limiter.test") ? new FakeRedis() : new actual.default(url, options);
+      }
+    },
+  };
+});
 
 const { LoginRateLimitStore, loginRateLimitKey, networkRateLimitKey } = await import("./rate-limit");
 
@@ -63,6 +76,35 @@ describe("LoginRateLimitStore.consume", () => {
     expect(results.filter(Boolean)).toHaveLength(3);
     await limiter.reset("someone");
     expect(await limiter.consume("someone")).toBe(true);
+  });
+});
+
+describe("LoginRateLimitStore when Redis stalls", () => {
+  it("falls back in-process within about 2 s when Redis accepts the connection but never answers", async () => {
+    // A stalled Valkey: the TCP connection opens, nothing ever comes back.
+    const sockets = new Set<Socket>();
+    const server = createServer((socket) => {
+      sockets.add(socket);
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const url = `redis://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    const limiter = new LoginRateLimitStore(url, 1);
+    try {
+      expect(constructed).toContainEqual({ url, options: expect.objectContaining({ connectTimeout: 3_000, commandTimeout: 1_500 }) });
+
+      const started = performance.now();
+      expect(await limiter.consume("visitor")).toBe(true);
+      const elapsed = performance.now() - started;
+      expect(elapsed).toBeGreaterThanOrEqual(1_400);
+      expect(elapsed).toBeLessThan(2_500);
+
+      // The fallback recorded that attempt, so the one-attempt limit holds.
+      expect(await limiter.isAllowed("visitor")).toBe(false);
+    } finally {
+      (limiter as unknown as { redis: Redis }).redis.disconnect();
+      for (const socket of sockets) socket.destroy();
+      await new Promise((resolve) => server.close(resolve));
+    }
   });
 });
 

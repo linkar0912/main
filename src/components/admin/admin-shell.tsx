@@ -190,9 +190,13 @@ export function AdminShell({
 
         <span className="sidebar-spacer" />
         <div className="admin-sidebar-foot">
-          <Link className="sidebar-link" href="/dashboard">
+          {/* A plain anchor, not next/link: /dashboard lives on the app host, and
+              a client navigation fetches it from this host, follows the redirect
+              and trips the console's CSP connect-src. A full page load follows
+              the redirect without that check, and nothing is prefetched. */}
+          <a className="sidebar-link" href="/dashboard">
             <ArrowLeft size={18} aria-hidden /> Back to workspace
-          </Link>
+          </a>
         </div>
       </aside>
 
@@ -228,10 +232,11 @@ export function AdminShell({
                   meta="Owner console"
                 />
                 <MenuDivider />
-                <Link className="menu-item" href="/dashboard" {...menuItemProps} onClick={close}>
+                {/* Plain anchor for the same reason as the sidebar link. */}
+                <a className="menu-item" href="/dashboard" {...menuItemProps} onClick={close}>
                   <ArrowLeft size={16} strokeWidth={1.9} aria-hidden />
                   <span className="menu-item-label">Back to workspace</span>
-                </Link>
+                </a>
                 <ThemeMenuSwitch className="menu-item" />
                 <MenuDivider />
                 <form action="/api/auth/logout" method="post">

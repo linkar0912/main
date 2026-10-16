@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
-const mocks = vi.hoisted(() => ({ workspace: vi.fn(), members: vi.fn(), count: vi.fn() }));
+const mocks = vi.hoisted(() => ({ workspace: vi.fn(), members: vi.fn(), count: vi.fn(), options: [] as unknown[] }));
 vi.mock("@/src/lib/env", () => ({ getServerEnv: () => ({ platformOwnerUserIds: ["owner-protected"] }) }));
 vi.mock("@/src/lib/prisma", () => {
   const counted = { count: mocks.count };
@@ -11,7 +11,7 @@ vi.mock("@/src/lib/prisma", () => {
     webhookEvent: counted, outboundDelivery: counted, instagramConnection: counted, facebookPageConnection: counted,
     automationSequence: counted, broadcast: counted, trackedLink: counted,
   };
-  return { prisma: { $transaction: (operation: (tx: unknown) => unknown) => operation(transaction) } };
+  return { prisma: { $transaction: (operation: (tx: unknown) => unknown, options?: unknown) => { mocks.options.push(options); return operation(transaction); } } };
 });
 vi.mock("@/src/lib/supabase/admin", () => ({ createSupabaseAdminClient: vi.fn() }));
 const { deletionImpactMatches, digestDeletionImpact, deletionConfirmationPhrase, previewDeletion } = await import("./impact");
@@ -52,6 +52,12 @@ describe("deletion impact", () => {
     await expect(previewDeletion({ kind: "WORKSPACE", id: "w1" })).resolves.toMatchObject({ impact: { structure: { workspaceStatus: "SUSPENDED" } } });
     mocks.workspace.mockResolvedValue({ name: "Acme", status: "SUSPENDED", deletionScheduledAt: new Date() });
     await expect(previewDeletion({ kind: "WORKSPACE", id: "w1" })).rejects.toMatchObject({ status: 409, code: "deletion_in_progress" });
+  });
+
+  it("reads the preview in one snapshot with more room than Prisma's 5 s default", async () => {
+    mocks.options.length = 0;
+    await previewDeletion({ kind: "WORKSPACE", id: "w1" });
+    expect(mocks.options).toEqual([{ isolationLevel: "RepeatableRead", maxWait: 5_000, timeout: 30_000 }]);
   });
 
   it("rejects a workspace that includes a platform owner", async () => {

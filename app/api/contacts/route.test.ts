@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createMemoryRepository } from "@/src/lib/memory-repository";
+import { createPrismaRepository, prisma } from "@/src/lib/prisma";
 import { sealSecret } from "@/src/lib/security/secrets";
 
 const mocks = vi.hoisted(() => ({ getValidatedSession: vi.fn() }));
@@ -9,10 +10,15 @@ vi.mock("@/src/lib/auth/session", () => ({ getValidatedSession: mocks.getValidat
 let repository = createMemoryRepository();
 vi.mock("@/src/lib/repository-provider", () => ({ getRepository: () => repository }));
 
-const { GET, POST } = await import("./route");
+type Route = typeof import("./route");
+let GET: Route["GET"];
+let POST: Route["POST"];
 
 describe("GET /api/contacts", () => {
   beforeEach(async () => {
+    // A fresh route module per test: the reconcile cooldown lives in it.
+    vi.resetModules();
+    ({ GET, POST } = await import("./route"));
     repository = createMemoryRepository();
     mocks.getValidatedSession.mockReset().mockResolvedValue({ userId: "user_1", workspaceId: "workspace_1" });
     const first = await repository.touchContact("workspace_1", "ig_1", "person_1", "2026-09-01T06:00:00.000Z");
@@ -223,5 +229,136 @@ describe("GET /api/contacts", () => {
       createdAt: "2026-08-29T08:00:00.000Z",
       lastSeenAt: "2026-09-02T08:00:00.000Z",
     });
+  });
+
+  it("never reopens a closed conversation or moves its updatedAt", async () => {
+    const contact = await repository.getContact("workspace_1", "ig_1", "person_1");
+    const closed = await repository.updateInboxState("workspace_1", contact!.id, { action: "set_status", status: "CLOSED" });
+    await repository.recordWebhookEvent("workspace_1", {
+      providerEventId: "message_later",
+      eventType: "message.received",
+      receivedAt: "2026-09-03T08:00:00.000Z",
+      payload: { accountId: "ig_1", recipientId: "person_1" },
+    });
+
+    const response = await POST(new Request("https://app.linkar.in/api/contacts", { method: "POST" }));
+
+    expect(await response.json()).toEqual({ data: { reconciled: 0 } });
+    expect(await repository.getContact("workspace_1", "ig_1", "person_1")).toMatchObject({
+      inboxStatus: "CLOSED",
+      updatedAt: closed!.updatedAt,
+      lastSeenAt: "2026-09-03T08:00:00.000Z",
+    });
+  });
+
+  it("runs the backfill once per workspace in a 15-minute window", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(new Date("2026-09-10T10:00:00.000Z"));
+      const listRecentParticipants = vi.spyOn(repository, "listRecentParticipants");
+      const message = (id: string, recipientId: string) => repository.recordWebhookEvent("workspace_1", {
+        providerEventId: id,
+        eventType: "message.received",
+        receivedAt: "2026-09-10T09:00:00.000Z",
+        payload: { accountId: "ig_1", recipientId },
+      });
+      await message("message_a", "person_a");
+      const post = async () => (await POST(new Request("https://app.linkar.in/api/contacts", { method: "POST" }))).json();
+
+      expect(await post()).toEqual({ data: { reconciled: 1 } });
+      await message("message_b", "person_b");
+      vi.setSystemTime(new Date("2026-09-10T10:14:00.000Z"));
+      expect(await post()).toEqual({ data: { reconciled: 0 } });
+      expect(listRecentParticipants).toHaveBeenCalledTimes(1);
+      expect(await repository.getContact("workspace_1", "ig_1", "person_b")).toBeNull();
+
+      // Another workspace has its own window.
+      mocks.getValidatedSession.mockResolvedValue({ userId: "user_2", workspaceId: "workspace_2" });
+      await post();
+      expect(listRecentParticipants).toHaveBeenCalledTimes(2);
+
+      mocks.getValidatedSession.mockResolvedValue({ userId: "user_1", workspaceId: "workspace_1" });
+      vi.setSystemTime(new Date("2026-09-10T10:15:00.000Z"));
+      expect(await post()).toEqual({ data: { reconciled: 1 } });
+      expect(await repository.getContact("workspace_1", "ig_1", "person_b")).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("reconcileContacts", () => {
+  const candidate = (igScopedUserId: string, firstSeenAt: string, lastSeenAt = firstSeenAt) => ({
+    instagramAccountId: "ig_1",
+    igScopedUserId,
+    firstSeenAt,
+    lastSeenAt,
+  });
+
+  it("memory: creates missing contacts and only widens the dates of existing ones", async () => {
+    const memory = createMemoryRepository();
+    const existing = await memory.touchContact("workspace_1", "ig_1", "known", "2026-09-05T00:00:00.000Z");
+    await memory.updateInboxState("workspace_1", existing.record.id, { action: "set_status", status: "CLOSED" });
+    const before = await memory.getContact("workspace_1", "ig_1", "known");
+
+    const created = await memory.reconcileContacts("workspace_1", [
+      candidate("known", "2026-09-01T00:00:00.000Z", "2026-09-09T00:00:00.000Z"),
+      candidate("fresh", "2026-09-02T00:00:00.000Z", "2026-09-04T00:00:00.000Z"),
+    ]);
+
+    expect(created).toBe(1);
+    expect(await memory.getContact("workspace_1", "ig_1", "known")).toEqual({
+      ...before,
+      createdAt: "2026-09-01T00:00:00.000Z",
+      lastSeenAt: "2026-09-09T00:00:00.000Z",
+    });
+    expect(await memory.getContact("workspace_1", "ig_1", "fresh")).toMatchObject({
+      createdAt: "2026-09-02T00:00:00.000Z",
+      lastSeenAt: "2026-09-04T00:00:00.000Z",
+      inboxStatus: "OPEN",
+      leadStatus: "NEW",
+    });
+    // Narrower dates never shrink the stored window.
+    expect(await memory.reconcileContacts("workspace_1", [candidate("known", "2026-09-03T00:00:00.000Z")])).toBe(0);
+    expect(await memory.getContact("workspace_1", "ig_1", "known")).toMatchObject({
+      createdAt: "2026-09-01T00:00:00.000Z",
+      lastSeenAt: "2026-09-09T00:00:00.000Z",
+    });
+  });
+
+  it("prisma: one statement that never sets inboxStatus or updatedAt on a conflict", async () => {
+    const queryRaw = vi.fn().mockResolvedValue([{ inserted: true }, { inserted: false }]);
+    const client = { $queryRaw: queryRaw } as unknown as typeof prisma;
+
+    const created = await createPrismaRepository(client).reconcileContacts("workspace_1", [
+      candidate("a", "2026-09-02T00:00:00.000Z"),
+      candidate("b", "2026-09-03T00:00:00.000Z"),
+      // The same sender twice is merged into one row with the widest dates.
+      candidate("a", "2026-09-01T00:00:00.000Z", "2026-09-04T00:00:00.000Z"),
+    ]);
+
+    expect(created).toBe(1);
+    expect(queryRaw).toHaveBeenCalledTimes(1);
+    const statement = queryRaw.mock.calls[0][0] as { sql: string; values: unknown[] };
+    const conflict = statement.sql.slice(statement.sql.indexOf("ON CONFLICT"));
+    expect(conflict).toContain('"createdAt" = LEAST(');
+    expect(conflict).toContain('"lastSeenAt" = GREATEST(');
+    expect(conflict).not.toContain("inboxStatus");
+    expect(conflict).not.toContain("updatedAt");
+    expect(statement.values).toEqual([
+      "workspace_1",
+      [expect.any(String), expect.any(String)],
+      ["ig_1", "ig_1"],
+      ["a", "b"],
+      ["2026-09-01T00:00:00.000Z", "2026-09-03T00:00:00.000Z"],
+      ["2026-09-04T00:00:00.000Z", "2026-09-03T00:00:00.000Z"],
+    ]);
+  });
+
+  it("prisma: skips the database when there is nothing to reconcile", async () => {
+    const queryRaw = vi.fn();
+    const client = { $queryRaw: queryRaw } as unknown as typeof prisma;
+    expect(await createPrismaRepository(client).reconcileContacts("workspace_1", [])).toBe(0);
+    expect(queryRaw).not.toHaveBeenCalled();
   });
 });

@@ -488,6 +488,14 @@ export type TrackedLinkStats = {
 /** Marks the sender as seen; `created` is true when this was their first interaction. */
 export type TouchContactResult = { created: boolean; record: AutomationContactRecord };
 
+/** A sender found in recent activity, with the first and last time they were seen there. */
+export type ContactReconcileCandidate = {
+  instagramAccountId: string;
+  igScopedUserId: string;
+  firstSeenAt: string;
+  lastSeenAt: string;
+};
+
 export type CapturedContactSummary = {
   id: string;
   email: string;
@@ -862,10 +870,14 @@ export interface AutomationRepository {
   countParticipantsCreatedSince(workspaceId: string, sinceIso: string): Promise<number>;
   // Analytics helpers (UTC day buckets over the trailing window).
   countParticipantsPerDay(workspaceId: string, days: number, automationId?: string): Promise<DailyCount[]>;
-  /** Per-automation execution outcome tallies since the given instant (funnels). */
+  /**
+   * Per-automation execution outcome tallies since the given instant
+   * (funnels). `automationId` narrows the count to that one automation.
+   */
   countExecutionsByStatusPerAutomation(
     workspaceId: string,
     sinceIso: string,
+    automationId?: string,
   ): Promise<{ automationId: string; sent: number; failed: number; skipped: number }[]>;
   countExecutionsSentPerDay(workspaceId: string, days: number, automationId?: string): Promise<DailyCount[]>;
   /**
@@ -1028,6 +1040,12 @@ export interface AutomationRepository {
     limit: number,
   ): Promise<OutboundDeliveryRecord[]>;
   ensureOutboundDelivery(input: EnsureOutboundDeliveryInput): Promise<OutboundDeliveryRecord>;
+  /**
+   * ensureOutboundDelivery for many rows at once: per 500 inputs, one insert
+   * that skips delivery keys already stored, then one read. Returns the
+   * stored rows in input order.
+   */
+  ensureOutboundDeliveries(inputs: EnsureOutboundDeliveryInput[]): Promise<OutboundDeliveryRecord[]>;
   getOutboundDelivery(deliveryKey: string): Promise<OutboundDeliveryRecord | null>;
   /** Atomically creates/claims the delivery and reserves its monthly usage slot. */
   prepareOutboundDelivery(input: PrepareOutboundDeliveryInput): Promise<PrepareOutboundDeliveryResult>;
@@ -1132,6 +1150,13 @@ export interface AutomationRepository {
     known?: AutomationContactRecord | null,
   ): Promise<TouchContactResult>;
   getContact(workspaceId: string, instagramAccountId: string, igScopedUserId: string): Promise<AutomationContactRecord | null>;
+  /**
+   * Backfills contacts from recent activity in one statement: creates the
+   * missing ones and widens createdAt / lastSeenAt on existing ones. Unlike
+   * touchContact it never reopens a conversation (inboxStatus) and never
+   * moves updatedAt. Returns how many contacts were created.
+   */
+  reconcileContacts(workspaceId: string, candidates: ContactReconcileCandidate[]): Promise<number>;
   /** Stores Instagram handles resolved from Meta so they survive restarts and replicas. */
   rememberContactUsernames(
     workspaceId: string,
@@ -1348,6 +1373,16 @@ export interface AutomationRepository {
   getWorkspaceOnboarding(workspaceId: string): Promise<WorkspaceOnboardingRecord | null>;
   /** Creates the row on first save (existingWorkspace false), otherwise applies the patch. */
   saveWorkspaceOnboarding(workspaceId: string, patch: WorkspaceOnboardingPatch): Promise<WorkspaceOnboardingRecord>;
+  /**
+   * Read-modify-write under a row lock: `change` gets the current row (null
+   * before the first save) and returns the patch to apply. Two saves at the
+   * same time are applied one after the other, so neither overwrites the
+   * answers the other just stored.
+   */
+  updateWorkspaceOnboarding(
+    workspaceId: string,
+    change: (current: WorkspaceOnboardingRecord | null) => WorkspaceOnboardingPatch,
+  ): Promise<WorkspaceOnboardingRecord>;
   /** Email is matched case-insensitively, like workspace members. */
   getMemberOnboarding(workspaceId: string, email: string): Promise<MemberOnboardingRecord | null>;
   saveMemberOnboarding(workspaceId: string, email: string, patch: MemberOnboardingPatch): Promise<MemberOnboardingRecord>;

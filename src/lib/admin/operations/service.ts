@@ -42,6 +42,10 @@ async function nextSnapshotNumber(tx: Prisma.TransactionClient, automationId: st
   return (aggregate._max.version ?? 0) + 1;
 }
 function changed(count: number): void { if (count !== 1) throw new AdminWorkspaceError(409, "stale_version"); }
+/** A broadcast delivery with everything a send needs: its broadcast, account and person. */
+function sendable<T extends { broadcastId: string | null; instagramAccountId: string | null; recipientId: string | null }>(delivery: T): delivery is T & { broadcastId: string; instagramAccountId: string; recipientId: string } {
+  return Boolean(delivery.broadcastId && delivery.instagramAccountId && delivery.recipientId);
+}
 function stringInput(input: Record<string, unknown>, key: string, max: number): string {
   const value = typeof input[key] === "string" ? input[key].trim() : "";
   if (!value || value.length > max) throw new AdminWorkspaceError(422, `invalid_${key}`);
@@ -94,19 +98,24 @@ export async function executeAdminOperation(kind: AdminOperationKind, id: string
     const record = await prisma.broadcast.findUnique({ where: { id } }); if (!record) throw new AdminWorkspaceError(404, "operation_not_found"); await protectWorkspace(record.workspaceId);
     if (record.version !== command.version) throw new AdminWorkspaceError(409, "stale_version");
     if (command.action === "cancel_pending") { if (!['PENDING', 'RUNNING'].includes(record.status)) throw new AdminWorkspaceError(409, "invalid_transition"); return prisma.$transaction(async (tx) => { changed((await tx.broadcast.updateMany({ where: { id, version: command.version }, data: { status: "CANCELLED", cancelledAt: new Date(), completedAt: new Date(), version: { increment: 1 } } })).count); const deliveries = await tx.outboundDelivery.updateMany({ where: { broadcastId: id, OR: [{ state: "PENDING" }, { state: "FAILED", retryable: true }] }, data: { state: "CANCELLED", retryable: false, version: { increment: 1 } } }); return { id, kind, action: command.action, cancelled: deliveries.count, version: command.version + 1 }; }); }
-    const deliveries = await prisma.outboundDelivery.findMany({ where: { broadcastId: id, state: "FAILED", retryable: true, providerMessageId: null }, select: { id: true, deliveryKey: true, workspaceId: true, broadcastId: true, instagramAccountId: true, recipientId: true, version: true } });
-    const valid = deliveries.filter((d): d is typeof d & { broadcastId: string; instagramAccountId: string; recipientId: string } => Boolean(d.broadcastId && d.instagramAccountId && d.recipientId));
+    const sendableFields = { id: true, deliveryKey: true, workspaceId: true, broadcastId: true, instagramAccountId: true, recipientId: true, version: true } as const;
+    const deliveries = await prisma.outboundDelivery.findMany({ where: { broadcastId: id, state: "FAILED", retryable: true, providerMessageId: null }, select: sendableFields });
+    const valid = deliveries.filter(sendable);
     if (!['PENDING', 'RUNNING', 'COMPLETED'].includes(record.status)) throw new AdminWorkspaceError(409, "invalid_transition");
     if (!valid.length) throw new AdminWorkspaceError(409, "not_retryable");
+    // One statement reserves every still-retryable delivery, so the cost does
+    // not grow with the number of failed sends (a per-row loop ran out of
+    // Prisma's 5 s default at about 14). Each returned row carries its version
+    // after the reservation.
     const reserved = await prisma.$transaction(async (tx) => {
       changed((await tx.broadcast.updateMany({ where: { id, version: command.version, status: record.status }, data: { status: "RUNNING", completedAt: null, version: { increment: 1 } } })).count);
-      const selected = [] as typeof valid;
-      for (const delivery of valid) {
-        const result = await tx.outboundDelivery.updateMany({ where: { id: delivery.id, version: delivery.version, state: "FAILED", retryable: true, providerMessageId: null }, data: { state: "PENDING", retryable: false, version: { increment: 1 } } });
-        if (result.count === 1) selected.push(delivery);
-      }
-      return selected;
-    });
+      const selected = await tx.outboundDelivery.updateManyAndReturn({
+        where: { id: { in: valid.map((delivery) => delivery.id) }, state: "FAILED", retryable: true, providerMessageId: null },
+        data: { state: "PENDING", retryable: false, version: { increment: 1 } },
+        select: sendableFields,
+      });
+      return selected.filter(sendable);
+    }, { maxWait: 5_000, timeout: 15_000 });
     let enqueue;
     try {
       enqueue = await enqueueBroadcastSends(reserved.map((d) => ({ deliveryKey: d.deliveryKey, broadcastId: d.broadcastId, workspaceId: d.workspaceId, igAccountId: d.instagramAccountId, igScopedUserId: d.recipientId })), 0, `broadcast-${id}-${command.version}`);
@@ -116,7 +125,7 @@ export async function executeAdminOperation(kind: AdminOperationKind, id: string
     const accepted = new Set(enqueue.accepted.map((d) => JSON.stringify([d.igAccountId, d.igScopedUserId])));
     for (const delivery of reserved) {
       if (accepted.has(JSON.stringify([delivery.instagramAccountId, delivery.recipientId]))) continue;
-      await prisma.outboundDelivery.updateMany({ where: { id: delivery.id, version: delivery.version + 1, state: "PENDING", providerMessageId: null }, data: { state: "FAILED", retryable: true, version: { increment: 1 } } });
+      await prisma.outboundDelivery.updateMany({ where: { id: delivery.id, version: delivery.version, state: "PENDING", providerMessageId: null }, data: { state: "FAILED", retryable: true, version: { increment: 1 } } });
     }
     if (!enqueue.accepted.length) {
       await prisma.broadcast.updateMany({ where: { id, version: command.version + 1, status: "RUNNING" }, data: { status: record.status, completedAt: record.completedAt } });

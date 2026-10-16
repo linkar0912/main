@@ -26,7 +26,9 @@ export default function NotFound() {
         <p>The link may be mistyped, or the page has moved. Check the address, or head back to the start.</p>
         <div className="not-found-actions">
           <Link className="button button-primary" href="/">Go to the home page</Link>
-          <Link className="button button-secondary" href="/support" prefetch={false}>Get help</Link>
+          {/* A plain link: on the app and admin hosts /support redirects to
+              the marketing host, which a client-side fetch cannot follow. */}
+          <a className="button button-secondary" href="/support">Get help</a>
         </div>
       </div>
     </main>

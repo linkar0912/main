@@ -28,6 +28,7 @@ import type {
   CapturedContactSummary,
   LeadStatus,
   TouchContactResult,
+  ContactReconcileCandidate,
   ContactTimelineEntry,
   VariantPerformance,
   WebhookEventRecord,
@@ -194,6 +195,48 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
       const existing = id ? contacts.get(id) : undefined;
       if (id && existing && existing.instagramUsername !== username) contacts.set(id, { ...existing, instagramUsername: username, updatedAt: now() });
     }
+  }
+
+  function ensureDeliveryRecord(input: EnsureOutboundDeliveryInput): OutboundDeliveryRecord {
+    const existing = outboundDeliveries.get(input.deliveryKey);
+    if (existing) return copy(existing);
+    const timestamp = now();
+    const record: OutboundDeliveryRecord = {
+      ...copy(input),
+      id: createId("delivery"),
+      state: "PENDING",
+      retryable: false,
+      attemptCount: 0,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    };
+    outboundDeliveries.set(record.deliveryKey, record);
+    return copy(record);
+  }
+
+  function applyWorkspaceOnboarding(workspaceId: string, patch: WorkspaceOnboardingPatch): WorkspaceOnboardingRecord {
+    const stamp = new Date().toISOString();
+    const current: WorkspaceOnboardingRecord = workspaceOnboarding.get(workspaceId) ?? {
+      workspaceId,
+      answers: {},
+      step: 1,
+      existingWorkspace: false,
+      createdAt: stamp,
+      updatedAt: stamp,
+    };
+    const next: WorkspaceOnboardingRecord = {
+      ...current,
+      ...(patch.answers !== undefined ? { answers: copy(patch.answers) } : {}),
+      ...(patch.step !== undefined ? { step: patch.step } : {}),
+      updatedAt: stamp,
+    };
+    for (const key of ["completedAt", "skippedAt", "inviteDismissedAt", "planDismissedAt"] as const) {
+      const value = patch[key];
+      if (value === null) delete next[key];
+      else if (value !== undefined) next[key] = value;
+    }
+    workspaceOnboarding.set(workspaceId, next);
+    return copy(next);
   }
 
   return {
@@ -1266,20 +1309,11 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
     },
 
     async ensureOutboundDelivery(input: EnsureOutboundDeliveryInput) {
-      const existing = outboundDeliveries.get(input.deliveryKey);
-      if (existing) return copy(existing);
-      const timestamp = now();
-      const record: OutboundDeliveryRecord = {
-        ...copy(input),
-        id: createId("delivery"),
-        state: "PENDING",
-        retryable: false,
-        attemptCount: 0,
-        createdAt: timestamp,
-        updatedAt: timestamp,
-      };
-      outboundDeliveries.set(record.deliveryKey, record);
-      return copy(record);
+      return ensureDeliveryRecord(input);
+    },
+
+    async ensureOutboundDeliveries(inputs: EnsureOutboundDeliveryInput[]) {
+      return inputs.map(ensureDeliveryRecord);
     },
 
     async getOutboundDelivery(deliveryKey) {
@@ -1580,11 +1614,12 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
       );
     },
 
-    async countExecutionsByStatusPerAutomation(workspaceId, sinceIso) {
+    async countExecutionsByStatusPerAutomation(workspaceId, sinceIso, automationId) {
       const sinceMs = Date.parse(sinceIso);
       const tallies = new Map<string, { sent: number; failed: number; skipped: number }>();
       for (const execution of executions.values()) {
         if (execution.workspaceId !== workspaceId || Date.parse(execution.createdAt) < sinceMs) continue;
+        if (automationId && execution.automationId !== automationId) continue;
         if (!(["SENT", "FAILED", "SKIPPED"] as const).includes(execution.status as "SENT" | "FAILED" | "SKIPPED")) continue;
         const tally = tallies.get(execution.automationId) ?? { sent: 0, failed: 0, skipped: 0 };
         if (execution.status === "SENT") tally.sent += 1;
@@ -1696,6 +1731,47 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
       const id = contactIdsBySender.get(`${workspaceId}:${instagramAccountId}:${igScopedUserId}`);
       const record = id ? contacts.get(id) : undefined;
       return record ? copy(record) : null;
+    },
+
+    async reconcileContacts(workspaceId, candidates: ContactReconcileCandidate[]) {
+      let created = 0;
+      for (const candidate of candidates) {
+        const senderKey = `${workspaceId}:${candidate.instagramAccountId}:${candidate.igScopedUserId}`;
+        const existingId = contactIdsBySender.get(senderKey);
+        const existing = existingId ? contacts.get(existingId) : undefined;
+        if (existing) {
+          // Mirrors the ON CONFLICT branch: only the two dates widen. The
+          // conversation stays CLOSED if it was closed, and updatedAt stays.
+          contacts.set(existing.id, {
+            ...existing,
+            createdAt: candidate.firstSeenAt < existing.createdAt ? candidate.firstSeenAt : existing.createdAt,
+            lastSeenAt: candidate.lastSeenAt > existing.lastSeenAt ? candidate.lastSeenAt : existing.lastSeenAt,
+          });
+          continue;
+        }
+        const record: AutomationContactRecord = {
+          id: createId("contact"),
+          workspaceId,
+          instagramAccountId: candidate.instagramAccountId,
+          igScopedUserId: candidate.igScopedUserId,
+          // Mirrors the AutomationContact_username_on_create trigger.
+          ...latestSenderUsername(workspaceId, candidate.instagramAccountId, candidate.igScopedUserId),
+          state: "NONE",
+          attempts: 0,
+          tags: [],
+          score: 0,
+          leadStatus: "NEW",
+          inboxStatus: "OPEN",
+          inboxFavorite: false,
+          lastSeenAt: candidate.lastSeenAt,
+          createdAt: candidate.firstSeenAt,
+          updatedAt: now(),
+        };
+        contacts.set(record.id, record);
+        contactIdsBySender.set(senderKey, record.id);
+        created += 1;
+      }
+      return created;
     },
 
     async rememberContactUsernames(workspaceId, entries) {
@@ -1871,7 +1947,9 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
           id: contact.id,
           email: contact.email!,
           instagramAccountId: contact.instagramAccountId,
-          capturedAt: contact.updatedAt,
+          // updatedAt moves on every later edit; it is only the fallback for
+          // addresses captured before emailCapturedAt existed.
+          capturedAt: contact.emailCapturedAt ?? contact.updatedAt,
         }));
     },
 
@@ -1951,7 +2029,7 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
         });
       }
       if (contact.email) {
-        entries.push({ id: "milestone:email", kind: "email_captured", at: contact.updatedAt, label: "Email captured", detail: contact.email });
+        entries.push({ id: "milestone:email", kind: "email_captured", at: contact.emailCapturedAt ?? contact.updatedAt, label: "Email captured", detail: contact.email });
       }
       if (contact.suppressedAt) {
         entries.push({ id: "milestone:optout", kind: "opted_out", at: contact.suppressedAt, label: "Opted out" });
@@ -2616,28 +2694,14 @@ export function createMemoryRepository(seed: LegacyAutomationSeed[] = []): Autom
     },
 
     async saveWorkspaceOnboarding(workspaceId, patch: WorkspaceOnboardingPatch) {
-      const stamp = new Date().toISOString();
-      const current: WorkspaceOnboardingRecord = workspaceOnboarding.get(workspaceId) ?? {
-        workspaceId,
-        answers: {},
-        step: 1,
-        existingWorkspace: false,
-        createdAt: stamp,
-        updatedAt: stamp,
-      };
-      const next: WorkspaceOnboardingRecord = {
-        ...current,
-        ...(patch.answers !== undefined ? { answers: copy(patch.answers) } : {}),
-        ...(patch.step !== undefined ? { step: patch.step } : {}),
-        updatedAt: stamp,
-      };
-      for (const key of ["completedAt", "skippedAt", "inviteDismissedAt", "planDismissedAt"] as const) {
-        const value = patch[key];
-        if (value === null) delete next[key];
-        else if (value !== undefined) next[key] = value;
-      }
-      workspaceOnboarding.set(workspaceId, next);
-      return copy(next);
+      return applyWorkspaceOnboarding(workspaceId, patch);
+    },
+
+    async updateWorkspaceOnboarding(workspaceId, change) {
+      // Nothing is awaited between the read and the write, so two calls can
+      // never interleave here (the Prisma version holds a row lock instead).
+      const current = workspaceOnboarding.get(workspaceId);
+      return applyWorkspaceOnboarding(workspaceId, change(current ? copy(current) : null));
     },
 
     async getMemberOnboarding(workspaceId, email) {

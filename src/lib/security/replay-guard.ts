@@ -17,7 +17,9 @@ export class ReplayGuard {
     private readonly namespace: string,
     private readonly ttlMs: number,
   ) {
-    this.redis = redisUrl ? new Redis(redisUrl, { maxRetriesPerRequest: 1, connectTimeout: 3_000 }) : undefined;
+    // commandTimeout: a connected but silent Valkey must reject quickly so the
+    // in-process fallback runs instead of the callback hanging.
+    this.redis = redisUrl ? new Redis(redisUrl, { maxRetriesPerRequest: 1, connectTimeout: 3_000, commandTimeout: 1_500 }) : undefined;
   }
 
   /** True the first time `key` is claimed within the TTL, false for a replay. */

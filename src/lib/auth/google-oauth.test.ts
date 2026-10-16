@@ -60,4 +60,44 @@ describe("exchangeGoogleCode", () => {
   it("throws when Google isn't configured", async () => {
     await expect(exchangeGoogleCode("code-1", { ...CONFIG, googleClientSecret: undefined })).rejects.toThrow();
   });
+
+  it("gives up after 10 s when Google's token endpoint never answers", async () => {
+    // Hand the exchange a timeout signal the test can fire.
+    const controller = new AbortController();
+    const timeoutSpy = vi.spyOn(AbortSignal, "timeout").mockReturnValue(controller.signal);
+    try {
+      // Stands in for fetch against a server that never answers: it rejects
+      // only when its signal fires, as fetch does.
+      const fetcher = vi.fn((_url: string, init?: RequestInit) => new Promise<Response>((_, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(init.signal?.reason));
+      }));
+      const pending = exchangeGoogleCode("code-1", CONFIG, fetcher as unknown as typeof fetch).catch((caught: unknown) => caught);
+
+      expect(timeoutSpy).toHaveBeenCalledWith(10_000);
+      expect(fetcher.mock.calls[0][1]?.signal).toBe(controller.signal);
+      controller.abort(new DOMException("The operation was aborted due to timeout", "TimeoutError"));
+
+      const error = await pending;
+      expect(error).toBeInstanceOf(GoogleOAuthError);
+      expect(error).toMatchObject({ status: 0, retryable: false, message: "Google token exchange timed out" });
+    } finally {
+      timeoutSpy.mockRestore();
+    }
+  });
+
+  it("treats an aborted exchange like a timeout", async () => {
+    const fetcher = vi.fn(async () => {
+      throw new DOMException("This operation was aborted", "AbortError");
+    });
+    await expect(exchangeGoogleCode("code-1", CONFIG, fetcher as unknown as typeof fetch))
+      .rejects.toMatchObject({ name: "GoogleOAuthError", status: 0 });
+  });
+
+  it("passes other network failures through unchanged", async () => {
+    const failure = new TypeError("fetch failed");
+    const fetcher = vi.fn(async () => {
+      throw failure;
+    });
+    await expect(exchangeGoogleCode("code-1", CONFIG, fetcher as unknown as typeof fetch)).rejects.toBe(failure);
+  });
 });

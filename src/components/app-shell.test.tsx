@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { useEffect } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const navigation = vi.hoisted(() => ({ pathname: "/dashboard" }));
@@ -10,6 +11,11 @@ vi.mock("next/navigation", () => ({ usePathname: () => navigation.pathname, useR
 
 const { AppShell } = await import("./app-shell");
 const { invalidateWorkspaceResource, notifyWorkspaceChanged } = await import("@/src/lib/client/workspace-data");
+const { OnboardingScreen } = await import("./onboarding/onboarding-screen");
+const { deferOnboarding, ONBOARDING_NOT_REQUIRED_KEY, readOnboardingDeferral } = await import("@/src/lib/onboarding/redirect");
+const { renderToString } = await import("react-dom/server");
+
+const requiredOnboarding = { required: true, flow: "owner", invite: false, planCard: false, goals: [], displayName: null };
 
 function stubShellFetch(role = "MEMBER", igAvatarUrl: string | null = null, platformOwner = false) {
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
@@ -38,8 +44,10 @@ describe("AppShell", () => {
   afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
     document.body.style.overflow = "";
     navigation.pathname = "/dashboard";
+    window.sessionStorage.clear();
   });
 
   it("resets workspace pages to the top after route changes", () => {
@@ -240,7 +248,7 @@ describe("AppShell", () => {
     stubShellFetch("OWNER", null, true);
     render(<AppShell><main>Workspace</main></AppShell>);
 
-    expect(await screen.findByRole("link", { name: "Admin" })).toBeTruthy();
+    expect((await screen.findByRole("link", { name: "Admin" })).getAttribute("href")).toBe("/admin");
 
     cleanup();
     stubShellFetch("OWNER", null, false);
@@ -306,12 +314,12 @@ describe("AppShell", () => {
 
     const main = screen.getByRole("main");
     expect(main.id).toBe("main-content");
-    expect(main.textContent).toContain("Workspace");
     const skip = screen.getByRole("link", { name: "Skip to content" });
     expect(skip.getAttribute("href")).toBe("#main-content");
     // First in the tab order, ahead of the sidebar.
     expect(document.querySelector("a[href], button")).toBe(skip);
     await screen.findByRole("button", { name: "Account menu" });
+    await waitFor(() => expect(main.textContent).toContain("Workspace"));
   });
 
   it("follows the menu button pattern for the account menu and returns focus to its button on Escape", async () => {
@@ -389,6 +397,196 @@ describe("AppShell", () => {
     await waitFor(() => expect(router.replace).toHaveBeenCalledWith("/onboarding"));
     // The page underneath never flashes before the redirect lands.
     expect(screen.queryByText("Home content")).toBeNull();
+  });
+
+  it("holds the page behind a skeleton until the onboarding decision, then remembers it for this tab", async () => {
+    let answer: ((response: Response) => void) | undefined;
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
+      if (String(input).includes("/api/workspace/bootstrap")) return new Promise<Response>((resolve) => { answer = resolve; });
+      return Promise.resolve({ ok: true, json: async () => ({ data: [] }) } as Response);
+    }));
+    render(<AppShell><p>Home content</p></AppShell>);
+
+    // The page (and its own requests) waits while the redirect is undecided.
+    expect(screen.queryByText("Home content")).toBeNull();
+    expect(screen.getByRole("region", { name: "Loading Home" })).toBeTruthy();
+    await act(async () => {
+      answer?.({ ok: true, json: async () => ({ data: { email: "owner@example.com", role: "OWNER", plan: "free", onboarding: { ...requiredOnboarding, required: false } } }) } as Response);
+    });
+    expect(await screen.findByText("Home content")).toBeTruthy();
+    expect(window.sessionStorage.getItem(ONBOARDING_NOT_REQUIRED_KEY)).toBe("1");
+
+    // Next time in this tab the page shows at once, without waiting.
+    cleanup();
+    invalidateWorkspaceResource("bootstrap");
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})));
+    render(<AppShell><p>Home content</p></AppShell>);
+    expect(screen.getByText("Home content")).toBeTruthy();
+  });
+
+  it("holds the page on a client-side arrival from /onboarding while the URL has not caught up yet", async () => {
+    router.replace.mockClear();
+    // Next commits the new URL after the first render, so the shell mounts
+    // with the router on /dashboard and window.location still on /onboarding.
+    window.history.pushState({}, "", "/onboarding");
+    const pageMounts = vi.fn();
+    function HomePage() {
+      useEffect(() => pageMounts(), []);
+      return <p>Home content</p>;
+    }
+    let answer: ((response: Response) => void) | undefined;
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
+      if (String(input).includes("/api/workspace/bootstrap")) return new Promise<Response>((resolve) => { answer = resolve; });
+      return Promise.resolve({ ok: true, json: async () => ({ data: [] }) } as Response);
+    }));
+    try {
+      render(<AppShell><HomePage /></AppShell>);
+      expect(screen.getByRole("region", { name: "Loading Home" })).toBeTruthy();
+      // The commit moves the URL on; the bootstrap answers after that.
+      window.history.pushState({}, "", "/dashboard");
+      await act(async () => {
+        answer?.({ ok: true, json: async () => ({ data: { email: "new.owner@example.com", role: "OWNER", plan: "free", onboarding: requiredOnboarding } }) } as Response);
+      });
+      await waitFor(() => expect(router.replace).toHaveBeenCalledWith("/onboarding"));
+      // The page never mounted, so none of its own requests went out.
+      expect(pageMounts).not.toHaveBeenCalled();
+      expect(screen.queryByText("Home content")).toBeNull();
+    } finally {
+      window.history.pushState({}, "", "/");
+    }
+  });
+
+  it("drops another account's deferral on this tab and still sends a new account into onboarding", async () => {
+    router.replace.mockClear();
+    stubShellFetch("OWNER");
+    render(<AppShell><p>Home content</p></AppShell>);
+    await screen.findByRole("button", { name: "Account menu" });
+    // That account's onboarding could not load, so it was deferred.
+    deferOnboarding();
+    cleanup();
+
+    invalidateWorkspaceResource("bootstrap");
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).includes("/api/workspace/bootstrap")) {
+        return { ok: true, json: async () => ({ data: { email: "someone.else@example.com", role: "OWNER", plan: "free", onboarding: requiredOnboarding } }) } as Response;
+      }
+      return { ok: true, json: async () => ({ data: [] }) } as Response;
+    }));
+    render(<AppShell><p>Home content</p></AppShell>);
+    await waitFor(() => expect(router.replace).toHaveBeenCalledWith("/onboarding"));
+    expect(readOnboardingDeferral()).toBeNull();
+  });
+
+  it("shows the page when the bootstrap fails, and never redirects on an error", async () => {
+    router.replace.mockClear();
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: false, status: 502, json: async () => ({}) }) as Response));
+    render(<AppShell><p>Home content</p></AppShell>);
+    expect(await screen.findByText("Home content")).toBeTruthy();
+    expect(await screen.findByText("Account unavailable")).toBeTruthy();
+    expect(router.replace).not.toHaveBeenCalled();
+  });
+
+  it("hydrates server-rendered page content as it is", async () => {
+    stubShellFetch("OWNER");
+    const consoleError = vi.spyOn(console, "error");
+    const container = document.createElement("div");
+    container.innerHTML = renderToString(<AppShell><p>Home content</p></AppShell>);
+    expect(container.textContent).toContain("Home content");
+    document.body.appendChild(container);
+    render(<AppShell><p>Home content</p></AppShell>, { container, hydrate: true });
+    expect(screen.getByText("Home content")).toBeTruthy();
+    await screen.findByRole("button", { name: "Account menu" });
+    expect(screen.getByText("Home content")).toBeTruthy();
+    expect(consoleError.mock.calls.filter((call) => /hydrat/i.test(String(call[0])))).toEqual([]);
+  });
+
+  it("does not bounce back to onboarding after its load failed and Go to Home was pressed", async () => {
+    router.push.mockClear();
+    router.replace.mockClear();
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: false, status: 502, json: async () => ({}) }) as Response));
+    render(<OnboardingScreen />);
+    fireEvent.click(await screen.findByRole("button", { name: "Go to Home" }));
+    expect(router.push).toHaveBeenCalledWith("/dashboard");
+    expect(readOnboardingDeferral()).not.toBeNull();
+    cleanup();
+
+    // The bootstrap still says onboarding is required (only /api/onboarding is failing).
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).includes("/api/workspace/bootstrap")) {
+        return { ok: true, json: async () => ({ data: { email: "new.owner@example.com", role: "OWNER", plan: "free", onboarding: requiredOnboarding } }) } as Response;
+      }
+      return { ok: true, json: async () => ({ data: [] }) } as Response;
+    }));
+    render(<AppShell><p>Home content</p></AppShell>);
+    expect(screen.getByText("Home content")).toBeTruthy();
+    await screen.findByRole("button", { name: "Account menu" });
+    await act(async () => { await Promise.resolve(); });
+    expect(router.replace).not.toHaveBeenCalledWith("/onboarding");
+    expect(screen.getByText("Home content")).toBeTruthy();
+  });
+
+  it("re-reads the shell payload on window focus at most once a minute, and never for a hidden tab", async () => {
+    let now = Date.parse("2026-10-16T10:00:00.000Z");
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    stubShellFetch("OWNER");
+    const fetchMock = vi.mocked(fetch);
+    const bootstrapCalls = () => fetchMock.mock.calls.filter(([url]) => String(url).includes("/api/workspace/bootstrap")).length;
+    render(<AppShell><main>Workspace</main></AppShell>);
+    await screen.findByRole("button", { name: "Account menu" });
+    expect(bootstrapCalls()).toBe(1);
+
+    // Five focus events within a minute of the last answer: nothing new.
+    for (let index = 0; index < 5; index += 1) {
+      now += 10_000;
+      await act(async () => { window.dispatchEvent(new Event("focus")); });
+    }
+    expect(bootstrapCalls()).toBe(1);
+
+    // A minute on, a burst of focus events shares one request.
+    now += 20_000;
+    await act(async () => {
+      for (let index = 0; index < 5; index += 1) window.dispatchEvent(new Event("focus"));
+    });
+    await waitFor(() => expect(bootstrapCalls()).toBe(2));
+
+    // A hidden tab never refreshes on focus.
+    now += 120_000;
+    const hidden = vi.spyOn(document, "hidden", "get").mockReturnValue(true);
+    await act(async () => { window.dispatchEvent(new Event("focus")); });
+    expect(bootstrapCalls()).toBe(2);
+    hidden.mockRestore();
+  });
+
+  it("keeps the focus refresh throttled while the bootstrap answers 502, and keeps the identity it had", async () => {
+    let now = Date.parse("2026-10-16T10:00:00.000Z");
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    let failing = false;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/api/workspace/bootstrap")) {
+        return failing
+          ? { ok: false, status: 502, json: async () => { throw new Error("Bad gateway page"); } } as unknown as Response
+          : { ok: true, json: async () => ({ data: { email: "alex.rivera@example.com", role: "OWNER", plan: "free" } }) } as Response;
+      }
+      return { ok: true, json: async () => ({ data: [] }) } as Response;
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const bootstrapCalls = () => fetchMock.mock.calls.filter(([url]) => String(url).includes("/api/workspace/bootstrap")).length;
+    render(<AppShell><main>Workspace</main></AppShell>);
+    await screen.findByRole("button", { name: "Account menu" });
+    expect(bootstrapCalls()).toBe(1);
+
+    // The origin starts failing; a minute later the person switches windows 5 times in 50 s.
+    failing = true;
+    now += 61_000;
+    for (let index = 0; index < 5; index += 1) {
+      await act(async () => { window.dispatchEvent(new Event("focus")); });
+      await act(async () => { await Promise.resolve(); });
+      now += 10_000;
+    }
+    expect(bootstrapCalls()).toBe(2);
+    expect(screen.getByRole("button", { name: "Account menu" })).toBeTruthy();
+    expect(screen.queryByText("Account unavailable")).toBeNull();
   });
 
   it("does not redirect when the bootstrap carries no onboarding requirement", async () => {

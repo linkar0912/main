@@ -1,9 +1,33 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+const redis = vi.hoisted(() => ({
+  constructed: [] as Array<{ url: string; options: Record<string, unknown> }>,
+  set: vi.fn(async () => "OK"),
+}));
+
+vi.mock("ioredis", () => ({
+  default: class FakeRedis {
+    set = redis.set;
+    eval = vi.fn();
+    constructor(url: string, options: Record<string, unknown>) {
+      redis.constructed.push({ url, options });
+    }
+  },
+}));
+
+vi.mock("@/src/lib/env", () => ({
+  getServerEnv: () => ({ redisUrl: "redis://challenges.test:6379", adminChallengeTtlSeconds: undefined }),
+}));
+
+vi.mock("@/src/lib/logger", () => ({
+  logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() },
+}));
 
 import {
   AdminChallengeError,
   createAdminChallenge,
   consumeAdminChallenge,
+  RedisAdminChallengeStore,
   type AdminChallengeRecord,
   type AdminChallengeStore,
 } from "./challenges";
@@ -66,5 +90,31 @@ describe("admin confirmation challenges", () => {
       consumeAdminChallenge({ ...binding, targetId: "workspace-2", token: challenge.token }, { store }),
     ).rejects.toMatchObject({ status: 403, code: "challenge_mismatch" });
     await expect(consumeAdminChallenge({ ...binding, token: challenge.token }, { store })).resolves.toBeUndefined();
+  });
+
+  it("gives its Redis client a command timeout so a stalled Valkey fails fast", async () => {
+    await createAdminChallenge(binding, { randomToken: () => "default-store-token" });
+
+    expect(redis.constructed).toEqual([{
+      url: "redis://challenges.test:6379",
+      options: expect.objectContaining({ connectTimeout: 3_000, commandTimeout: 1_500 }),
+    }]);
+    expect(redis.set).toHaveBeenCalledTimes(1);
+  });
+
+  it("answers 503 challenge_unavailable when Redis fails or times out, instead of a bare error", async () => {
+    const timedOut = new Error("Command timed out");
+    const store = new RedisAdminChallengeStore({
+      set: vi.fn(async () => { throw timedOut; }),
+      eval: vi.fn(async () => { throw timedOut; }),
+    } as unknown as ConstructorParameters<typeof RedisAdminChallengeStore>[0]);
+
+    await expect(createAdminChallenge(binding, { store, randomToken: () => "stalled-token" })).rejects.toEqual(
+      new AdminChallengeError(503, "challenge_unavailable"),
+    );
+    await expect(consumeAdminChallenge({ ...binding, token: "stalled-token" }, { store })).rejects.toMatchObject({
+      status: 503,
+      code: "challenge_unavailable",
+    });
   });
 });

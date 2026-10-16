@@ -65,6 +65,21 @@ describe("ProofRail", () => {
     expect(duplicate?.textContent).toContain("Beauty creator in Bengaluru");
   });
 
+  it("asks the image optimizer for 1x and 2x portraits only, sized to the 68 px slot", () => {
+    const { container } = render(<ProofRail />);
+    const portraits = Array.from(container.querySelectorAll("img"));
+
+    expect(portraits).toHaveLength(4);
+    for (const portrait of portraits) {
+      // A `sizes` attribute would switch to width descriptors and list every
+      // configured width, each one a separate encode on the origin.
+      expect(portrait.getAttribute("sizes")).toBeNull();
+      expect(portrait.getAttribute("width")).toBe("68");
+      const descriptors = (portrait.getAttribute("srcset") ?? "").split(",").map((candidate) => candidate.trim().split(/\s+/)[1]);
+      expect(descriptors).toEqual(["1x", "2x"]);
+    }
+  });
+
   it("keeps the audience statement fixed while the creator examples live in a right-hand ticker", () => {
     render(<ProofRail />);
 

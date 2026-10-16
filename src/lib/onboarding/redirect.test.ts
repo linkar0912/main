@@ -1,5 +1,17 @@
-import { describe, expect, it } from "vitest";
-import { shouldRedirectToOnboarding } from "./redirect";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  adoptOnboardingIdentity,
+  clearOnboardingDeferral,
+  deferOnboarding,
+  mayRedirectToOnboarding,
+  ONBOARDING_DEFER_MS,
+  ONBOARDING_DEFERRED_KEY,
+  ONBOARDING_IDENTITY_KEY,
+  onboardingKnownNotRequired,
+  readOnboardingDeferral,
+  rememberOnboardingNotRequired,
+  shouldRedirectToOnboarding,
+} from "./redirect";
 import type { OnboardingSummary } from "./status";
 
 const needed: OnboardingSummary = { required: true, flow: "owner", invite: false, planCard: false, goals: [], displayName: null };
@@ -32,5 +44,92 @@ describe("shouldRedirectToOnboarding", () => {
   it("puts onboarding before the checkout of a plan picked on /pricing", () => {
     expect(shouldRedirectToOnboarding(needed, "/settings", "?section=billing&plan=growth&interval=annual")).toBe(true);
     expect(shouldRedirectToOnboarding({ ...needed, required: false }, "/settings", "?section=billing&plan=growth&interval=annual")).toBe(false);
+  });
+});
+
+describe("onboarding deferral", () => {
+  const now = Date.parse("2026-10-16T10:00:00.000Z");
+
+  it("holds the redirect off for 30 minutes after a deferral, then asks again", () => {
+    expect(shouldRedirectToOnboarding(needed, "/dashboard", "", now - 1_000, now)).toBe(false);
+    expect(shouldRedirectToOnboarding(needed, "/dashboard", "", now - ONBOARDING_DEFER_MS + 1, now)).toBe(false);
+    expect(shouldRedirectToOnboarding(needed, "/dashboard", "", now - ONBOARDING_DEFER_MS, now)).toBe(true);
+    expect(shouldRedirectToOnboarding(needed, "/dashboard", "", null, now)).toBe(true);
+    // A timestamp from the future (a clock change) is not a deferral.
+    expect(shouldRedirectToOnboarding(needed, "/dashboard", "", now + 60_000, now)).toBe(true);
+  });
+
+  it("tells whether a page could be redirected before the bootstrap answers", () => {
+    expect(mayRedirectToOnboarding("/dashboard", "", null, now)).toBe(true);
+    expect(mayRedirectToOnboarding("/settings", "?meta=connected", null, now)).toBe(false);
+    expect(mayRedirectToOnboarding("/dashboard", "", now - 1_000, now)).toBe(false);
+  });
+
+  describe("tab storage", () => {
+    function stubStorage(blocked = false) {
+      const values = new Map<string, string>();
+      const storage = {
+        getItem: (key: string) => { if (blocked) throw new Error("blocked"); return values.get(key) ?? null; },
+        setItem: (key: string, value: string) => { if (blocked) throw new Error("blocked"); values.set(key, value); },
+        removeItem: (key: string) => { if (blocked) throw new Error("blocked"); values.delete(key); },
+      };
+      vi.stubGlobal("window", { sessionStorage: storage });
+      return values;
+    }
+
+    afterEach(() => vi.unstubAllGlobals());
+
+    it("stores, reads and clears the deferral and the not-required flag", () => {
+      const values = stubStorage();
+      expect(readOnboardingDeferral()).toBeNull();
+      deferOnboarding(now);
+      expect(values.get(ONBOARDING_DEFERRED_KEY)).toBe(String(now));
+      expect(readOnboardingDeferral()).toBe(now);
+      clearOnboardingDeferral();
+      expect(readOnboardingDeferral()).toBeNull();
+
+      expect(onboardingKnownNotRequired()).toBe(false);
+      rememberOnboardingNotRequired(true);
+      expect(onboardingKnownNotRequired()).toBe(true);
+      rememberOnboardingNotRequired(false);
+      expect(onboardingKnownNotRequired()).toBe(false);
+    });
+
+    it("drops the flags when a different account signs in on the same tab", () => {
+      const values = stubStorage();
+      adoptOnboardingIdentity("first@example.com");
+      deferOnboarding(now);
+      rememberOnboardingNotRequired(true);
+      // The same account (any case) keeps them.
+      adoptOnboardingIdentity("First@Example.com");
+      expect(readOnboardingDeferral()).toBe(now);
+      expect(onboardingKnownNotRequired()).toBe(true);
+      // The email itself is never stored.
+      expect(values.get(ONBOARDING_IDENTITY_KEY)).not.toContain("example");
+
+      adoptOnboardingIdentity("second@example.com");
+      expect(readOnboardingDeferral()).toBeNull();
+      expect(onboardingKnownNotRequired()).toBe(false);
+    });
+
+    it("keeps a deferral made before any account was known on this tab", () => {
+      stubStorage();
+      deferOnboarding(now);
+      adoptOnboardingIdentity("first@example.com");
+      expect(readOnboardingDeferral()).toBe(now);
+      // An empty email changes nothing.
+      adoptOnboardingIdentity("");
+      expect(readOnboardingDeferral()).toBe(now);
+    });
+
+    it("never throws when the browser blocks storage", () => {
+      stubStorage(true);
+      expect(() => adoptOnboardingIdentity("first@example.com")).not.toThrow();
+      expect(() => deferOnboarding(now)).not.toThrow();
+      expect(() => clearOnboardingDeferral()).not.toThrow();
+      expect(() => rememberOnboardingNotRequired(true)).not.toThrow();
+      expect(readOnboardingDeferral()).toBeNull();
+      expect(onboardingKnownNotRequired()).toBe(false);
+    });
   });
 });

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  ADMIN_RECENT_KEY,
   adminPages,
   filterItems,
   groupBySection,
@@ -13,6 +14,7 @@ import {
   RECENT_LIMIT,
   workspaceActions,
   workspacePages,
+  WORKSPACE_RECENT_KEY,
   type PaletteItem,
 } from "./command-palette-items";
 import { automationItem, contactItem, conversationItem } from "./command-palette-sources";
@@ -84,6 +86,21 @@ describe("recent picks", () => {
     expect(recent.every((entry) => entry.section === "Recent")).toBe(true);
   });
 
+  it("opens a remembered pick on the other host with a full page load, even one saved before it was marked", () => {
+    // Saved by an older build: no external flag.
+    window.localStorage.setItem(ADMIN_RECENT_KEY, JSON.stringify([
+      { id: "page:/dashboard", kind: "page", label: "Back to workspace", href: "/dashboard" },
+      { id: "page:/admin/users", kind: "page", label: "Users", href: "/admin/users" },
+    ]));
+    window.localStorage.setItem(WORKSPACE_RECENT_KEY, JSON.stringify([
+      { id: "page:/admin", kind: "page", label: "Owner console", href: "/admin" },
+      { id: "page:/contacts", kind: "page", label: "Contacts", href: "/contacts" },
+      { id: "action:export-contacts", kind: "action", label: "Export contacts", href: "/api/contacts/export", external: true },
+    ]));
+    expect(readRecent(ADMIN_RECENT_KEY).map((entry) => [entry.href, Boolean(entry.external)])).toEqual([["/dashboard", true], ["/admin/users", false]]);
+    expect(readRecent(WORKSPACE_RECENT_KEY).map((entry) => [entry.href, Boolean(entry.external)])).toEqual([["/admin", true], ["/contacts", false], ["/api/contacts/export", true]]);
+  });
+
   it("survives corrupt storage", () => {
     window.localStorage.setItem("test.recent", "{not json");
     expect(readRecent("test.recent")).toEqual([]);
@@ -100,6 +117,15 @@ describe("palette contents", () => {
     }
     expect(hrefs).not.toContain("/admin");
     expect(workspacePages({ platformOwner: true }).map((page) => page.href)).toContain("/admin");
+  });
+
+  it("crosses between the workspace and the owner console with a full page load", () => {
+    // Each lives on its own host; router.push would fetch the other host's
+    // page from this one and trip the CSP connect-src.
+    expect(workspacePages({ platformOwner: true }).find((page) => page.href === "/admin")?.external).toBe(true);
+    expect(adminPages().find((page) => page.label === "Back to workspace")).toMatchObject({ href: "/dashboard", external: true });
+    expect(workspacePages({ platformOwner: true }).filter((page) => page.external).map((page) => page.href)).toEqual(["/admin"]);
+    expect(adminPages().filter((page) => page.external).map((page) => page.href)).toEqual(["/dashboard"]);
   });
 
   it("offers the + menu items plus connecting accounts and exporting contacts", () => {

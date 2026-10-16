@@ -77,6 +77,15 @@ function CodeField({ code, onCodeChange, autoFocus = false }: { code: string; on
   );
 }
 
+/**
+ * The enrollment QR as an image source. auth-js already returns a data URI
+ * ("data:image/svg+xml;utf-8,<svg..."), and prefixing it again made the image
+ * fail to load. Raw SVG markup is encoded so it can never be read as markup.
+ */
+function qrCodeImageSource(qrCode: string): string {
+  return qrCode.startsWith("data:") ? qrCode : `data:image/svg+xml;charset=utf-8,${encodeURIComponent(qrCode)}`;
+}
+
 function EnrollmentForm({
   enrollment,
   code,
@@ -97,10 +106,10 @@ function EnrollmentForm({
   return (
     <form className="admin-enrollment" onSubmit={onSubmit}>
       <div className="admin-qr-frame">
-        {/* Supabase returns trusted enrollment SVG; encoding it prevents markup injection. */}
+        {/* An <img> never runs script from its source, whatever the SVG holds. */}
         {/* eslint-disable-next-line @next/next/no-img-element -- ephemeral data URI cannot use the image optimizer */}
         <img
-          src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(enrollment.qrCode)}`}
+          src={qrCodeImageSource(enrollment.qrCode)}
           alt="Linkar authenticator QR code"
         />
       </div>
@@ -139,6 +148,8 @@ export function AdminSecurityScreen({
   const [enrollment, setEnrollment] = useState<Enrollment | null>(null);
   const [code, setCode] = useState("");
   const [removal, setRemoval] = useState<Removal | null>(null);
+  // Which verified app the AAL1 code comes from. Null means the first one.
+  const [selectedFactorId, setSelectedFactorId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -174,6 +185,7 @@ export function AdminSecurityScreen({
     [security],
   );
   const verified = security.aal === "aal2";
+  const challengeFactor = verifiedFactors.find((factor) => factor.id === selectedFactorId) ?? verifiedFactors[0];
 
   async function beginEnrollment(backup = false) {
     setBusy(true);
@@ -192,7 +204,7 @@ export function AdminSecurityScreen({
 
   async function verifyEnrollment(event: React.FormEvent) {
     event.preventDefault();
-    const factorId = enrollment?.factorId ?? verifiedFactors[0]?.id;
+    const factorId = enrollment?.factorId ?? challengeFactor?.id;
     if (!factorId || !/^\d{6}$/.test(code)) return;
     setBusy(true);
     setError(null);
@@ -277,15 +289,35 @@ export function AdminSecurityScreen({
             <div>
               <h2 id="verify-title">{verifiedFactors.length > 0 ? "Verify your authenticator" : "Set up two-factor sign-in"}</h2>
               <p>
-                {verifiedFactors.length > 0
-                  ? `Enter a fresh six-digit code from ${verifiedFactors[0]?.friendlyName ?? "your authenticator app"}.`
-                  : "You need an authenticator app before you can use the owner console. Add Linkar to it, then enter one fresh six-digit code."}
+                {verifiedFactors.length > 1
+                  ? "Choose the authenticator app you have with you, then enter a fresh six-digit code from it."
+                  : verifiedFactors.length > 0
+                    ? `Enter a fresh six-digit code from ${challengeFactor?.friendlyName ?? "your authenticator app"}.`
+                    : "You need an authenticator app before you can use the owner console. Add Linkar to it, then enter one fresh six-digit code."}
               </p>
             </div>
           </div>
 
           {verifiedFactors.length > 0 ? (
             <form className="admin-form" onSubmit={verifyEnrollment}>
+              {verifiedFactors.length > 1 ? (
+                <fieldset className="admin-segmented">
+                  <legend>Authenticator app</legend>
+                  {verifiedFactors.map((factor) => (
+                    <label key={factor.id}>
+                      <input
+                        type="radio"
+                        name="mfa-factor"
+                        value={factor.id}
+                        checked={factor.id === challengeFactor?.id}
+                        disabled={busy}
+                        onChange={() => setSelectedFactorId(factor.id)}
+                      />
+                      {factor.friendlyName}
+                    </label>
+                  ))}
+                </fieldset>
+              ) : null}
               <CodeField code={code} onCodeChange={setCode} autoFocus />
               <div className="admin-actions">
                 <button className="button button-primary" type="submit" disabled={busy || !/^\d{6}$/.test(code)}>

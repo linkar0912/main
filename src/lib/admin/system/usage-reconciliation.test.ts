@@ -16,5 +16,6 @@ describe("reconcileUsageReservations", () => {
     client.$transaction.mockImplementation(async (work) => work(client));
     await expect(reconcileUsageReservations(client as never)).resolves.toEqual({ periodsUpdated: 3 });
     expect(client.$executeRaw).toHaveBeenCalledTimes(2);
+    expect(client.$transaction).toHaveBeenCalledWith(expect.any(Function), { isolationLevel: "Serializable", maxWait: 5_000, timeout: 60_000 });
   });
 });

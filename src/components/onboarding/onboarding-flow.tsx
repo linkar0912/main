@@ -22,6 +22,8 @@ import {
   Workflow,
 } from "lucide-react";
 import { PRODUCT_NAME } from "@/src/lib/branding";
+import { backoffDelay } from "@/src/lib/client/workspace-data";
+import { deferOnboarding, rememberOnboardingNotRequired } from "@/src/lib/onboarding/redirect";
 import { LinkarMark } from "../linkar-mark";
 import { InstagramGlyph } from "../instagram-glyph";
 import { FacebookGlyph } from "../facebook-glyph";
@@ -52,7 +54,7 @@ import {
   type OnboardingAnswers,
 } from "@/src/lib/onboarding/answers";
 import type { OnboardingPlan } from "@/src/lib/onboarding/build-plan";
-import type { OnboardingView } from "@/src/lib/onboarding/view";
+import type { OnboardingAction, OnboardingView } from "@/src/lib/onboarding/view";
 import type { FacebookPageChoice, OnboardingClient, OnboardingSave } from "./onboarding-client";
 import { OnboardingPlanView } from "./onboarding-plan";
 import styles from "./onboarding.module.css";
@@ -87,6 +89,165 @@ function connectMessage(status: string | undefined, channel: "Instagram" | "Face
 
 /** Step transitions: the old step fades out while the new one arrives. */
 const LEAVE_MS = 160;
+
+/** A failed step save is sent again after 1 s, 2 s, 4 s... (up to 30 s). */
+const SAVE_RETRY_BASE_MS = 1_000;
+const SAVE_RETRY_CAP_MS = 30_000;
+/** Sends of one step save (the first and its resends) before it waits for Try again or the next step: about a minute and a half. */
+export const SAVE_MAX_ATTEMPTS = 8;
+
+/** The HTTP status a failed save carries, when the server answered. */
+function failedStatus(error: unknown): number | undefined {
+  const status = (error as { status?: unknown } | null)?.status;
+  return typeof status === "number" ? status : undefined;
+}
+
+/**
+ * A refusal a resend cannot change: signed out, not allowed, or an answer
+ * the server rejected. A timeout or "too many requests" can still go through.
+ */
+function resendCannotHelp(error: unknown): boolean {
+  const status = failedStatus(error);
+  return status !== undefined && status >= 400 && status < 500 && status !== 408 && status !== 429;
+}
+
+type SaveQueueOptions = {
+  save: (body: OnboardingSave) => Promise<OnboardingView>;
+  onSaved: (view: OnboardingView) => void;
+  /** true when a save failed; false once every queued save is through. */
+  onFailing: (failing: boolean) => void;
+  /** A save came back 401: the session has ended, so nothing will save until they sign in again. */
+  onSignedOut?: () => void;
+  retryDelay?: (attempt: number) => number;
+};
+
+export type SaveQueue = {
+  /**
+   * Queues a save behind the ones before it. Answers pile up until a save
+   * carrying them succeeds, so every request sends all unsaved answers.
+   * With `retry`, a failure is sent again with backoff until it goes
+   * through, until a newer save takes it over (that one carries the same
+   * answers and a newer step), or until SAVE_MAX_ATTEMPTS sends. A refusal
+   * (4xx) is never resent, and a hidden tab waits until it is visible again.
+   * Resolves true once saved.
+   */
+  enqueue(body: OnboardingSave, options?: { retry?: boolean }): Promise<boolean>;
+  /** "Try again": resend now instead of waiting out the backoff. */
+  retryNow(): void;
+  open(): void;
+  close(): void;
+};
+
+export function createSaveQueue({ save, onSaved, onFailing, onSignedOut, retryDelay }: SaveQueueOptions): SaveQueue {
+  const delay = retryDelay ?? ((attempt: number) => backoffDelay(attempt, { baseMs: SAVE_RETRY_BASE_MS, capMs: SAVE_RETRY_CAP_MS }));
+  const unsaved: Record<string, unknown> = {};
+  let tail: Promise<unknown> = Promise.resolve();
+  let outstanding = 0;
+  let generation = 0;
+  let lastOk = true;
+  let lastFailed: { step?: number; action?: OnboardingAction } | null = null;
+  // The resend waiting on a backoff timer or on the tab becoming visible.
+  let waiting: { cancel: () => void; resolve: () => void } | null = null;
+  let closed = false;
+
+  function wake() {
+    if (!waiting) return;
+    const { cancel, resolve } = waiting;
+    waiting = null;
+    cancel();
+    resolve();
+  }
+
+  function pause(ms: number): Promise<void> {
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => { waiting = null; resolve(); }, ms);
+      waiting = { cancel: () => clearTimeout(timer), resolve };
+    });
+  }
+
+  /** A hidden tab does not resend; it waits until someone looks at it again. */
+  function whenVisible(): Promise<void> {
+    if (typeof document === "undefined" || !document.hidden) return Promise.resolve();
+    return new Promise((resolve) => {
+      const onChange = () => {
+        if (document.hidden) return;
+        document.removeEventListener("visibilitychange", onChange);
+        waiting = null;
+        resolve();
+      };
+      document.addEventListener("visibilitychange", onChange);
+      waiting = { cancel: () => document.removeEventListener("visibilitychange", onChange), resolve };
+    });
+  }
+
+  function enqueue(body: OnboardingSave, { retry = false }: { retry?: boolean } = {}): Promise<boolean> {
+    if (body.answers) Object.assign(unsaved, body.answers);
+    const ticket = ++generation;
+    const intent = { ...(body.step !== undefined ? { step: body.step } : {}), ...(body.action ? { action: body.action } : {}) };
+    outstanding += 1;
+    // A save waiting to retry is taken over by this one.
+    wake();
+
+    const run = async (): Promise<boolean> => {
+      for (let attempt = 1; !closed; attempt += 1) {
+        const answers = { ...unsaved };
+        const request: OnboardingSave = { ...intent, ...(Object.keys(answers).length > 0 ? { answers } : {}) };
+        try {
+          const view = await save(request);
+          // Only what this save carried is settled; answers given meanwhile stay queued.
+          for (const [key, value] of Object.entries(answers)) {
+            if (unsaved[key] === value) delete unsaved[key];
+          }
+          lastOk = true;
+          lastFailed = null;
+          if (!closed) onSaved(view);
+          return true;
+        } catch (error) {
+          lastOk = false;
+          lastFailed = intent;
+          if (!closed) {
+            onFailing(true);
+            if (failedStatus(error) === 401) onSignedOut?.();
+          }
+          // A newer save already queued carries these answers, so it goes next.
+          if (!retry || closed || generation !== ticket) return false;
+          // Try again, or the next step's save, sends these answers again.
+          if (resendCannotHelp(error) || attempt >= SAVE_MAX_ATTEMPTS) return false;
+          await pause(delay(attempt));
+          if (generation === ticket && !closed) await whenVisible();
+          if (generation !== ticket) return false;
+        }
+      }
+      return false;
+    };
+
+    const result = tail.then(run);
+    tail = result.finally(() => {
+      outstanding -= 1;
+      if (outstanding === 0 && lastOk && Object.keys(unsaved).length === 0 && !closed) onFailing(false);
+    });
+    return result;
+  }
+
+  return {
+    enqueue,
+    retryNow() {
+      if (waiting) {
+        wake();
+        return;
+      }
+      if (outstanding > 0) return;
+      if (lastFailed || Object.keys(unsaved).length > 0) void enqueue(lastFailed ?? {}, { retry: true });
+    },
+    open() {
+      closed = false;
+    },
+    close() {
+      closed = true;
+      wake();
+    },
+  };
+}
 
 type Direction = "forward" | "back";
 
@@ -161,13 +322,13 @@ export function OnboardingFlow({ view, client, connectReturn, initialStep, initi
   const [planResult, setPlanResult] = useState<{ request: number; plan: OnboardingPlan | null } | null>(initialPlan ? { request: 0, plan: initialPlan } : null);
   const loadedRequest = useRef(initialPlan ? 0 : -1);
   const [saveError, setSaveError] = useState(false);
+  const [signedOut, setSignedOut] = useState(false);
   const [busy, setBusy] = useState(false);
   const [facebookChoices, setFacebookChoices] = useState<FacebookPageChoice[] | null>(null);
   const [facebookChoice, setFacebookChoice] = useState("");
   const [facebookError, setFacebookError] = useState("");
   const headingRef = useRef<HTMLHeadingElement>(null);
   const firstRender = useRef(true);
-  const pendingSave = useRef<OnboardingSave | null>(null);
   const headingId = useId();
   const hintId = useId();
 
@@ -176,25 +337,33 @@ export function OnboardingFlow({ view, client, connectReturn, initialStep, initi
   const facebookName = connections.facebook.find((item) => item.status === "CONNECTED")?.pageName;
   const connectedLabel = instagramName ? `@${instagramName.replace(/^@/, "")}` : facebookName ?? null;
 
-  const persist = useCallback(async (body: OnboardingSave) => {
-    pendingSave.current = body;
-    try {
-      const next = await client.save(body);
+  // Saves go out one at a time, in order, each carrying every answer not
+  // yet saved; the warning stays up until all of them are through.
+  const saves = useMemo(() => createSaveQueue({
+    save: (body) => client.save(body),
+    onSaved: (next) => {
       setConnections(next.connections);
-      setSaveError(false);
-      pendingSave.current = null;
-      return true;
-    } catch {
-      setSaveError(true);
-      return false;
-    }
-  }, [client]);
+      setSignedOut(false);
+    },
+    onFailing: (failing) => {
+      setSaveError(failing);
+      if (!failing) setSignedOut(false);
+    },
+    onSignedOut: () => setSignedOut(true),
+  }), [client]);
+  useEffect(() => {
+    saves.open();
+    return () => saves.close();
+  }, [saves]);
+  /** Step moves retry on their own; a save someone waits on reports at once. */
+  const persist = useCallback((body: OnboardingSave, options?: { retry?: boolean }) => saves.enqueue(body, options), [saves]);
 
-  // A connect that came back successfully moves the resume point on too.
+  // A connect that came back successfully moves the resume point on too,
+  // in turn with every other save.
   useEffect(() => {
     if (!owner || !returnedConnected || resumeStep > 7) return;
-    client.save({ step: 8 }).then((next) => setConnections(next.connections)).catch(() => undefined);
-  }, [client, owner, returnedConnected, resumeStep]);
+    void persist({ step: 8 }, { retry: true });
+  }, [persist, owner, returnedConnected, resumeStep]);
 
   // Facebook asks which Page to connect before anything is saved.
   useEffect(() => {
@@ -295,25 +464,31 @@ export function OnboardingFlow({ view, client, connectReturn, initialStep, initi
       const saved = await persist({ ...(cleaned ? { answers: cleaned } : {}), action: "complete" });
       setBusy(false);
       if (!saved) return;
+      // Home can show at once: the shell need not wait to check onboarding.
+      rememberOnboardingNotRequired(true);
       goTo(target, "forward");
       return;
     }
     goTo(target, "forward");
-    void persist({ step: target, ...(cleaned ? { answers: cleaned } : {}) });
+    void persist({ step: target, ...(cleaned ? { answers: cleaned } : {}) }, { retry: true });
     if (owner && target === 8) setPlanRequest((request) => request + 1);
   }
 
   function back() {
     if (step <= 1 || step >= doneStep) return;
     goTo(step - 1, "back");
-    void persist({ step: step - 1 });
+    void persist({ step: step - 1 }, { retry: true });
   }
 
   async function skip() {
     if (busy) return;
     setBusy(true);
-    await persist({ action: "skip" });
+    const saved = await persist({ action: "skip" });
     setBusy(false);
+    // Home would send them straight back while the skip is not saved, so
+    // the shell holds the redirect off for a while instead.
+    if (saved) rememberOnboardingNotRequired(true);
+    else deferOnboarding();
     client.navigate("/dashboard");
   }
 
@@ -323,7 +498,9 @@ export function OnboardingFlow({ view, client, connectReturn, initialStep, initi
     setBusy(true);
     const saved = await persist({ action: "complete" });
     setBusy(false);
-    if (saved) client.navigate(href);
+    if (!saved) return;
+    rememberOnboardingNotRequired(true);
+    client.navigate(href);
   }
 
   async function connectFacebookPage() {
@@ -336,7 +513,7 @@ export function OnboardingFlow({ view, client, connectReturn, initialStep, initi
       setConnections((current) => ({ ...current, facebook: [...current.facebook, { pageId: facebookChoice, pageName: page?.name ?? "Your Page", status: "CONNECTED" }] }));
       setFacebookChoices(null);
       goTo(8, "forward");
-      void persist({ step: 8 });
+      void persist({ step: 8 }, { retry: true });
       setPlanRequest((request) => request + 1);
     } catch (error) {
       setFacebookError(error instanceof Error ? error.message : "Could not connect that Page");
@@ -699,8 +876,18 @@ export function OnboardingFlow({ view, client, connectReturn, initialStep, initi
           <footer className={styles.footer}>
             {saveError ? (
               <p className={styles.saveError} role="alert">
-                Your answers didn’t save.
-                <button type="button" className={styles.textButton} onClick={() => { if (pendingSave.current) void persist(pendingSave.current); }}>Try again</button>
+                {signedOut ? (
+                  <>
+                    You’ve been signed out, so your answers can’t save.
+                    {/* A full page load: signing in starts a fresh session. */}
+                    <a className={styles.textButton} href="/login?next=/onboarding">Sign in again</a>
+                  </>
+                ) : (
+                  <>
+                    Your answers didn’t save.
+                    <button type="button" className={styles.textButton} onClick={() => saves.retryNow()}>Try again</button>
+                  </>
+                )}
               </p>
             ) : null}
             <div className={styles.footerRow}>

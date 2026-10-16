@@ -1,4 +1,4 @@
-import { matchesTrigger, findMatchedKeyword } from "./match";
+import { evaluateTrigger } from "./match";
 import type { EvaluationContext, EvaluationResult, ExecutionAction, FlowDefinitionV1, NormalizedEvent } from "./types";
 import { withinSchedule } from "./types";
 
@@ -11,7 +11,8 @@ export function evaluateFlow(
     return { status: "skipped", reason: "outside scheduled window", actions: [] };
   }
 
-  if (!matchesTrigger(flow, event, context)) {
+  const triggerMatch = evaluateTrigger(flow, event, context);
+  if (!triggerMatch.matched) {
     return { status: "skipped", reason: "trigger did not match", actions: [] };
   }
 
@@ -19,11 +20,8 @@ export function evaluateFlow(
     return { status: "skipped", reason: "comment triggers support only a private reply", actions: [] };
   }
 
-  const matchedKeyword =
-    (flow.trigger.type === "comment" || flow.trigger.type === "message" || flow.trigger.type === "story_reply")
-      && flow.trigger.match === "keyword"
-      ? findMatchedKeyword(event.text, flow.trigger.keywords, flow.trigger.mode)
-      : undefined;
+  // Set only for keyword triggers: the keyword the trigger check already found.
+  const matchedKeyword = triggerMatch.keyword;
 
   const actions: ExecutionAction[] = [];
   let privateReplyAdded = false;

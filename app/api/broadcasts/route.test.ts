@@ -1,4 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { createMemoryRepository } from "@/src/lib/memory-repository";
+import { createPrismaRepository, prisma } from "@/src/lib/prisma";
+import type { EnsureOutboundDeliveryInput } from "@/src/lib/repository";
 
 const mocks = vi.hoisted(() => ({
   getValidatedSession: vi.fn(),
@@ -9,7 +12,8 @@ const mocks = vi.hoisted(() => ({
   getMessagingWindow: vi.fn(),
   incrementBroadcastCounters: vi.fn(),
   finalizeBroadcastIfDone: vi.fn(),
-  ensureOutboundDelivery: vi.fn(),
+  ensureOutboundDeliveries: vi.fn(),
+  cancelBroadcast: vi.fn(),
   claimOutboundDelivery: vi.fn(),
   failOutboundDelivery: vi.fn(),
   reconcileBroadcastCounters: vi.fn(),
@@ -32,7 +36,8 @@ vi.mock("@/src/lib/repository-provider", () => ({
     getMessagingWindow: mocks.getMessagingWindow,
     incrementBroadcastCounters: mocks.incrementBroadcastCounters,
     finalizeBroadcastIfDone: mocks.finalizeBroadcastIfDone,
-    ensureOutboundDelivery: mocks.ensureOutboundDelivery,
+    ensureOutboundDeliveries: mocks.ensureOutboundDeliveries,
+    cancelBroadcast: mocks.cancelBroadcast,
     claimOutboundDelivery: mocks.claimOutboundDelivery,
     failOutboundDelivery: mocks.failOutboundDelivery,
     reconcileBroadcastCounters: mocks.reconcileBroadcastCounters,
@@ -76,7 +81,9 @@ describe("/api/broadcasts", () => {
     mocks.getMessagingWindow.mockReset().mockResolvedValue(null);
     mocks.incrementBroadcastCounters.mockReset();
     mocks.finalizeBroadcastIfDone.mockReset();
-    mocks.ensureOutboundDelivery.mockReset().mockImplementation(async (input) => ({ ...input, id: input.deliveryKey, state: "PENDING" }));
+    mocks.ensureOutboundDeliveries.mockReset().mockImplementation(async (inputs: EnsureOutboundDeliveryInput[]) =>
+      inputs.map((input) => ({ ...input, id: input.deliveryKey, state: "PENDING" })));
+    mocks.cancelBroadcast.mockReset().mockResolvedValue({ status: "cancelled", broadcast: { ...createdBroadcast, status: "CANCELLED" } });
     mocks.claimOutboundDelivery.mockReset().mockResolvedValue({ claimed: true, record: { state: "CLAIMED" } });
     mocks.failOutboundDelivery.mockReset().mockResolvedValue(true);
     mocks.reconcileBroadcastCounters.mockReset().mockResolvedValue({ total: 2, sent: 0, failed: 1, skipped: 0, pending: 1 });
@@ -140,7 +147,8 @@ describe("/api/broadcasts", () => {
     const response = await create();
 
     expect(response.status).toBe(502);
-    expect(mocks.ensureOutboundDelivery).toHaveBeenCalledTimes(2);
+    expect(mocks.ensureOutboundDeliveries).toHaveBeenCalledTimes(1);
+    expect(mocks.ensureOutboundDeliveries.mock.calls[0][0]).toHaveLength(2);
     expect(mocks.failOutboundDelivery).toHaveBeenCalledTimes(1);
     expect(mocks.reconcileBroadcastCounters).toHaveBeenCalledWith("workspace_1", "broadcast_1");
     expect(mocks.incrementBroadcastCounters).not.toHaveBeenCalled();
@@ -185,6 +193,68 @@ describe("/api/broadcasts", () => {
     expect(mocks.releaseMonthlyBroadcast).toHaveBeenCalledWith("workspace_1", expect.stringMatching(/-01$/));
   });
 
+  it("stores 500 deliveries with one batched insert and one read, then queues all of them", async () => {
+    mocks.getValidatedSession.mockResolvedValue({ userId: "user_1", workspaceId: "workspace_1" });
+    const recipients = Array.from({ length: 500 }, (_, index) => ({ instagramAccountId: "ig_a", igScopedUserId: `person_${index}` }));
+    mocks.listBroadcastRecipients.mockResolvedValue({ recipients, totalEligible: 500 });
+    mocks.createBroadcast.mockResolvedValue({ ...createdBroadcast, total: 500 });
+    const createMany = vi.fn().mockResolvedValue({ count: 500 });
+    const findMany = vi.fn(async ({ where }: { where: { deliveryKey: { in: string[] } } }) => where.deliveryKey.in.map((deliveryKey) => ({
+      id: `delivery_${deliveryKey}`,
+      deliveryKey,
+      workspaceId: "workspace_1",
+      kind: "BROADCAST_RECIPIENT",
+      recipientId: null,
+      instagramAccountId: "ig_a",
+      automationId: null,
+      participantId: null,
+      sequenceEnrollmentId: null,
+      broadcastId: "broadcast_1",
+      payload: { type: "text", text: "Hello" },
+      state: "PENDING",
+      retryable: false,
+      resultCode: null,
+      claimOwner: null,
+      claimExpiresAt: null,
+      attemptCount: 0,
+      providerMessageId: null,
+      lastError: null,
+      createdAt: new Date("2026-09-01T00:00:00.000Z"),
+      updatedAt: new Date("2026-09-01T00:00:00.000Z"),
+      sentAt: null,
+    })).reverse());
+    const client = { outboundDelivery: { createMany, findMany } } as unknown as typeof prisma;
+    mocks.ensureOutboundDeliveries.mockImplementation(createPrismaRepository(client).ensureOutboundDeliveries);
+
+    const response = await create();
+
+    expect(response.status).toBe(201);
+    expect(createMany).toHaveBeenCalledTimes(1);
+    expect(createMany.mock.calls[0][0].skipDuplicates).toBe(true);
+    expect(createMany.mock.calls[0][0].data).toHaveLength(500);
+    expect(findMany).toHaveBeenCalledTimes(1);
+    const [jobs] = mocks.enqueueBroadcastSends.mock.calls[0];
+    expect(jobs).toHaveLength(500);
+    // Each job carries its own person's delivery, whatever order the read returned.
+    expect(jobs[0]).toMatchObject({ igScopedUserId: "person_0", deliveryKey: expect.stringContaining("person_0") });
+    expect(jobs[499]).toMatchObject({ igScopedUserId: "person_499", deliveryKey: expect.stringContaining("person_499") });
+  });
+
+  it("closes the broadcast and gives the reservation back when its deliveries cannot be stored", async () => {
+    mocks.getValidatedSession.mockResolvedValue({ userId: "user_1", workspaceId: "workspace_1" });
+    mocks.listBroadcastRecipients.mockResolvedValue({
+      recipients: [{ instagramAccountId: "ig_a", igScopedUserId: "recipient_a" }],
+      totalEligible: 1,
+    });
+    mocks.createBroadcast.mockResolvedValue(createdBroadcast);
+    mocks.ensureOutboundDeliveries.mockRejectedValue(new Error("pool timeout"));
+
+    await expect(create()).rejects.toThrow("pool timeout");
+    expect(mocks.cancelBroadcast).toHaveBeenCalledWith("workspace_1", "broadcast_1");
+    expect(mocks.releaseMonthlyBroadcast).toHaveBeenCalledWith("workspace_1", expect.stringMatching(/-01$/));
+    expect(mocks.enqueueBroadcastSends).not.toHaveBeenCalled();
+  });
+
   it("returns the literal broadcast-feature contract", async () => {
     const { EntitlementError } = await import("@/src/lib/entitlements/service");
     mocks.getValidatedSession.mockResolvedValue({ userId: "user_1", workspaceId: "workspace_1" });
@@ -194,5 +264,55 @@ describe("/api/broadcasts", () => {
 
     expect(response.status).toBe(403);
     await expect(response.json()).resolves.toEqual({ error: "entitlement_required", capability: "broadcasts" });
+  });
+});
+
+describe("ensureOutboundDeliveries", () => {
+  const input = (deliveryKey: string): EnsureOutboundDeliveryInput => ({
+    deliveryKey,
+    workspaceId: "workspace_1",
+    kind: "BROADCAST_RECIPIENT",
+    broadcastId: "broadcast_1",
+    instagramAccountId: "ig_a",
+    recipientId: deliveryKey,
+    payload: { type: "text", text: "Hello" },
+  });
+
+  it("memory: returns stored rows in input order and keeps an existing row as it is", async () => {
+    const memory = createMemoryRepository();
+    const existing = await memory.ensureOutboundDelivery(input("key_b"));
+
+    const records = await memory.ensureOutboundDeliveries([input("key_a"), input("key_b"), input("key_c"), input("key_a")]);
+
+    expect(records.map((record) => record.deliveryKey)).toEqual(["key_a", "key_b", "key_c", "key_a"]);
+    expect(records[1]).toEqual(existing);
+    expect(records[3].id).toBe(records[0].id);
+    expect(records[0]).toMatchObject({ state: "PENDING", attemptCount: 0, broadcastId: "broadcast_1" });
+    expect(await memory.getOutboundDelivery("key_c")).toEqual(records[2]);
+  });
+
+  it("prisma: splits more than 500 rows into batches of 500", async () => {
+    const createMany = vi.fn().mockResolvedValue({ count: 0 });
+    const findMany = vi.fn(async ({ where }: { where: { deliveryKey: { in: string[] } } }) => where.deliveryKey.in.map((deliveryKey) => ({
+      id: deliveryKey, deliveryKey, workspaceId: "workspace_1", kind: "BROADCAST_RECIPIENT", payload: {}, state: "PENDING", retryable: false,
+      attemptCount: 0, createdAt: new Date(0), updatedAt: new Date(0),
+    })));
+    const client = { outboundDelivery: { createMany, findMany } } as unknown as typeof prisma;
+
+    const records = await createPrismaRepository(client).ensureOutboundDeliveries(
+      Array.from({ length: 1_001 }, (_, index) => input(`key_${index}`)),
+    );
+
+    expect(createMany.mock.calls.map(([args]) => args.data.length)).toEqual([500, 500, 1]);
+    expect(findMany).toHaveBeenCalledTimes(3);
+    expect(records).toHaveLength(1_001);
+    expect(records[1_000].deliveryKey).toBe("key_1000");
+  });
+
+  it("prisma: fails loudly when a row is neither inserted nor found", async () => {
+    const client = {
+      outboundDelivery: { createMany: vi.fn().mockResolvedValue({ count: 0 }), findMany: vi.fn().mockResolvedValue([]) },
+    } as unknown as typeof prisma;
+    await expect(createPrismaRepository(client).ensureOutboundDeliveries([input("key_a")])).rejects.toThrow("key_a");
   });
 });

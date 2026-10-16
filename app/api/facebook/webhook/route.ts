@@ -22,6 +22,22 @@ function verifyTokenEquals(candidate: string | null, expected: string): boolean 
   return candidateBuffer.length === expectedBuffer.length && timingSafeEqual(candidateBuffer, expectedBuffer);
 }
 
+// Meta redelivers a delivery that fails or times out. Giving up on a stalled
+// Redis after 5 s, with a 503, keeps those requests from piling up here.
+const ENQUEUE_DEADLINE_MS = 5_000;
+
+async function withEnqueueDeadline<T>(work: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`Enqueue took longer than ${ENQUEUE_DEADLINE_MS} ms`)), ENQUEUE_DEADLINE_MS);
+  });
+  try {
+    return await Promise.race([work, deadline]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** GET: Meta webhook verification. The same query parameters the IG route
  * accepts, but scoped to a Facebook-only verify token so the two channels
  * never share a handshake. */
@@ -71,7 +87,19 @@ export async function POST(request: Request) {
   }
 
   const events = normalizeFacebookWebhook(payload);
-  const enqueued = await enqueueFacebookEvents(events, undefined, { receivedAt });
+  let enqueued: number;
+  try {
+    enqueued = await withEnqueueDeadline(enqueueFacebookEvents(events, undefined, { receivedAt }));
+  } catch (error) {
+    // Ask Meta to redeliver. Job ids are deterministic, so BullMQ drops a
+    // redelivered event that did reach the queue this time.
+    logger.error("Webhook enqueue failed; asking Meta to redeliver", {
+      channel: "facebook",
+      events: events.length,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return Response.json({ received: false, retryable: true }, { status: 503 });
+  }
   let retryableFailure = false;
   if (events.length > 0 && enqueued === 0) {
     // No Redis queue: fall back to inline processing. Sequential keeps the

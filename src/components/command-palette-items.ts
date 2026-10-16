@@ -111,6 +111,23 @@ export const RECENT_LIMIT = 5;
 
 type StoredItem = Pick<PaletteItem, "id" | "kind" | "label" | "hint" | "href" | "external" | "action">;
 
+function isOwnerConsoleHref(href: string): boolean {
+  const pathname = href.split(/[?#]/, 1)[0];
+  return pathname === "/admin" || pathname.startsWith("/admin/");
+}
+
+/**
+ * Whether a remembered link points at the other host: the owner console from
+ * the workspace palette, or the workspace from the console's. Picks saved
+ * before those items were marked external must still get a full page load.
+ */
+function crossesHost(storageKey: string, href: string | undefined): boolean {
+  if (!href?.startsWith("/") || href.startsWith("/api/")) return false;
+  if (storageKey === ADMIN_RECENT_KEY) return !isOwnerConsoleHref(href);
+  if (storageKey === WORKSPACE_RECENT_KEY) return isOwnerConsoleHref(href);
+  return false;
+}
+
 /** The last few things picked, newest first, listed under "Recent" before typing. */
 export function readRecent(storageKey: string): PaletteItem[] {
   try {
@@ -120,7 +137,12 @@ export function readRecent(storageKey: string): PaletteItem[] {
     return parsed
       .filter((entry): entry is StoredItem => Boolean(entry) && typeof entry.id === "string" && typeof entry.label === "string" && (typeof entry.href === "string" || typeof entry.action === "string"))
       .slice(0, RECENT_LIMIT)
-      .map((entry) => ({ ...entry, kind: entry.kind ?? "page", section: "Recent" }));
+      .map((entry) => ({
+        ...entry,
+        kind: entry.kind ?? "page",
+        section: "Recent",
+        ...(crossesHost(storageKey, entry.href) ? { external: true } : {}),
+      }));
   } catch {
     return [];
   }
@@ -179,7 +201,9 @@ export function workspacePages({ platformOwner = false }: { platformOwner?: bool
     page("/settings?section=security", "Security", "password sessions sign out data deletion", "Settings"),
     page("/profile", "My profile", "account security password two-factor"),
     page("/help", "Help", "support docs guide faq"),
-    ...(platformOwner ? [page("/admin", "Owner console", "admin operator")] : []),
+    // The owner console is another host: a full page load, not router.push
+    // (a client navigation fetches it from this host and trips connect-src).
+    ...(platformOwner ? [{ ...page("/admin", "Owner console", "admin operator"), external: true }] : []),
   ];
 }
 
@@ -202,6 +226,7 @@ export function adminPages(): PaletteItem[] {
     page("/admin/deletions", "Delete data", "remove erase gdpr"),
     page("/admin/audit", "Audit log", "history events actions"),
     page("/admin/security", "Your security", "two-factor mfa authenticator"),
-    page("/dashboard", "Back to workspace", "app home"),
+    // The workspace is another host, so a full page load (see workspacePages).
+    { ...page("/dashboard", "Back to workspace", "app home"), external: true },
   ];
 }

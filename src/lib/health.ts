@@ -62,6 +62,54 @@ export type Health = {
   };
 };
 
+/**
+ * Deadlines for each probe. Without one, /api/health could hang past every
+ * caller's timeout: the database probe shares Prisma's pool with user traffic
+ * (10 s default pool_timeout), and a connected but silent Valkey never
+ * answers. The probes run in parallel, so the whole check answers within the
+ * longest deadline.
+ *
+ * The database gets the longer one because a slow database is not a down
+ * one. A `SELECT 1` from this host to the Singapore database already takes
+ * about 0.9 to 1.2 s at idle, before a cold connection or any pool wait.
+ * /api/health turns "error" into a 503, which Dokploy's service healthcheck
+ * and the production monitor read, so a tight deadline would report a slow but
+ * working database as an outage. 5 s still answers inside the release
+ * script's `--max-time 10` and the monitor's 10 s timeout.
+ */
+export const HEALTH_DATABASE_PROBE_TIMEOUT_MS = 5_000;
+/** Redis and the worker heartbeat read are one round trip to a local Valkey. */
+export const HEALTH_REDIS_PROBE_TIMEOUT_MS = 2_000;
+/** Below the Redis probe deadline, so the client gives up on its own first. */
+const HEALTH_REDIS_COMMAND_TIMEOUT_MS = 1_500;
+
+class HealthProbeTimeoutError extends Error {
+  constructor(timeoutMs: number) {
+    super(`Health probe did not answer within ${timeoutMs} ms`);
+    this.name = "HealthProbeTimeoutError";
+  }
+}
+
+/**
+ * Settles with `probe`, or rejects once the deadline passes. A probe that
+ * answers late is abandoned, not cancelled; Promise.race keeps its eventual
+ * rejection handled.
+ */
+async function withDeadline<T>(probe: () => Promise<T>, timeoutMs: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      Promise.resolve().then(probe),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new HealthProbeTimeoutError(timeoutMs)), timeoutMs);
+        timer.unref?.();
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function checkDatabase(): Promise<void> {
   const { prisma } = await import("./prisma");
   await prisma.$queryRaw`SELECT 1`;
@@ -88,6 +136,9 @@ export async function getHealthRedis(redisUrl: string): Promise<import("ioredis"
   if (!globalForHealth.linkarHealthRedis && !globalForHealth.linkarHealthRedisPending) {
     globalForHealth.linkarHealthRedisPending = import("ioredis").then(({ default: Redis }) => {
       const client = new Redis(redisUrl, {
+        // A Valkey that accepts the connection but never replies would
+        // otherwise leave every PING and GET pending forever.
+        commandTimeout: HEALTH_REDIS_COMMAND_TIMEOUT_MS,
         connectTimeout: 3_000,
         lazyConnect: true,
         maxRetriesPerRequest: 1,
@@ -142,7 +193,7 @@ async function getWorkerState(
 ): Promise<NonNullable<Health["worker"]>> {
   if (!redisConfigured) return { heartbeat: "not_configured", release: null };
   try {
-    const beat = await read();
+    const beat = await withDeadline(read, HEALTH_REDIS_PROBE_TIMEOUT_MS);
     if (!beat) return { heartbeat: "stale", release: null };
     return { heartbeat: now - beat.at <= WORKER_HEARTBEAT_STALE_MS ? "ok" : "stale", release: beat.release };
   } catch {
@@ -150,11 +201,16 @@ async function getWorkerState(
   }
 }
 
-async function getDependencyState(configured: boolean, checker: HealthChecker): Promise<DependencyState> {
+async function getDependencyState(
+  configured: boolean,
+  checker: HealthChecker,
+  timeoutMs: number,
+): Promise<DependencyState> {
   if (!configured) return "not_configured";
 
   try {
-    await checker();
+    // A probe that does not answer in time is reported like one that failed.
+    await withDeadline(checker, timeoutMs);
     return "ok";
   } catch {
     return "error";
@@ -180,8 +236,8 @@ function integrationState(appId?: string, appSecret?: string): IntegrationState 
 export async function getHealth(checkers: HealthCheckers = {}): Promise<Health> {
   const { databaseUrl, redisUrl, metaAppId, metaAppSecret, facebookAppId, facebookAppSecret, followGatedCampaignsEnabled } = getServerEnv();
   const [database, redis, worker] = await Promise.all([
-    getDependencyState(Boolean(databaseUrl), checkers.database ?? checkDatabase),
-    getDependencyState(Boolean(redisUrl), checkers.redis ?? (() => checkRedis(redisUrl!))),
+    getDependencyState(Boolean(databaseUrl), checkers.database ?? checkDatabase, HEALTH_DATABASE_PROBE_TIMEOUT_MS),
+    getDependencyState(Boolean(redisUrl), checkers.redis ?? (() => checkRedis(redisUrl!)), HEALTH_REDIS_PROBE_TIMEOUT_MS),
     checkers.workerHeartbeat
       ? getWorkerState(Boolean(redisUrl), checkers.workerHeartbeat, Date.now())
       : Promise.resolve(undefined),
@@ -209,8 +265,10 @@ export async function getHealth(checkers: HealthCheckers = {}): Promise<Health> 
 
 /**
  * Whether this web container can serve requests: its own database and Redis
- * dependencies. The container healthcheck keys off the HTTP status, so a
- * stopped worker must not take the web service down with it.
+ * dependencies. /api/health keys its HTTP status off this, and Dokploy's
+ * service healthcheck and the release tooling read that, so a stopped worker
+ * must not take the web service down with it. The image's own HEALTHCHECK
+ * probes /api/health/live instead, which does no dependency I/O.
  */
 export function isWebServing(health: Health): boolean {
   const { database, redis } = health.dependencies;

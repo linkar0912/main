@@ -14,6 +14,13 @@ export class GoogleOAuthError extends Error {
 
 type GoogleOAuthConfig = Pick<ServerEnv, "googleClientId" | "googleClientSecret" | "googleRedirectUri">;
 
+/** Upper bound on Google's token endpoint, so a stalled exchange cannot pin a sign-in. */
+const GOOGLE_TOKEN_TIMEOUT_MS = 10_000;
+
+function isTimeoutOrAbort(error: unknown): boolean {
+  return error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
+}
+
 /**
  * Builds Google's own authorize URL directly (bypassing Supabase's hosted
  * `/auth/v1/authorize` relay) so the consent screen shows our redirect_uri's
@@ -64,11 +71,20 @@ export async function exchangeGoogleCode(
     code,
     grant_type: "authorization_code",
   });
-  const response = await fetcher("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    body,
-  });
+  let response: Response;
+  try {
+    response = await fetcher("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body,
+      signal: AbortSignal.timeout(GOOGLE_TOKEN_TIMEOUT_MS),
+    });
+  } catch (error) {
+    // Status 0: no answer from Google. The callback's catch sends the person
+    // back to sign-in with error=oauth instead of hanging.
+    if (isTimeoutOrAbort(error)) throw new GoogleOAuthError("Google token exchange timed out", 0);
+    throw error;
+  }
   const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
   if (!response.ok) {
     const message = typeof payload.error_description === "string"

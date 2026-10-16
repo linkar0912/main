@@ -13,6 +13,73 @@ const ALLOWED_DAYS = new Set([7, 14, 30]);
 
 type DayPoint = { day: string; count: number };
 
+/**
+ * Each view runs 4 to 18 queries, and Home, Insights and the automations list
+ * all ask for them, so the same answer is shared per workspace and view for
+ * this long. A request that arrives while the same answer is still loading
+ * waits for that load instead of starting another one.
+ */
+const INSIGHTS_CACHE_MS = 30_000;
+/** A load still running after this long no longer blocks a fresh one. */
+const INSIGHTS_IN_FLIGHT_MS = 60_000;
+const INSIGHTS_CACHE_ENTRIES = 500;
+/** Queries one request keeps in flight; the rest wait for a free connection slot. */
+const QUERY_CONCURRENCY = 6;
+
+type InsightsCacheEntry = { expiresAt: number; value: Promise<unknown> };
+const insightsCache = new Map<string, InsightsCacheEntry>();
+
+function sharedInsights<T>(key: string, load: () => Promise<T>): Promise<T> {
+    const now = Date.now();
+    const hit = insightsCache.get(key);
+    if (hit && hit.expiresAt > now) return hit.value as Promise<T>;
+    if (insightsCache.size >= INSIGHTS_CACHE_ENTRIES) {
+        for (const [entryKey, entry] of insightsCache) {
+            if (entry.expiresAt <= now) insightsCache.delete(entryKey);
+        }
+        const oldest = insightsCache.keys().next();
+        if (insightsCache.size >= INSIGHTS_CACHE_ENTRIES && !oldest.done) insightsCache.delete(oldest.value);
+    }
+    const value = load();
+    const entry: InsightsCacheEntry = { expiresAt: now + INSIGHTS_IN_FLIGHT_MS, value };
+    insightsCache.set(key, entry);
+    value.then(
+        () => { entry.expiresAt = Date.now() + INSIGHTS_CACHE_MS; },
+        // A failure is never shared beyond the requests already waiting on it.
+        () => { if (insightsCache.get(key) === entry) insightsCache.delete(key); },
+    );
+    return value;
+}
+
+type TaskResults<T extends readonly (() => Promise<unknown>)[]> = {
+    -readonly [K in keyof T]: T[K] extends () => Promise<infer R> ? R : never;
+};
+
+/**
+ * Runs the queries with at most QUERY_CONCURRENCY in flight, results in task
+ * order. Each statement holds a pooled connection for its whole round trip,
+ * so one page firing 18 at once took most of the web pool from everyone else.
+ */
+async function runLimited<const T extends readonly (() => Promise<unknown>)[]>(tasks: T): Promise<TaskResults<T>> {
+    const results: unknown[] = new Array(tasks.length);
+    let next = 0;
+    let failed = false;
+    const worker = async () => {
+        while (!failed && next < tasks.length) {
+            const index = next;
+            next += 1;
+            try {
+                results[index] = await tasks[index]();
+            } catch (error) {
+                failed = true;
+                throw error;
+            }
+        }
+    };
+    await Promise.all(Array.from({ length: Math.min(QUERY_CONCURRENCY, tasks.length) }, worker));
+    return results as TaskResults<T>;
+}
+
 /** UTC midnight that opens a trailing window of `days` days (today included). */
 function windowStart(days: number): string {
     const since = new Date();
@@ -44,12 +111,16 @@ function currentPeriodStart(): string {
  * Plan usage = the metered quantity the plan actually limits: messages
  * reserved against the monthly delivery allowance, next to that allowance
  * (null = unlimited). Workspace-wide by nature, even on a campaign page.
+ * Two queries, returned as tasks so they share the caller's concurrency limit.
  */
-async function planUsage(repository: AutomationRepository, workspaceId: string) {
-    const [usage, monthlyDeliveryLimit] = await Promise.all([
-        repository.getWorkspaceUsage(workspaceId, currentPeriodStart()),
-        getEntitlementService().getMonthlyDeliveryLimit(workspaceId).catch(() => null),
-    ]);
+function planUsageTasks(repository: AutomationRepository, workspaceId: string) {
+    return [
+        () => repository.getWorkspaceUsage(workspaceId, currentPeriodStart()),
+        () => getEntitlementService().getMonthlyDeliveryLimit(workspaceId).catch(() => null),
+    ] as const;
+}
+
+function planUsage(usage: { deliveriesReserved: number }, monthlyDeliveryLimit: number | null) {
     return { deliveriesThisMonth: usage.deliveriesReserved, monthlyDeliveryLimit };
 }
 
@@ -79,25 +150,22 @@ async function automationAnalytics(repository: AutomationRepository, workspaceId
     // Email-capture automations also count people messaged, asked and
     // captured; nothing else has those steps, so nothing else pays for them.
     const capturing = collectsEmail(automation);
-    const [[captureNow, captureWide], participantsSeries, sentSeries, outcomesNow, outcomesWide, funnelNow, funnelWide, mediaNow, mediaWide] = await Promise.all([
-        capturing
-            ? Promise.all([
-                repository.countEmailCaptureFunnel(workspaceId, automationId, since),
-                repository.countEmailCaptureFunnel(workspaceId, automationId, sinceBefore),
-            ])
-            : Promise.resolve([null, null] as const),
+    const [captureNow, captureWide, participantsSeries, sentSeries, outcomesNow, outcomesWide, funnelNow, funnelWide, mediaNow, mediaWide] = await runLimited([
+        async () => capturing ? repository.countEmailCaptureFunnel(workspaceId, automationId, since) : null,
+        async () => capturing ? repository.countEmailCaptureFunnel(workspaceId, automationId, sinceBefore) : null,
         // Campaigns reach people as participants; classic automations have
         // none, so their reach is the distinct people a reply was sent to.
-        isCampaign(automation)
+        () => isCampaign(automation)
             ? repository.countParticipantsPerDay(workspaceId, days * 2, automationId)
             : repository.countRecipientsPerDay(workspaceId, days * 2, automationId),
-        repository.countExecutionsSentPerDay(workspaceId, days * 2, automationId),
-        repository.countExecutionsByStatusPerAutomation(workspaceId, since),
-        repository.countExecutionsByStatusPerAutomation(workspaceId, sinceBefore),
-        repository.countParticipantFunnel(workspaceId, automationId, since),
-        repository.countParticipantFunnel(workspaceId, automationId, sinceBefore),
-        repository.countParticipantsByMedia(workspaceId, automationId, since),
-        repository.countParticipantsByMedia(workspaceId, automationId, sinceBefore),
+        () => repository.countExecutionsSentPerDay(workspaceId, days * 2, automationId),
+        // Counted for this automation only, not for every one in the workspace.
+        () => repository.countExecutionsByStatusPerAutomation(workspaceId, since, automationId),
+        () => repository.countExecutionsByStatusPerAutomation(workspaceId, sinceBefore, automationId),
+        () => repository.countParticipantFunnel(workspaceId, automationId, since),
+        () => repository.countParticipantFunnel(workspaceId, automationId, sinceBefore),
+        () => repository.countParticipantsByMedia(workspaceId, automationId, since),
+        () => repository.countParticipantsByMedia(workspaceId, automationId, sinceBefore),
     ]);
     const participants = splitWindow(participantsSeries, days);
     const sent = splitWindow(sentSeries, days);
@@ -158,59 +226,68 @@ export async function GET(request: Request) {
     }
 
     const include = params.get("include");
-
-    if (include === "usage") {
-        return NextResponse.json({ usage: await planUsage(repository, session.workspaceId) });
-    }
-
-    // Contacts are workspace records with no automation column, so these two
-    // totals cannot be narrowed to one automation; the response says so
-    // instead of letting a campaign view present them as its own.
-    const contactTotalsScope = "workspace" as const;
+    const view = include === "usage" || include === "automation" || include === "overview" ? include : "all";
     const requestedDays = Number(params.get("days"));
     const days = ALLOWED_DAYS.has(requestedDays) ? requestedDays : TIMESERIES_DAYS;
+    if (view === "automation" && !automation) {
+        return NextResponse.json({ error: "automationId is required" }, { status: 400 });
+    }
 
-    if (include === "automation") {
+    const workspaceId = session.workspaceId;
+    const cacheKey = [workspaceId, view, automationId ?? "", days].join("|");
+    return NextResponse.json(await sharedInsights(cacheKey, async () => {
+        if (view === "usage") {
+            const [usage, monthlyDeliveryLimit] = await runLimited(planUsageTasks(repository, workspaceId));
+            return { usage: planUsage(usage, monthlyDeliveryLimit) };
+        }
         // One automation's analytics view (its Overview tab). Everything is
         // inside the chosen window, plus the window before it for the
         // "up 18% on the previous 7 days" lines.
-        if (!automation) return NextResponse.json({ error: "automationId is required" }, { status: 400 });
-        return NextResponse.json(await automationAnalytics(repository, session.workspaceId, automation, days));
-    }
+        if (view === "automation" && automation) return automationAnalytics(repository, workspaceId, automation, days);
+        if (view === "overview") return overviewInsights(repository, workspaceId, automationId, days);
+        return fullInsights(repository, workspaceId, automationId, days);
+    }));
+}
 
-    if (include === "overview") {
-        const [participantsSeries, sentSeries, capturedEmails, optedOut] = await Promise.all([
-            repository.countParticipantsPerDay(session.workspaceId, days * 2, automationId),
-            repository.countExecutionsSentPerDay(session.workspaceId, days * 2, automationId),
-            repository.countCapturedContacts(session.workspaceId),
-            repository.countSuppressedContacts(session.workspaceId),
-        ]);
-        const participants = splitWindow(participantsSeries, days);
-        const sent = splitWindow(sentSeries, days);
-        return NextResponse.json({
-            timeseries: { days, participantsPerDay: participants.current, sentPerDay: sent.current },
-            previous: { sent: sent.previousTotal, reached: participants.previousTotal },
-            capturedEmails,
-            optedOut,
-            contactTotalsScope,
-        });
-    }
+// Contacts are workspace records with no automation column, so these two
+// totals cannot be narrowed to one automation; the response says so instead
+// of letting a campaign view present them as its own.
+const contactTotalsScope = "workspace" as const;
 
-    const [funnel, journey, participantsSeries, sentSeries, mediaPerformance, outcomes, capturedEmails, optedOut, usage] = await Promise.all([
-        repository.countParticipantsByState(session.workspaceId, automationId || undefined),
-        repository.countParticipantFunnel(session.workspaceId, automationId),
-        repository.countParticipantsPerDay(session.workspaceId, days * 2, automationId),
-        repository.countExecutionsSentPerDay(session.workspaceId, days * 2, automationId),
-        repository.countParticipantsByMedia(session.workspaceId, automationId),
-        repository.countExecutionsByStatusPerAutomation(session.workspaceId, windowStart(days)),
-        repository.countCapturedContacts(session.workspaceId),
-        repository.countSuppressedContacts(session.workspaceId),
-        planUsage(repository, session.workspaceId),
+async function overviewInsights(repository: AutomationRepository, workspaceId: string, automationId: string | undefined, days: number) {
+    const [participantsSeries, sentSeries, capturedEmails, optedOut] = await runLimited([
+        () => repository.countParticipantsPerDay(workspaceId, days * 2, automationId),
+        () => repository.countExecutionsSentPerDay(workspaceId, days * 2, automationId),
+        () => repository.countCapturedContacts(workspaceId),
+        () => repository.countSuppressedContacts(workspaceId),
+    ]);
+    const participants = splitWindow(participantsSeries, days);
+    const sent = splitWindow(sentSeries, days);
+    return {
+        timeseries: { days, participantsPerDay: participants.current, sentPerDay: sent.current },
+        previous: { sent: sent.previousTotal, reached: participants.previousTotal },
+        capturedEmails,
+        optedOut,
+        contactTotalsScope,
+    };
+}
+
+async function fullInsights(repository: AutomationRepository, workspaceId: string, automationId: string | undefined, days: number) {
+    const [funnel, journey, participantsSeries, sentSeries, mediaPerformance, outcomes, capturedEmails, optedOut, usage, monthlyDeliveryLimit] = await runLimited([
+        () => repository.countParticipantsByState(workspaceId, automationId || undefined),
+        () => repository.countParticipantFunnel(workspaceId, automationId),
+        () => repository.countParticipantsPerDay(workspaceId, days * 2, automationId),
+        () => repository.countExecutionsSentPerDay(workspaceId, days * 2, automationId),
+        () => repository.countParticipantsByMedia(workspaceId, automationId),
+        () => repository.countExecutionsByStatusPerAutomation(workspaceId, windowStart(days), automationId),
+        () => repository.countCapturedContacts(workspaceId),
+        () => repository.countSuppressedContacts(workspaceId),
+        ...planUsageTasks(repository, workspaceId),
     ]);
     const participants = splitWindow(participantsSeries, days);
     const sent = splitWindow(sentSeries, days);
 
-    return NextResponse.json({
+    return {
         funnel,
         // Cumulative "reached at least this step" counts. `funnel` above is
         // where each person is right now, which doesn't read as a funnel.
@@ -225,6 +302,6 @@ export async function GET(request: Request) {
         capturedEmails,
         optedOut,
         contactTotalsScope,
-        usage,
-    });
+        usage: planUsage(usage, monthlyDeliveryLimit),
+    };
 }

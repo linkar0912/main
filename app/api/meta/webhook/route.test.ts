@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   enqueueWebhookEvents: vi.fn(),
@@ -6,6 +6,11 @@ const mocks = vi.hoisted(() => ({
   processNormalizedEvent: vi.fn(),
   findWorkspaceByInstagramAccount: vi.fn(),
   getWorkspaceStatus: vi.fn(),
+  logError: vi.fn(),
+}));
+
+vi.mock("@/src/lib/logger", () => ({
+  logger: { error: mocks.logError, warn: vi.fn(), info: vi.fn(), debug: vi.fn() },
 }));
 
 vi.mock("@/src/lib/env", () => ({ getServerEnv: () => ({
@@ -40,6 +45,43 @@ describe("POST /api/meta/webhook", () => {
     mocks.processNormalizedEvent.mockReset().mockResolvedValue({ sent: 1 });
     mocks.findWorkspaceByInstagramAccount.mockReset().mockResolvedValue({ workspaceId: "workspace_1" });
     mocks.getWorkspaceStatus.mockReset().mockResolvedValue("ACTIVE");
+    mocks.logError.mockReset();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("asks Meta to redeliver with a 503 when the enqueue fails", async () => {
+    mocks.enqueueWebhookEvents.mockRejectedValue(new Error("Connection is closed."));
+
+    const response = await POST(new Request("http://localhost/api/meta/webhook", { method: "POST", body: "{}" }));
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toEqual({ received: false, retryable: true });
+    expect(mocks.processNormalizedEvent).not.toHaveBeenCalled();
+    expect(mocks.logError).toHaveBeenCalledWith(
+      expect.stringContaining("enqueue failed"),
+      expect.objectContaining({ channel: "instagram", events: 1, error: "Connection is closed." }),
+    );
+  });
+
+  it("gives up on an enqueue that hangs after 5 s and asks Meta to redeliver", async () => {
+    vi.useFakeTimers();
+    mocks.enqueueWebhookEvents.mockReturnValue(new Promise(() => undefined));
+
+    let settled = false;
+    const pending = POST(new Request("http://localhost/api/meta/webhook", { method: "POST", body: "{}" }))
+      .finally(() => { settled = true; });
+    await vi.advanceTimersByTimeAsync(4_999);
+    expect(settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    const response = await pending;
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toEqual({ received: false, retryable: true });
+    expect(mocks.processNormalizedEvent).not.toHaveBeenCalled();
+    expect(mocks.logError).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ channel: "instagram", events: 1 }));
   });
 
   it("returns 503 when inline processing has a retryable failure", async () => {

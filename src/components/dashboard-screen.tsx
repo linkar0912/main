@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { Check, ChevronDown, Link2, Plus, RefreshCw, Zap } from "lucide-react";
 import { FacebookGlyph } from "./facebook-glyph";
@@ -147,12 +147,26 @@ function DemoBanner() {
  * where it is replying from, how much of the setup is switched on and,
  * when it is true, that nothing needs attention.
  */
-function StatusLine({ connections, automations, automationsKnown, allClear }: {
+/** Shown instead of a guess when the connected accounts could not be read. */
+function ConnectionsUnknown({ onRetry }: { onRetry: () => void }) {
+  return (
+    <span className="home-status" data-tone="neutral" role="status">
+      <span className="home-status-dot" aria-hidden />
+      <span>Could not check your accounts.</span>
+      <button className="text-link" type="button" onClick={onRetry}>Retry</button>
+    </span>
+  );
+}
+
+function StatusLine({ connections, connectionsFailed, onRetryConnections, automations, automationsKnown, allClear }: {
   connections: AttentionConnection[] | null;
+  connectionsFailed: boolean;
+  onRetryConnections: () => void;
   automations: AutomationRecord[];
   automationsKnown: boolean;
   allClear: boolean;
 }) {
+  if (connections === null && connectionsFailed) return <ConnectionsUnknown onRetry={onRetryConnections} />;
   if (connections === null) return <span className="home-status is-pending">Checking your connected accounts…</span>;
   const live = connections.filter((connection) => connection.status === "CONNECTED")
     .map((connection) => connection.kind === "instagram" ? `@${connection.name.replace(/^@/, "")}` : connection.name);
@@ -390,7 +404,13 @@ type StepState = "done" | "current" | "todo" | "checking";
  * It really is a sequence, so the steps are numbered; only the current one
  * is open, finished ones fold to a line with a check.
  */
-function GuidedStart({ connections, goals, onBrowseTemplates }: { connections: AttentionConnection[] | null; goals: Goal[]; onBrowseTemplates: () => void }) {
+function GuidedStart({ connections, connectionsFailed, onRetryConnections, goals, onBrowseTemplates }: {
+  connections: AttentionConnection[] | null;
+  connectionsFailed: boolean;
+  onRetryConnections: () => void;
+  goals: Goal[];
+  onBrowseTemplates: () => void;
+}) {
   // With saved onboarding goals the recipes are picked for this person
   // (same ranking as the onboarding plan); otherwise the three defaults.
   const recipes = goals.length > 0
@@ -414,6 +434,11 @@ function GuidedStart({ connections, goals, onBrowseTemplates }: { connections: A
             <h3>Connect Instagram or a Facebook Page</h3>
             {connectState === "done" ? (
               <p>Connected to {joinNames(names)}.</p>
+            ) : connectState === "checking" && connectionsFailed ? (
+              <p>
+                Could not check your accounts.{" "}
+                <button className="text-link" type="button" onClick={onRetryConnections}>Retry</button>
+              </p>
             ) : connectState === "checking" ? (
               <p>Checking your connected accounts…</p>
             ) : (
@@ -471,6 +496,13 @@ export function DashboardScreen({ initialAutomations, initialInsights, initialHa
   // no "create your first automation".
   const automationsFailed = Boolean(automationsError) && automations.length === 0;
   const automationsKnown = !loading && !automationsFailed;
+  const isNewWorkspace = automationsKnown && automations.length === 0;
+  // A new workspace gets the guided start, which needs only the connected
+  // accounts: the numbers, delivery failures and plan use feed panels it
+  // does not show, so they are not asked for. That also keeps a new owner's
+  // first Home, which the shell then swaps for onboarding, down to the
+  // account requests the sidebar makes anyway.
+  const showsActivity = !isNewWorkspace;
   const { range, setRange, ready: rangeReady } = useRangePreference(HOME_RANGE_KEY, initialRange);
   const [insights, setInsights] = useState<InsightsPayload | null>(initialInsights ?? null);
   // The window the numbers on screen describe; trails `range` while a newly
@@ -485,6 +517,8 @@ export function DashboardScreen({ initialAutomations, initialInsights, initialHa
   const hasInsightsRef = useRef(Boolean(initialInsights));
   // A server-known "connected" has no names yet; an empty list is only claimed once the request answers.
   const [connections, setConnections] = useState<AttentionConnection[] | null>(() => initialHasConnection === false ? [] : null);
+  // A failed request leaves the accounts unknown (never "none connected").
+  const [connectionsFailed, setConnectionsFailed] = useState(false);
   const [failures, setFailures] = useState<DeliveryFailure[] | null>(null);
   const [usage, setUsage] = useState<PlanUsage | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -523,50 +557,65 @@ export function DashboardScreen({ initialAutomations, initialInsights, initialHa
   // The chosen window: the first load (once the saved choice is known, so a
   // remembered 30 days never fetches 14 first), and every switch after it.
   useEffect(() => {
-    if (!rangeReady) return;
+    if (!rangeReady || !showsActivity) return;
     rangeRef.current = range;
     let active = true;
     loadInsights(range, () => active);
     return () => { active = false; };
-  }, [range, rangeReady, loadInsights]);
+  }, [range, rangeReady, showsActivity, loadInsights]);
 
   function chooseRange(next: AnalyticsRange) {
     setSwitchFailed(false);
     setRange(next);
   }
 
+  // Only a full answer for both channels can say what is connected: a failed
+  // request keeps the last confirmed list (unknown until there is one), so
+  // Home never claims "Not connected" because of an outage.
+  const loadConnections = useCallback((isActive: () => boolean = () => true) => {
+    Promise.all([getInstagramConnections(), getFacebookPages()]).then(([instagram, pages]) => {
+      if (!isActive()) return;
+      setConnections([
+        ...instagram.map((connection) => ({ kind: "instagram" as const, name: connection.username ?? "", status: connection.status ?? "CONNECTED" })),
+        ...pages.map((page) => ({ kind: "facebook" as const, name: page.pageName ?? "", status: page.status ?? "CONNECTED" })),
+      ]);
+      setConnectionsFailed(false);
+    }, () => {
+      if (isActive()) setConnectionsFailed(true);
+    });
+  }, []);
+
+  function retryConnections() {
+    setConnectionsFailed(false);
+    loadConnections();
+  }
+
+  const refreshInsightsOnFocus = useEffectEvent((isActive: () => boolean) => {
+    if (showsActivity) loadInsights(rangeRef.current, isActive);
+  });
+
   useEffect(() => {
     let active = true;
-    function refresh() {
-      Promise.all([
-        getInstagramConnections().catch(() => []),
-        getFacebookPages().catch(() => []),
-      ]).then(([instagram, pages]) => {
-        if (!active) return;
-        setConnections([
-          ...instagram.map((connection) => ({ kind: "instagram" as const, name: connection.username ?? "", status: connection.status ?? "CONNECTED" })),
-          ...pages.map((page) => ({ kind: "facebook" as const, name: page.pageName ?? "", status: page.status ?? "CONNECTED" })),
-        ]);
-      });
-    }
+    const refresh = () => loadConnections(() => active);
     refresh();
     // Resource freshness prevents tab focus from producing a burst of repeat
     // requests. Connection mutations invalidate their own entries, while
     // older confirmed entries refresh after the shared freshness window.
     const onFocus = () => {
       refresh();
-      loadInsights(rangeRef.current, () => active);
+      refreshInsightsOnFocus(() => active);
     };
     window.addEventListener("focus", onFocus);
     return () => {
       active = false;
       window.removeEventListener("focus", onFocus);
     };
-  }, [loadInsights]);
+  }, [loadConnections]);
 
   // Failures and plan use only feed "Needs you"; a failure to load either
   // simply means no row, never a false alarm.
   useEffect(() => {
+    if (!showsActivity) return;
     let active = true;
     fetchRecentFailures()
       .then((data) => { if (active) setFailures(data); })
@@ -575,7 +624,7 @@ export function DashboardScreen({ initialAutomations, initialInsights, initialHa
       .then((data) => { if (active) setUsage(data); })
       .catch(() => undefined);
     return () => { active = false; };
-  }, []);
+  }, [showsActivity]);
 
   function retryInsights() {
     if (switchFailed) setSwitchFailed(false);
@@ -583,7 +632,6 @@ export function DashboardScreen({ initialAutomations, initialInsights, initialHa
     loadInsights(range);
   }
 
-  const isNewWorkspace = automationsKnown && automations.length === 0;
   const attention = deriveAttentionItems({ connections, automations, automationsKnown, failures, usage });
   const everythingKnown = connections !== null && automationsKnown && failures !== null;
   const allClear = everythingKnown && attention.length === 0 && !isNewWorkspace;
@@ -599,7 +647,14 @@ export function DashboardScreen({ initialAutomations, initialInsights, initialHa
         fallbackEmail={initialEmail ?? ""}
         displayName={initialDisplayName ?? onboarding?.displayName ?? undefined}
         status={isNewWorkspace ? "Let’s get your first automatic reply live." : (
-          <StatusLine connections={connections} automations={automations} automationsKnown={automationsKnown} allClear={allClear} />
+          <StatusLine
+            connections={connections}
+            connectionsFailed={connectionsFailed}
+            onRetryConnections={retryConnections}
+            automations={automations}
+            automationsKnown={automationsKnown}
+            allClear={allClear}
+          />
         )}
       />
 
@@ -612,7 +667,13 @@ export function DashboardScreen({ initialAutomations, initialInsights, initialHa
           {showPlan ? (
             <YourPlanCard connected={liveConnection} enterDelay={ENTER.start} onDismiss={() => setPlanHidden(true)} onBrowseTemplates={() => setPickerOpen(true)} />
           ) : (
-            <GuidedStart connections={connections} goals={onboarding?.goals ?? []} onBrowseTemplates={() => setPickerOpen(true)} />
+            <GuidedStart
+              connections={connections}
+              connectionsFailed={connectionsFailed}
+              onRetryConnections={retryConnections}
+              goals={onboarding?.goals ?? []}
+              onBrowseTemplates={() => setPickerOpen(true)}
+            />
           )}
           <TrackedLinksRow />
         </>

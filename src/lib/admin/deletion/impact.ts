@@ -66,6 +66,8 @@ async function previewUser(id: string): Promise<DeletionImpact> {
 }
 
 async function previewWorkspace(id: string): Promise<DeletionImpact> {
+  // Thirteen statements in one snapshot: Prisma's 5 s default ran out on a
+  // 1,000-row workspace at production round-trip times.
   return prisma.$transaction(async (transaction) => {
     const workspace = await transaction.workspace.findUnique({ where: { id }, select: { name: true, status: true, deletionScheduledAt: true } });
     if (!workspace) throw new AdminWorkspaceError(404, "workspace_not_found");
@@ -101,7 +103,7 @@ async function previewWorkspace(id: string): Promise<DeletionImpact> {
       memberUserIds: userIds,
       warnings: ["All workspace-owned data and connected-provider state will be permanently removed."],
     };
-  }, { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead });
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead, maxWait: 5_000, timeout: 30_000 });
 }
 
 export async function previewDeletion(target: DeletionTarget): Promise<DeletionPreview> {

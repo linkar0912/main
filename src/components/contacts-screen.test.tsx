@@ -8,7 +8,7 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(navigation.search),
   useRouter: () => ({ replace: navigation.replace, push: vi.fn() }),
 }));
-const { ContactsScreen, stagePageOffset } = await import("./contacts-screen");
+const { CONTACTS_RECONCILED_AT_KEY, ContactsScreen, stagePageOffset } = await import("./contacts-screen");
 
 const contacts = [
   {
@@ -70,6 +70,7 @@ describe("ContactsScreen", () => {
     cleanup();
     vi.unstubAllGlobals();
     vi.useRealTimers();
+    window.sessionStorage.clear();
     navigation.search = "";
     navigation.replace.mockReset();
   });
@@ -198,6 +199,57 @@ describe("ContactsScreen", () => {
     render(<ContactsScreen />);
 
     expect(await screen.findByText("@probablymansi")).toBeTruthy();
+  });
+
+  it("does not ask for the backfill when the list itself failed to load", async () => {
+    const methods: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      methods.push(init?.method ?? "GET");
+      if (String(input).includes("scope=all")) {
+        return new Response(JSON.stringify({ error: "Contacts are unavailable" }), { status: 502 });
+      }
+      return new Response(JSON.stringify({ data: {} }));
+    }));
+
+    render(<ContactsScreen />);
+
+    expect(await screen.findByText("Contacts are unavailable")).toBeTruthy();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(methods).not.toContain("POST");
+    expect(window.sessionStorage.getItem(CONTACTS_RECONCILED_AT_KEY)).toBeNull();
+  });
+
+  it("counts a failed backfill as an attempt and does not resend it after a reload", async () => {
+    const serve = () => {
+      const posts: string[] = [];
+      const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (init?.method === "POST") {
+          posts.push(url);
+          return new Response(JSON.stringify({ error: "Gateway timeout" }), { status: 524 });
+        }
+        if (url.includes("scope=all")) {
+          return new Response(JSON.stringify({ data: { count: 2, counts: { NEW: 1, ENGAGED: 0, QUALIFIED: 1, CUSTOMER: 0 }, contacts } }));
+        }
+        return new Response(JSON.stringify({ data: {} }));
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      return posts;
+    };
+
+    const firstVisit = serve();
+    render(<ContactsScreen />);
+    expect(await screen.findByText("maya@example.com")).toBeTruthy();
+    await waitFor(() => expect(firstVisit).toEqual(["/api/contacts"]));
+    await waitFor(() => expect(Number(window.sessionStorage.getItem(CONTACTS_RECONCILED_AT_KEY))).toBeGreaterThan(0));
+    cleanup();
+
+    // A reload: module state is fresh (new fetch), sessionStorage is not.
+    const reload = serve();
+    render(<ContactsScreen />);
+    expect(await screen.findByText("maya@example.com")).toBeTruthy();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(reload).toEqual([]);
   });
 
   it("shows contacts while Instagram names are still resolving", async () => {

@@ -70,7 +70,8 @@ const PUBLIC_ROUTES: Record<string, string> = {
   // Visitor-facing redirects and probes.
   "app/r/[slug]/route.ts": "public tracked-link redirect",
   "app/api/t/[id]/route.ts": "public click redirect; the unguessable participant id is the capability",
-  "app/api/health/route.ts": "liveness probe for the container and monitor",
+  "app/api/health/route.ts": "readiness probe for Dokploy, the release script and the monitor; detail needs a token",
+  "app/api/health/live/route.ts": "liveness probe for the container healthcheck; no I/O",
 };
 
 function listRouteFiles(root: string): string[] {

@@ -7,6 +7,7 @@ import { prisma } from "@/src/lib/prisma";
 export async function reconcileUsageReservations(client: PrismaClient = prisma): Promise<{ periodsUpdated: number }> {
   for (let attempt = 0; ; attempt += 1) {
     try {
+      // Two table-wide statements: give them room beyond Prisma's 5 s default.
       return await client.$transaction(async (transaction) => {
         // Reservations for deliveries that can never re-claim and confirm them
         // (FAILED / UNKNOWN) are orphans - drop them before rebuilding the counter.
@@ -33,7 +34,7 @@ export async function reconcileUsageReservations(client: PrismaClient = prisma):
           )
         `;
         return { periodsUpdated };
-      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 5_000, timeout: 60_000 });
     } catch (error) {
       if (attempt < 2 && (error as { code?: string }).code === "P2034") continue;
       throw error;

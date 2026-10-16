@@ -19,6 +19,22 @@ function verifyTokenEquals(candidate: string | null, expected: string): boolean 
   return candidateBuffer.length === expectedBuffer.length && timingSafeEqual(candidateBuffer, expectedBuffer);
 }
 
+// Meta redelivers a delivery that fails or times out. Giving up on a stalled
+// Redis after 5 s, with a 503, keeps those requests from piling up here.
+const ENQUEUE_DEADLINE_MS = 5_000;
+
+async function withEnqueueDeadline<T>(work: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`Enqueue took longer than ${ENQUEUE_DEADLINE_MS} ms`)), ENQUEUE_DEADLINE_MS);
+  });
+  try {
+    return await Promise.race([work, deadline]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function GET(request: Request) {
   const env = getServerEnv();
   const url = new URL(request.url);
@@ -60,10 +76,24 @@ export async function POST(request: Request) {
 
   const events = normalizeWebhook(payload);
   const echoes = normalizeManualReplyEchoes(payload);
-  const [enqueued, echoesEnqueued] = await Promise.all([
-    enqueueWebhookEvents(events, undefined, { receivedAt }),
-    enqueueManualReplyEchoes(echoes),
-  ]);
+  let enqueued: number;
+  let echoesEnqueued: number;
+  try {
+    [enqueued, echoesEnqueued] = await withEnqueueDeadline(Promise.all([
+      enqueueWebhookEvents(events, undefined, { receivedAt }),
+      enqueueManualReplyEchoes(echoes),
+    ]));
+  } catch (error) {
+    // Ask Meta to redeliver. Job ids are deterministic, so BullMQ drops a
+    // redelivered event that did reach the queue this time.
+    logger.error("Webhook enqueue failed; asking Meta to redeliver", {
+      channel: "instagram",
+      events: events.length,
+      echoes: echoes.length,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return Response.json({ received: false, retryable: true }, { status: 503 });
+  }
   if (echoes.length > 0 && echoesEnqueued === 0) {
     // No queue (demo/self-hosted): judge echoes inline. There is no delayed
     // retry here, so an undecided echo simply leaves automations running.

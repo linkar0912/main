@@ -69,7 +69,8 @@ type RouteContext = { params: Promise<{ slug: string }> };
 // Clicks counted per link per visitor per minute. Past the cap the visitor is
 // still redirected, but nothing is written and no conversion callback fires,
 // so a refresh loop can neither inflate the stats nor turn the link into a
-// request flood against the customer's conversion endpoint.
+// request flood against the customer's conversion endpoint. Visitors without
+// a known address ("anon") all share one bucket per link.
 const CLICKS_PER_VISITOR_PER_MINUTE = 30;
 let clickLimiter: LoginRateLimitStore | undefined;
 
@@ -109,9 +110,12 @@ export async function GET(request: Request, context: RouteContext) {
   clickLimiter ??= new LoginRateLimitStore(env.redisUrl, CLICKS_PER_VISITOR_PER_MINUTE, 60_000, "link-click");
   const limiter = clickLimiter;
   afterResponse("Tracked-link click recording", async () => {
-    // Visitors without a known address ("anon") share nothing to key on and
-    // are not limited here.
-    if (ipHash !== "anon" && !(await limiter.consume(`${link.id}:${ipHash}`))) return;
+    // Visitors without a known address ("anon") have nothing of their own to
+    // key on, so they share the `<link>:anon` bucket instead of skipping the
+    // limiter. A request with no client address (a direct hit on the origin,
+    // or an internal one) must not get unlimited clicks and conversion calls.
+    // A real ipHash is 16 hex characters, so it never lands in that bucket.
+    if (!(await limiter.consume(`${link.id}:${ipHash}`))) return;
     await repository.recordTrackedLinkClick(link.id, {
       workspaceId: link.workspaceId,
       ipHash,

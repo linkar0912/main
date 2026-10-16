@@ -80,7 +80,7 @@ describe("worker health server", () => {
     });
   });
 
-  it("does not answer paths other than /health", async () => {
+  it("does not answer paths other than /health and /live", async () => {
     const server = createWorkerHealthServer({
       database: async () => undefined,
       redis: async () => undefined,
@@ -88,6 +88,90 @@ describe("worker health server", () => {
 
     await withServer(server, async (baseUrl) => {
       expect((await fetch(`${baseUrl}/`)).status).toBe(404);
+      expect((await fetch(`${baseUrl}/live/extra`)).status).toBe(404);
+    });
+  });
+});
+
+describe("worker liveness", () => {
+  /** Checkers that record a call, so a test can prove /live sends no dependency I/O. */
+  function recordingCheckers() {
+    const calls: string[] = [];
+    return {
+      calls,
+      checkers: {
+        database: async () => {
+          calls.push("database");
+        },
+        redis: async () => {
+          calls.push("redis");
+        },
+      },
+    };
+  }
+
+  it("answers 200 while BullMQ is consuming, without probing the database or Redis", async () => {
+    vi.stubEnv("DATABASE_URL", "postgresql://user:secret@database/linkar");
+    vi.stubEnv("REDIS_URL", "redis://:secret@valkey:6379");
+    vi.stubEnv("BUILD_COMMIT", "worker-release");
+    const { calls, checkers } = recordingCheckers();
+    const server = createWorkerHealthServer(checkers, () => true, { heartbeat: false });
+
+    await withServer(server, async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/live`);
+      expect(response.status).toBe(200);
+      expect(response.headers.get("cache-control")).toBe("no-store");
+      await expect(response.json()).resolves.toEqual({ status: "ok", release: "worker-release", processing: "ok" });
+    });
+    expect(calls).toEqual([]);
+  });
+
+  it("stays 200 when a dependency is down, which /health still reports", async () => {
+    vi.stubEnv("DATABASE_URL", "postgresql://user:secret@database/linkar");
+    vi.stubEnv("REDIS_URL", "redis://:secret@valkey:6379");
+    const server = createWorkerHealthServer({
+      database: async () => {
+        throw new Error("postgresql://user:secret@database/linkar refused");
+      },
+      redis: async () => undefined,
+    }, () => true, { heartbeat: false });
+
+    await withServer(server, async (baseUrl) => {
+      expect((await fetch(`${baseUrl}/live`)).status).toBe(200);
+      expect((await fetch(`${baseUrl}/health`)).status).toBe(503);
+    });
+  });
+
+  it("answers 503 when BullMQ is not consuming", async () => {
+    const server = createWorkerHealthServer({}, () => false, { heartbeat: false });
+
+    await withServer(server, async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/live`);
+      expect(response.status).toBe(503);
+      await expect(response.json()).resolves.toMatchObject({ status: "degraded", processing: "error" });
+    });
+  });
+
+  it("answers 503 when the processing check throws, without echoing the error", async () => {
+    const server = createWorkerHealthServer({}, () => {
+      throw new Error("redis://:secret@valkey:6379 not ready");
+    }, { heartbeat: false });
+
+    await withServer(server, async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/live`);
+      expect(response.status).toBe(503);
+      expect(await response.text()).not.toContain("secret");
+    });
+  });
+
+  it("answers 503 inside the readiness timeout when the processing check hangs", async () => {
+    const server = createWorkerHealthServer({}, () => new Promise<boolean>(() => undefined), { heartbeat: false });
+
+    await withServer(server, async (baseUrl) => {
+      const started = Date.now();
+      const response = await fetch(`${baseUrl}/live`, { signal: AbortSignal.timeout(8_000) });
+      expect(response.status).toBe(503);
+      expect(Date.now() - started).toBeLessThan(5_000);
     });
   });
 });

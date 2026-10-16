@@ -15,6 +15,7 @@ import { InboxFilters } from "./inbox-filters";
 import { groupConversations, lastSpeaker, type ConversationGroupKey } from "./conversation-groups";
 import type { InboxContact, InboxFiltersValue, InboxMember, InboxMessage } from "./types";
 import { toReadableApiError } from "@/src/lib/api-error-message";
+import { backoffDelay } from "@/src/lib/client/workspace-data";
 
 const DEFAULT_FILTERS: InboxFiltersValue = {
   query: "",
@@ -170,8 +171,20 @@ type InboxListSnapshot = {
 const INBOX_FRESH_FOR_MS = 120_000;
 /** How often an open inbox checks for new messages while the tab is visible. */
 export const INBOX_LIVE_REFRESH_MS = 8_000;
+/** Failed checks back off from that, doubling each time, up to this. */
+export const INBOX_LIVE_REFRESH_MAX_MS = 120_000;
 const INBOX_CACHE_LIMIT = 20;
 const inboxFirstPageCache = new Map<string, InboxListSnapshot>();
+
+/**
+ * The wait before the next live check: the normal pace while checks work,
+ * then twice as long after each failure in a row (16 s, 32 s... up to two
+ * minutes, spread a little so open tabs do not retry together).
+ */
+export function liveRefreshDelay(failures: number, random: () => number = Math.random): number {
+  if (failures <= 0) return INBOX_LIVE_REFRESH_MS;
+  return backoffDelay(failures + 1, { baseMs: INBOX_LIVE_REFRESH_MS, capMs: INBOX_LIVE_REFRESH_MAX_MS, random });
+}
 
 function inboxCacheKey(filters: InboxFiltersValue): string {
   return JSON.stringify(filters);
@@ -389,9 +402,10 @@ export function InstagramInbox() {
     liveGuardRef.current.filtersKey = inboxCacheKey(filters);
     liveGuardRef.current.busy = liveBusy;
   }, [filters, liveBusy]);
-  const refreshLive = useEffectEvent(async () => {
+  /** One quiet check for new messages; says whether it worked, so the timer can back off. */
+  const refreshLive = useEffectEvent(async (): Promise<"ok" | "failed" | "skipped"> => {
     const guard = liveGuardRef.current;
-    if (guard.inFlight || liveBusy || document.visibilityState !== "visible") return;
+    if (guard.inFlight || liveBusy || document.visibilityState !== "visible") return "skipped";
     guard.inFlight = true;
     const requestFilters = filters;
     const requestKey = inboxCacheKey(filters);
@@ -400,7 +414,9 @@ export function InstagramInbox() {
     try {
       const listResponse = await fetch(inboxUrl(requestFilters));
       const listPayload = (await listResponse.json().catch(() => ({}))) as InboxPayload;
-      if (listResponse.ok && listPayload.data && stillCurrent()) {
+      // A failed list means the server is struggling: skip the thread too.
+      if (!listResponse.ok || !listPayload.data) return "failed";
+      if (stillCurrent()) {
         const page = listPayload.data;
         setContacts((existing) => mergeLiveContacts(existing, page.contacts));
         if (page.members) setMembers(page.members);
@@ -409,7 +425,8 @@ export function InstagramInbox() {
       if (openId && activeContactIdRef.current === openId) {
         const threadResponse = await fetch(`/api/inbox/${openId}`);
         const threadPayload = (await threadResponse.json().catch(() => ({}))) as ConversationPayload;
-        if (threadResponse.ok && threadPayload.data && activeContactIdRef.current === openId && !guard.busy) {
+        if (!threadResponse.ok || !threadPayload.data) return "failed";
+        if (activeContactIdRef.current === openId && !guard.busy) {
           const latest = threadPayload.data.messages;
           const known = new Set(messages.map((message) => message.id));
           const arrived = latest.filter((message) => message.direction === "inbound" && !known.has(message.id));
@@ -421,22 +438,47 @@ export function InstagramInbox() {
               ? `New message from ${name}: ${arrived[0].text}`
               : `${arrived.length} new messages from ${name}. Latest: ${arrived[arrived.length - 1].text}`);
           }
-          const openContact = listPayload.data?.contacts.find((contact) => contact.id === openId);
+          const openContact = listPayload.data.contacts.find((contact) => contact.id === openId);
           if (openContact?.unread) void patchContact(openId, { action: "mark_read" });
         }
       }
+      return "ok";
     } catch {
       // Live refresh is opportunistic; the next tick (or a manual action) retries.
+      return "failed";
     } finally {
       guard.inFlight = false;
     }
   });
+  // Each check schedules the next one, so checks never pile up, and a run of
+  // failures (a 502 during an outage) slows them down instead of keeping a
+  // struggling server busy every 8 seconds.
   useEffect(() => {
-    const timer = window.setInterval(() => void refreshLive(), INBOX_LIVE_REFRESH_MS);
-    const onVisible = () => { if (document.visibilityState === "visible") void refreshLive(); };
+    let timer: number | undefined;
+    let stopped = false;
+    let failures = 0;
+    const schedule = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => void tick(), liveRefreshDelay(failures));
+    };
+    const tick = async () => {
+      const outcome = await refreshLive();
+      if (stopped) return;
+      if (outcome === "failed") failures += 1;
+      else if (outcome === "ok") failures = 0;
+      schedule();
+    };
+    // Coming back to the tab checks at once, unless checks are backing off.
+    const onVisible = () => {
+      if (document.visibilityState !== "visible" || failures > 0) return;
+      window.clearTimeout(timer);
+      void tick();
+    };
+    schedule();
     document.addEventListener("visibilitychange", onVisible);
     return () => {
-      window.clearInterval(timer);
+      stopped = true;
+      window.clearTimeout(timer);
       document.removeEventListener("visibilitychange", onVisible);
     };
   }, []);

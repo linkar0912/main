@@ -4,7 +4,7 @@ import { getValidatedSession } from "@/src/lib/auth/session";
 import { getServerEnv } from "@/src/lib/env";
 import { MetaClient } from "@/src/lib/meta/client";
 import { hasCachedInstagramAvatar, instagramIdentityKey, resolveInstagramUsernames } from "@/src/lib/meta/username-resolver";
-import { LEAD_STATUSES, type ContactSearch, type LeadStatus } from "@/src/lib/repository";
+import { LEAD_STATUSES, type ContactReconcileCandidate, type ContactSearch, type LeadStatus } from "@/src/lib/repository";
 import { decodeInboxCursor, encodeInboxCursor } from "@/src/lib/inbox-cursor";
 
 export const runtime = "nodejs";
@@ -12,21 +12,39 @@ export const runtime = "nodejs";
 const CONTACT_RECONCILIATION_LIMIT = 500;
 const MAX_QUERY_LENGTH = 100;
 
+// The backfill reads 1,000 rows and writes up to 1,000 contacts, and every
+// teammate's browser asks for it. The web app runs as a single replica, so an
+// in-process map is enough to run it at most once per workspace per window,
+// however many tabs, reloads or teammates ask in the meantime.
+const RECONCILE_COOLDOWN_MS = 15 * 60_000;
+const reconcileStartedAt = new Map<string, number>();
+
+/** True when this workspace may run the backfill now; claims the window if so. */
+function claimReconcileWindow(workspaceId: string, now = Date.now()): boolean {
+  const last = reconcileStartedAt.get(workspaceId);
+  if (last !== undefined && now - last < RECONCILE_COOLDOWN_MS) return false;
+  if (reconcileStartedAt.size >= 1_000) {
+    for (const [key, startedAt] of reconcileStartedAt) {
+      if (now - startedAt >= RECONCILE_COOLDOWN_MS) reconcileStartedAt.delete(key);
+    }
+  }
+  // Claimed before the work starts, and kept when it fails, so neither a
+  // second tab nor a retry during a database incident repeats it.
+  reconcileStartedAt.set(workspaceId, now);
+  return true;
+}
+
 export async function POST(request: Request) {
   const session = await getValidatedSession(request);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!claimReconcileWindow(session.workspaceId)) return NextResponse.json({ data: { reconciled: 0 } });
 
   const repository = getRepository();
   const [participants, events] = await Promise.all([
     repository.listRecentParticipants(session.workspaceId, CONTACT_RECONCILIATION_LIMIT),
     repository.listRecentWebhookEvents(session.workspaceId, CONTACT_RECONCILIATION_LIMIT),
   ]);
-  const candidates = new Map<string, {
-    instagramAccountId: string;
-    igScopedUserId: string;
-    firstSeenAt: string;
-    lastSeenAt: string;
-  }>();
+  const candidates = new Map<string, ContactReconcileCandidate>();
   for (const participant of participants) {
     if (!participant.igScopedUserId) continue;
     const key = `${participant.instagramAccountId}:${participant.igScopedUserId}`;
@@ -52,33 +70,11 @@ export async function POST(request: Request) {
     });
   }
 
-  // Batched concurrency instead of one contact per round trip: up to 500
-  // candidates × 2 touches used to serialize into ~1 000 sequential DB calls,
-  // and the list fetch waited on all of them. Candidates are distinct
-  // (Map-keyed), so concurrent touches can't collide.
-  const RECONCILE_BATCH = 10;
-  const candidateList = [...candidates.values()];
-  let reconciled = 0;
-  for (let index = 0; index < candidateList.length; index += RECONCILE_BATCH) {
-    const batch = await Promise.all(candidateList.slice(index, index + RECONCILE_BATCH).map(async (candidate) => {
-      const touched = await repository.touchContact(
-        session.workspaceId,
-        candidate.instagramAccountId,
-        candidate.igScopedUserId,
-        candidate.firstSeenAt,
-      );
-      if (candidate.lastSeenAt !== candidate.firstSeenAt) {
-        await repository.touchContact(
-          session.workspaceId,
-          candidate.instagramAccountId,
-          candidate.igScopedUserId,
-          candidate.lastSeenAt,
-        );
-      }
-      return touched;
-    }));
-    reconciled += batch.filter((touched) => touched.created).length;
-  }
+  // One statement for every candidate. touchContact used to run up to twice
+  // per candidate (about 4,000 statements on 10 pooled connections), and it
+  // reopened conversations someone had closed; reconcileContacts only creates
+  // missing contacts and widens the first and last seen dates.
+  const reconciled = await repository.reconcileContacts(session.workspaceId, [...candidates.values()]);
   return NextResponse.json({ data: { reconciled } });
 }
 

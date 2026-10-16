@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   getValidatedSession: vi.fn(),
@@ -41,10 +41,13 @@ vi.mock("@/src/lib/repository-provider", () => ({
   }),
 }));
 
-const { GET } = await import("./route");
+let GET: typeof import("./route").GET;
 
 describe("GET /api/insights", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    // A fresh route module per test: the 30-second result cache lives in it.
+    vi.resetModules();
+    ({ GET } = await import("./route"));
     mocks.getValidatedSession.mockReset().mockResolvedValue({ workspaceId: "workspace_1", userId: "user_1" });
     mocks.getAutomation.mockReset().mockResolvedValue({ id: "automation_1", definition: { version: 2, trigger: { type: "comment" } } });
     mocks.countParticipantsByState.mockReset().mockResolvedValue({});
@@ -293,6 +296,109 @@ describe("GET /api/insights", () => {
       expect(body.capture).toBeNull();
       expect(mocks.countEmailCaptureFunnel).not.toHaveBeenCalled();
     });
+  });
+
+  describe("shared results", () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("serves an identical request from the cache for 30 seconds", async () => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date("2026-10-16T10:00:00.000Z"));
+      mocks.countCapturedContacts.mockResolvedValueOnce(11).mockResolvedValue(12);
+
+      const first = await (await GET(new Request("http://localhost/api/insights?include=overview&days=7"))).json();
+      vi.setSystemTime(new Date("2026-10-16T10:00:29.000Z"));
+      const second = await (await GET(new Request("http://localhost/api/insights?include=overview&days=7"))).json();
+
+      expect(second).toEqual(first);
+      expect(second.capturedEmails).toBe(11);
+      expect(mocks.countCapturedContacts).toHaveBeenCalledTimes(1);
+      expect(mocks.countParticipantsPerDay).toHaveBeenCalledTimes(1);
+
+      // Another window, view or workspace is its own entry.
+      await GET(new Request("http://localhost/api/insights?include=overview&days=30"));
+      expect(mocks.countCapturedContacts).toHaveBeenCalledTimes(2);
+      mocks.getValidatedSession.mockResolvedValue({ workspaceId: "workspace_2", userId: "user_2" });
+      await GET(new Request("http://localhost/api/insights?include=overview&days=7"));
+      expect(mocks.countCapturedContacts).toHaveBeenCalledTimes(3);
+      mocks.getValidatedSession.mockResolvedValue({ workspaceId: "workspace_1", userId: "user_1" });
+
+      vi.setSystemTime(new Date("2026-10-16T10:00:31.000Z"));
+      const later = await (await GET(new Request("http://localhost/api/insights?include=overview&days=7"))).json();
+      expect(later.capturedEmails).toBe(12);
+      expect(mocks.countCapturedContacts).toHaveBeenCalledTimes(4);
+    });
+
+    it("lets concurrent identical requests share one load", async () => {
+      let finish: (value: number) => void = () => undefined;
+      mocks.countCapturedContacts.mockReturnValue(new Promise<number>((resolve) => { finish = resolve; }));
+
+      const pending = [
+        GET(new Request("http://localhost/api/insights?include=overview")),
+        GET(new Request("http://localhost/api/insights?include=overview")),
+      ];
+      await vi.waitFor(() => expect(mocks.countCapturedContacts).toHaveBeenCalledTimes(1));
+      finish(5);
+      const bodies = await Promise.all(pending.map(async (response) => (await response).json()));
+
+      expect(bodies.map((body) => body.capturedEmails)).toEqual([5, 5]);
+      expect(mocks.countCapturedContacts).toHaveBeenCalledTimes(1);
+      expect(mocks.countSuppressedContacts).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not keep a failed load", async () => {
+      mocks.countSuppressedContacts.mockRejectedValueOnce(new Error("pool timeout"));
+
+      await expect(GET(new Request("http://localhost/api/insights?include=overview"))).rejects.toThrow("pool timeout");
+      const retry = await GET(new Request("http://localhost/api/insights?include=overview"));
+
+      expect(retry.status).toBe(200);
+      expect(mocks.countSuppressedContacts).toHaveBeenCalledTimes(2);
+    });
+
+    it("still checks the automation belongs to the workspace on a cached view", async () => {
+      await GET(new Request("http://localhost/api/insights?include=automation&automationId=automation_1&days=7"));
+      mocks.getAutomation.mockResolvedValue(null);
+      const response = await GET(new Request("http://localhost/api/insights?include=automation&automationId=automation_1&days=7"));
+      expect(response.status).toBe(404);
+    });
+  });
+
+  it("keeps at most 6 queries in flight for the full view", async () => {
+    let inFlight = 0;
+    let peak = 0;
+    const slow = <T,>(value: T) => async () => {
+      inFlight += 1;
+      peak = Math.max(peak, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      inFlight -= 1;
+      return value;
+    };
+    mocks.countParticipantsByState.mockImplementation(slow({}));
+    mocks.countParticipantFunnel.mockImplementation(slow({ commented: 0, openingSent: 0, optedIn: 0, followed: 0, linkSent: 0 }));
+    mocks.countParticipantsPerDay.mockImplementation(slow([]));
+    mocks.countExecutionsSentPerDay.mockImplementation(slow([]));
+    mocks.countParticipantsByMedia.mockImplementation(slow([]));
+    mocks.countExecutionsByStatusPerAutomation.mockImplementation(slow([]));
+    mocks.countCapturedContacts.mockImplementation(slow(3));
+    mocks.countSuppressedContacts.mockImplementation(slow(1));
+    mocks.getWorkspaceUsage.mockImplementation(slow({ deliveriesReserved: 9, broadcastsCreated: 0 }));
+    mocks.getMonthlyDeliveryLimit.mockImplementation(slow(100));
+
+    const body = await (await GET(new Request("http://localhost/api/insights"))).json();
+
+    expect(peak).toBe(6);
+    expect(body).toMatchObject({ capturedEmails: 3, optedOut: 1, usage: { deliveriesThisMonth: 9, monthlyDeliveryLimit: 100 } });
+  });
+
+  it("include=automation counts send outcomes for that automation only", async () => {
+    await GET(new Request("http://localhost/api/insights?include=automation&automationId=automation_1&days=7"));
+    expect(mocks.countExecutionsByStatusPerAutomation).toHaveBeenCalledTimes(2);
+    for (const call of mocks.countExecutionsByStatusPerAutomation.mock.calls) {
+      expect(call[2]).toBe("automation_1");
+    }
   });
 
   it("returns 404 before analytics queries for a foreign automation", async () => {

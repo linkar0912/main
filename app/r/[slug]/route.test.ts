@@ -110,6 +110,62 @@ describe("GET /r/[slug]", () => {
     }
   });
 
+  // A request with no client address (a direct hit on the origin, or an
+  // internal one such as the image optimizer used to make) hashes to "anon".
+  it("limits visitors without a known address under one shared bucket per link, still redirecting", async () => {
+    await repository.createTrackedLink("workspace_1", {
+      slug: "anon-flood",
+      destination: "https://example.com/",
+      conversionUrl: "https://hooks.example.com/conversion",
+    });
+    const recordClick = vi.spyOn(repository, "recordTrackedLinkClick");
+    // No trusted proxy, so each forged X-Forwarded-For still resolves to "anon".
+    const click = (i: number) => GET(
+      new Request("http://localhost/r/anon-flood", { headers: { "x-forwarded-for": `198.51.100.${i}` } }),
+      context("anon-flood"),
+    );
+
+    for (let i = 0; i < 31; i++) expect((await click(i)).status).toBe(302);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(recordClick).toHaveBeenCalledTimes(30);
+    expect(recordClick.mock.calls.every(([, input]) => input.ipHash === "anon")).toBe(true);
+    expect(mocks.postJson).toHaveBeenCalledTimes(30);
+  });
+
+  it("keeps a visitor with a known address out of the exhausted anonymous bucket", async () => {
+    vi.stubEnv("TRUSTED_PROXY_HOPS", "1");
+    try {
+      await repository.createTrackedLink("workspace_1", { slug: "mixed", destination: "https://example.com/" });
+      const recordClick = vi.spyOn(repository, "recordTrackedLinkClick");
+
+      // No CF-Connecting-IP and no X-Forwarded-For: "anon" even behind a trusted proxy.
+      for (let i = 0; i < 31; i++) await GET(new Request("http://localhost/r/mixed"), context("mixed"));
+      await GET(new Request("http://localhost/r/mixed", { headers: { "cf-connecting-ip": "198.51.100.77" } }), context("mixed"));
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      expect(recordClick).toHaveBeenCalledTimes(31);
+      expect(recordClick.mock.calls.slice(0, 30).every(([, input]) => input.ipHash === "anon")).toBe(true);
+      expect(recordClick.mock.calls.at(-1)?.[1].ipHash).toMatch(/^[0-9a-f]{16}$/);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("keeps each link's anonymous bucket separate", async () => {
+    await repository.createTrackedLink("workspace_1", { slug: "first", destination: "https://example.com/" });
+    await repository.createTrackedLink("workspace_1", { slug: "second", destination: "https://example.com/" });
+    const recordClick = vi.spyOn(repository, "recordTrackedLinkClick");
+
+    for (let i = 0; i < 31; i++) await GET(new Request("http://localhost/r/first"), context("first"));
+    await GET(new Request("http://localhost/r/second"), context("second"));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(recordClick).toHaveBeenCalledTimes(31);
+    const second = await repository.getTrackedLinkBySlugPublic("second");
+    expect(recordClick.mock.calls.at(-1)?.[0]).toBe(second?.id);
+  });
+
   it("410s an expired link before touching the destination", async () => {
     await repository.createTrackedLink("workspace_1", {
       slug: "old",

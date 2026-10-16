@@ -20,6 +20,7 @@ import { InlineConfirm } from "./inline-confirm";
 import { Skeleton } from "./skeleton";
 import { PageHeader } from "./page-header";
 import { SocialAvatar } from "./social-avatar";
+import { isMarketingPath } from "@/src/lib/site-routing";
 import type { ConnectionStatus, MemberRole } from "@/src/lib/repository";
 import { formatDate } from "@/src/lib/format-date";
 import { friendlyFirstName } from "@/src/lib/display-name";
@@ -371,12 +372,21 @@ function ProfileBody({
                 ["/data-deletion", "Data deletion", ExternalLink],
               ].map(([href, label, Icon]) => {
                 const LinkIcon = Icon as typeof Users;
+                const content = (
+                  <>
+                    <span className="settings-row-copy"><strong><LinkIcon size={15} /> {label as string}</strong></span>
+                    <ChevronRight size={16} />
+                  </>
+                );
                 return (
                   <li key={label as string}>
-                    <Link className="settings-row settings-link-row" href={href as string}>
-                      <span className="settings-row-copy"><strong><LinkIcon size={15} /> {label as string}</strong></span>
-                      <ChevronRight size={16} />
-                    </Link>
+                    {/* The policy pages live on the marketing host: a plain link,
+                        so nothing is prefetched or fetched across origins. */}
+                    {isMarketingPath(href as string) ? (
+                      <a className="settings-row settings-link-row" href={href as string}>{content}</a>
+                    ) : (
+                      <Link className="settings-row settings-link-row" href={href as string}>{content}</Link>
+                    )}
                   </li>
                 );
               })}

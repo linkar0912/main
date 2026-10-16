@@ -1,10 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { createServer, type AddressInfo, type Server, type Socket } from "node:net";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
   canViewHealthDetail,
   getCachedWebHealth,
   getHealth,
+  getHealthRedis,
+  HEALTH_DATABASE_PROBE_TIMEOUT_MS,
+  HEALTH_REDIS_PROBE_TIMEOUT_MS,
   isWebServing,
   parseWorkerHeartbeat,
   WORKER_HEARTBEAT_STALE_MS,
@@ -372,5 +376,173 @@ describe("cached web health", () => {
     vi.stubEnv("DATABASE_URL", "");
     vi.stubEnv("REDIS_URL", "");
     await expect(getCachedWebHealth(() => getHealth(), 1_001)).resolves.toMatchObject({ status: "ok" });
+  });
+});
+
+describe("health probe deadline", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function stubConfigured() {
+    vi.stubEnv("DATABASE_URL", "postgresql://user:secret@database/linkar");
+    vi.stubEnv("REDIS_URL", "redis://:secret@valkey:6379");
+    vi.stubEnv("BUILD_COMMIT", "");
+    stubNoIntegrationCredentials();
+  }
+
+  const never = () => new Promise<never>(() => undefined);
+  const answersAfter = (ms: number) => () => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+  it("gives the database more time than Redis, and both fit the callers' 10 s timeouts", () => {
+    expect(HEALTH_DATABASE_PROBE_TIMEOUT_MS).toBeGreaterThan(HEALTH_REDIS_PROBE_TIMEOUT_MS);
+    // ops/dokploy/release-linkar.sh uses --max-time 10 and
+    // scripts/check-production-health.mjs a 10 s timeout.
+    expect(HEALTH_DATABASE_PROBE_TIMEOUT_MS).toBeLessThanOrEqual(5_000);
+  });
+
+  it("reports a database that never answers as an error once its deadline passes", async () => {
+    vi.useFakeTimers();
+    stubConfigured();
+    let settled = false;
+    const pending = getHealth({ database: never, redis: async () => undefined }).finally(() => {
+      settled = true;
+    });
+
+    await vi.advanceTimersByTimeAsync(HEALTH_DATABASE_PROBE_TIMEOUT_MS - 1);
+    expect(settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+
+    const health = await pending;
+    expect(health.dependencies).toEqual({ database: "error", redis: "ok" });
+    expect(health.status).toBe("degraded");
+    expect(isWebServing(health)).toBe(false);
+  });
+
+  it("reports Redis that never answers as an error once its shorter deadline passes", async () => {
+    vi.useFakeTimers();
+    stubConfigured();
+    let settled = false;
+    const pending = getHealth({ database: async () => undefined, redis: never }).finally(() => {
+      settled = true;
+    });
+
+    await vi.advanceTimersByTimeAsync(HEALTH_REDIS_PROBE_TIMEOUT_MS - 1);
+    expect(settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+
+    await expect(pending).resolves.toMatchObject({ dependencies: { database: "ok", redis: "error" } });
+  });
+
+  it("keeps a slow but working database ok past the Redis deadline", async () => {
+    vi.useFakeTimers();
+    stubConfigured();
+    // Production measured about 0.9 to 1.2 s for the database probe at idle;
+    // under pool pressure it runs longer without being down.
+    const pending = getHealth({
+      database: answersAfter(HEALTH_REDIS_PROBE_TIMEOUT_MS + 1_500),
+      redis: async () => undefined,
+    });
+
+    await vi.advanceTimersByTimeAsync(HEALTH_REDIS_PROBE_TIMEOUT_MS + 1_500);
+
+    const health = await pending;
+    expect(health).toMatchObject({ status: "ok", dependencies: { database: "ok", redis: "ok" } });
+    expect(isWebServing(health)).toBe(true);
+  });
+
+  it("bounds both dependency probes in parallel, not one after the other", async () => {
+    vi.useFakeTimers();
+    stubConfigured();
+    let settled = false;
+    const pending = getHealth({ database: never, redis: never }).finally(() => {
+      settled = true;
+    });
+
+    // The whole check settles at the longest deadline, not the sum of both.
+    await vi.advanceTimersByTimeAsync(HEALTH_DATABASE_PROBE_TIMEOUT_MS - 1);
+    expect(settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+
+    await expect(pending).resolves.toMatchObject({ dependencies: { database: "error", redis: "error" } });
+  });
+
+  it("reports a worker heartbeat read that never answers as an error after the Redis deadline", async () => {
+    vi.useFakeTimers();
+    stubConfigured();
+    const pending = getHealth({ database: async () => undefined, redis: async () => undefined, workerHeartbeat: never });
+
+    await vi.advanceTimersByTimeAsync(HEALTH_REDIS_PROBE_TIMEOUT_MS);
+
+    const health = await pending;
+    expect(health.worker).toEqual({ heartbeat: "error", release: null });
+    // The worker never decides the web container's verdict.
+    expect(isWebServing(health)).toBe(true);
+  });
+
+  it("still reports probes that answer inside their deadlines as ok", async () => {
+    vi.useFakeTimers();
+    stubConfigured();
+    const pending = getHealth({
+      database: answersAfter(HEALTH_DATABASE_PROBE_TIMEOUT_MS - 100),
+      redis: answersAfter(HEALTH_REDIS_PROBE_TIMEOUT_MS - 100),
+    });
+
+    await vi.advanceTimersByTimeAsync(HEALTH_DATABASE_PROBE_TIMEOUT_MS);
+
+    await expect(pending).resolves.toMatchObject({ status: "ok", dependencies: { database: "ok", redis: "ok" } });
+  });
+});
+
+describe("health Redis client", () => {
+  const healthGlobals = globalThis as unknown as {
+    linkarHealthRedis?: { disconnect(): void };
+    linkarHealthRedisUrl?: string;
+    linkarHealthRedisPending?: unknown;
+  };
+  let server: Server | undefined;
+  const sockets = new Set<Socket>();
+
+  afterEach(async () => {
+    healthGlobals.linkarHealthRedis?.disconnect();
+    delete healthGlobals.linkarHealthRedis;
+    delete healthGlobals.linkarHealthRedisUrl;
+    delete healthGlobals.linkarHealthRedisPending;
+    for (const socket of sockets) socket.destroy();
+    sockets.clear();
+    await new Promise<void>((resolve) => (server ? server.close(() => resolve()) : resolve()));
+    server = undefined;
+  });
+
+  /** A Valkey that accepts the connection and then never replies, like a SIGSTOPped one. */
+  async function silentRedis(): Promise<string> {
+    server = createServer((socket) => {
+      sockets.add(socket);
+      socket.on("data", () => undefined);
+    });
+    await new Promise<void>((resolve) => server!.listen(0, "127.0.0.1", resolve));
+    return `redis://127.0.0.1:${(server!.address() as AddressInfo).port}`;
+  }
+
+  it("gives up on a connected but silent Valkey instead of waiting forever", async () => {
+    const client = await getHealthRedis(await silentRedis());
+    const started = Date.now();
+    const outcome = await Promise.race([
+      client.ping().then(() => "answered", (error: Error) => error.message),
+      new Promise<string>((resolve) => setTimeout(() => resolve("still pending"), 10_000)),
+    ]);
+    expect(outcome).toMatch(/timed out/i);
+    expect(Date.now() - started).toBeLessThan(HEALTH_REDIS_PROBE_TIMEOUT_MS + 3_000);
+  });
+
+  it("reports a silent Valkey as an error from the default probe", async () => {
+    vi.stubEnv("DATABASE_URL", "");
+    vi.stubEnv("REDIS_URL", await silentRedis());
+    stubNoIntegrationCredentials();
+
+    const health = await getHealth();
+
+    expect(health.dependencies).toEqual({ database: "not_configured", redis: "error" });
+    expect(isWebServing(health)).toBe(false);
   });
 });

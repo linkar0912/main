@@ -1,9 +1,17 @@
 // @vitest-environment jsdom
 import { cleanup, render, screen, within } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/src/lib/env", () => ({
   getServerEnv: () => ({ publicSiteUrl: "https://linkar.in", appUrl: "https://app.linkar.in" }),
+}));
+// Marks every next/link anchor, so a test can tell it from a plain <a>.
+vi.mock("next/link", () => ({
+  default: ({ href, children, ...rest }: { href: string; children?: ReactNode } & Record<string, unknown>) => {
+    const anchorProps = Object.fromEntries(Object.entries(rest).filter(([key]) => !["prefetch", "scroll", "replace"].includes(key)));
+    return <a data-next-link="" href={String(href)} {...anchorProps}>{children}</a>;
+  },
 }));
 
 const { LoginScreen } = await import("./login-screen");
@@ -68,6 +76,26 @@ describe("LoginScreen host routing", () => {
       const link = screen.getAllByRole("link", { name }).at(0);
       expect(link?.getAttribute("href")?.startsWith("/"), name).toBe(true);
     }
+  });
+
+  it("links account creation and password reset on the owner-console host to the app host with plain anchors", () => {
+    // A next/link on admin.linkar.in would fetch /signup from the console
+    // host, follow the redirect to app.linkar.in and trip connect-src.
+    render(<LoginScreen nextPath="/admin" adminHost />);
+
+    const signup = screen.getByRole("link", { name: "Create an account" });
+    expect(signup.getAttribute("href")).toBe("https://app.linkar.in/signup?next=%2Fdashboard");
+    expect(signup.hasAttribute("data-next-link")).toBe(false);
+    const reset = screen.getByRole("link", { name: /Forgot your password/ });
+    expect(reset.getAttribute("href")).toBe("https://app.linkar.in/forgot-password");
+    expect(reset.hasAttribute("data-next-link")).toBe(false);
+    expect(screen.getByRole("form", { name: "Sign in to Linkar" }).querySelector<HTMLInputElement>('input[name="next"]')?.value).toBe("/admin");
+  });
+
+  it("keeps client navigation for those links on the app host", () => {
+    render(<LoginScreen nextPath="/automations" />);
+    expect(screen.getByRole("link", { name: "Create an account" }).hasAttribute("data-next-link")).toBe(true);
+    expect(screen.getByRole("link", { name: /Forgot your password/ }).hasAttribute("data-next-link")).toBe(true);
   });
 
   it("carries the requested destination through the sign-in form", () => {

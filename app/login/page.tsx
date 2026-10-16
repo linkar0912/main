@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
-import { redirect } from "next/navigation";
+import { headers } from "next/headers";
+import { redirect, unstable_rethrow } from "next/navigation";
 import { LoginScreen } from "@/src/components/auth/login-screen";
 import { sanitizeInvite } from "@/src/lib/auth/auth-redirect";
 import { getRequestSession, safeNextPath } from "@/src/lib/auth/session";
 import { PRODUCT_NAME } from "@/src/lib/branding";
 import { describePlanIntent, parsePlanIntent } from "@/src/lib/billing/plan-intent";
+import { ADMIN_HOST, resolveRequestHostname } from "@/src/lib/site-routing";
 
 export const dynamic = "force-dynamic";
 
@@ -39,9 +41,32 @@ const ERRORS: Record<string, string> = {
   "resend-locked": "Too many confirmation emails requested. Try again in an hour.",
 };
 
+function isOwnerConsolePath(path: string): boolean {
+  const pathname = path.split(/[?#]/, 1)[0];
+  return pathname === "/admin" || pathname.startsWith("/admin/");
+}
+
+/** Whether this request came in on the owner-console host. */
+async function onOwnerConsoleHost(): Promise<boolean> {
+  try {
+    return resolveRequestHostname(await headers(), "").toLowerCase().replace(/:\d+$/, "") === ADMIN_HOST;
+  } catch (error) {
+    // Outside a request (a render in a unit test) there is no host to read,
+    // so behave as the app host. Next's own control-flow errors still pass.
+    unstable_rethrow(error);
+    return false;
+  }
+}
+
 export default async function LoginPage({ searchParams }: LoginPageProps) {
   const params = await searchParams;
-  const nextPath = safeNextPath(params.next);
+  // admin.linkar.in/login only signs in to the owner console. Any other next
+  // would make the login route answer with a 303 to app.linkar.in, which the
+  // console's CSP form-action used to block, and could provision a workspace
+  // for an owner who has none.
+  const adminHost = await onOwnerConsoleHost();
+  const requestedNext = safeNextPath(params.next);
+  const nextPath = adminHost && !isOwnerConsolePath(requestedNext) ? "/admin" : requestedNext;
   const invite = sanitizeInvite(params.invite);
 
   // Already signed in (with a workspace): there is nothing to do here. A
@@ -70,5 +95,5 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
     : undefined;
   const resend = unconfirmedEmail ?? (verifyInvalid || params.error === "unconfirmed" || params.error?.startsWith("resend-") ? true : undefined);
 
-  return <LoginScreen nextPath={nextPath} invite={invite} error={error} notice={notice} resend={resend} />;
+  return <LoginScreen nextPath={nextPath} invite={invite} error={error} notice={notice} resend={resend} adminHost={adminHost} />;
 }

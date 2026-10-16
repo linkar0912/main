@@ -655,7 +655,7 @@ const TOPICS: Topic[] = [
         a: (
           <>
             Contact exports live with your contacts when your plan includes exports. For deletion, see{" "}
-            <Link href="/data-deletion">Data deletion</Link> - it covers both the self-serve route and
+            <a href="/data-deletion">Data deletion</a> - it covers both the self-serve route and
             an owner-initiated request, and returns a confirmation code to keep.
           </>
         ),
@@ -921,11 +921,13 @@ function HelpBody({ supportEmail: supportEmailProp }: { supportEmail?: string })
             )}
           </section>
 
+          {/* Plain links: these pages live on the marketing host, and next/link
+              would prefetch or fetch them cross-origin (blocked by connect-src). */}
           <nav className="profile-footer-links" aria-label="Policies">
-            <Link href="/privacy">Privacy policy</Link>
-            <Link href="/terms">Terms of service</Link>
-            <Link href="/data-deletion">Data deletion</Link>
-            <Link href="/support">Public support page</Link>
+            <a href="/privacy">Privacy policy</a>
+            <a href="/terms">Terms of service</a>
+            <a href="/data-deletion">Data deletion</a>
+            <a href="/support">Public support page</a>
           </nav>
         </div>
       </div>

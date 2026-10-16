@@ -26,3 +26,27 @@ it("keeps server errors visible inside the confirmation dialog", async () => {
   expect(screen.getByRole("dialog").contains(screen.getByRole("alert"))).toBe(true);
   expect(screen.getByRole("alert").textContent).toBe("Stale version");
 });
+it("downloads a contact export served as CSV instead of reporting it unavailable", async () => {
+  const csv = "id,email\r\ncontact-1,person@example.com\n";
+  const fetch = vi.fn().mockResolvedValue(new Response(csv, { status: 200, headers: { "content-type": "text/csv; charset=utf-8" } }));
+  vi.stubGlobal("fetch", fetch);
+  const createObjectURL = vi.fn<(blob: Blob) => string>(() => "blob:contact-export");
+  vi.stubGlobal("URL", Object.assign(URL, { createObjectURL, revokeObjectURL: vi.fn() }));
+  const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+  const complete = vi.fn();
+  render(<OperationActions detail={{ ...detail, kind: "contact", id: "contact-1", allowedActions: ["export_one"] }} onComplete={complete} />);
+  await userEvent.click(screen.getByRole("button", { name: "Export" }));
+  await userEvent.type(screen.getByRole("textbox", { name: /^Reason/ }), "owner asked for a copy");
+  await userEvent.click(screen.getByRole("button", { name: "Confirm" }));
+  expect(fetch).toHaveBeenCalledWith("/api/admin/operations/contact/contact-1", expect.objectContaining({ method: "PATCH" }));
+  expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ action: "export_one", version: 4, input: {} });
+  expect(createObjectURL).toHaveBeenCalledTimes(1);
+  const file = createObjectURL.mock.calls[0][0];
+  expect(file.size).toBe(new TextEncoder().encode(csv).length);
+  expect(file.type).toContain("text/csv");
+  const anchor = click.mock.contexts[0] as HTMLAnchorElement;
+  expect(anchor.download).toBe("linkar-contact-contact-1.csv");
+  expect(screen.queryByRole("alert")).toBeNull();
+  expect(complete).toHaveBeenCalledWith("Done: Export.");
+  click.mockRestore();
+});

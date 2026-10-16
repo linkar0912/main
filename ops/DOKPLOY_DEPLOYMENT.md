@@ -23,10 +23,22 @@ the worker's Redis heartbeat (`linkar:worker:heartbeat`, 90-second TTL) carries
 its commit into the web health detail as `worker.release`.
 
 Both containers run the image's `HEALTHCHECK` (`scripts/container-healthcheck.mjs`):
-it probes `/api/health` on the web port and falls back to the worker's private
-`/health` when nothing listens on the web port, so the same image is healthy
-in either role. The HTTP status follows each container's own dependencies; a
-stopped worker never fails the web container's healthcheck.
+it probes the liveness route `/api/health/live` on the web port and falls back
+to the worker's private `/live` when nothing listens on the web port, so the
+same image is healthy in either role. Neither liveness endpoint does database
+or Redis I/O: the web one answers whenever the process can serve a request,
+and the worker's answers 200 while BullMQ reports it is consuming. A Valkey
+restart, a pooler blip or a slow database therefore never gets a container
+replaced, and a stopped worker never fails the web container's healthcheck.
+
+Dependency state is readiness and stays on `/api/health` (web) and the
+worker's `/health`, which the release script and monitoring read. Each probe
+there has its own deadline (5 s for the database, 2 s for Redis), and the HTTP
+status follows that container's own database and Redis. Dokploy's service
+healthcheck for `linkar-web` reads `dependencies.database` and
+`dependencies.redis` from `/api/health` until it is pointed at
+`/api/health/live` (and the worker's at `/live`); make that change in Dokploy
+so a dependency outage cannot replace the only web task.
 
 ## Release flow
 

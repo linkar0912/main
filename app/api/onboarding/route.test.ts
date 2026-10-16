@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createMemoryRepository } from "@/src/lib/memory-repository";
+import { createPrismaRepository, prisma } from "@/src/lib/prisma";
 import type { AutomationRepository, MemberRole } from "@/src/lib/repository";
 
 const state = vi.hoisted(() => ({
@@ -60,6 +61,17 @@ describe("/api/onboarding", () => {
     expect((await state.repository.getMemberOnboarding("w1", "priya.shah@studio.test"))?.displayName).toBe("Priya");
   });
 
+  it("keeps both answers when two step saves arrive at the same time", async () => {
+    const [niches, audience] = await Promise.all([
+      PUT(put({ step: 4, answers: { niches: ["fashion"] } })),
+      PUT(put({ step: 5, answers: { audience: "1k_10k" } })),
+    ]);
+    expect(niches.status).toBe(200);
+    expect(audience.status).toBe(200);
+    const data = await view(await GET(new Request("http://localhost/api/onboarding")));
+    expect(data.answers).toEqual({ niches: ["fashion"], audience: "1k_10k" });
+  });
+
   it("rejects values outside the enums and unknown fields", async () => {
     expect((await PUT(put({ answers: { accountType: "pirate" } }))).status).toBe(400);
     expect((await PUT(put({ answers: { goals: ["sell"], admin: true } }))).status).toBe(400);
@@ -97,5 +109,89 @@ describe("/api/onboarding", () => {
     expect(await state.repository.getWorkspaceOnboarding("w1")).toBeNull();
     data = await view(await PUT(put({ action: "complete" })));
     expect(data.completedAt).toEqual(expect.any(String));
+  });
+});
+
+describe("updateWorkspaceOnboarding", () => {
+  const row = (answers: Record<string, unknown>, overrides: Record<string, unknown> = {}) => ({
+    workspaceId: "w1",
+    answers,
+    step: 3,
+    completedAt: null,
+    skippedAt: null,
+    existingWorkspace: false,
+    inviteDismissedAt: null,
+    planDismissedAt: null,
+    createdAt: new Date("2026-10-01T00:00:00.000Z"),
+    updatedAt: new Date("2026-10-01T00:00:00.000Z"),
+    ...overrides,
+  });
+
+  function fakeClient(locks: Array<ReturnType<typeof row>[]>, inserted = 1) {
+    const queryRaw = vi.fn(async () => locks.shift() ?? []);
+    const executeRaw = vi.fn().mockResolvedValue(inserted);
+    const update = vi.fn(async ({ data }: { data: Record<string, unknown> }) => row((data.answers ?? {}) as Record<string, unknown>, { step: data.step ?? 3 }));
+    const transaction = { $queryRaw: queryRaw, $executeRaw: executeRaw, workspaceOnboarding: { update } };
+    const client = { $transaction: vi.fn(async (work: (tx: typeof transaction) => unknown) => work(transaction)) } as unknown as typeof prisma;
+    return { client, queryRaw, executeRaw, update };
+  }
+
+  it("memory: hands the current row to the change and applies what it returns", async () => {
+    const memory = createMemoryRepository();
+    const seen: unknown[] = [];
+    await memory.updateWorkspaceOnboarding("w1", (current) => {
+      seen.push(current);
+      return { answers: { niches: ["fashion"] }, step: 4 };
+    });
+    const saved = await memory.updateWorkspaceOnboarding("w1", (current) => {
+      seen.push(current?.answers);
+      return { answers: { ...current?.answers, audience: "1k_10k" } };
+    });
+    expect(seen).toEqual([null, { niches: ["fashion"] }]);
+    expect(saved).toMatchObject({ step: 4, answers: { niches: ["fashion"], audience: "1k_10k" }, existingWorkspace: false });
+  });
+
+  it("prisma: locks the row, merges from what is stored and writes inside the same transaction", async () => {
+    const { client, queryRaw, executeRaw, update } = fakeClient([[row({ niches: ["fashion"] })]]);
+
+    const saved = await createPrismaRepository(client).updateWorkspaceOnboarding("w1", (current) => ({
+      answers: { ...current?.answers, audience: "1k_10k" },
+      step: 5,
+    }));
+
+    expect(queryRaw).toHaveBeenCalledTimes(1);
+    const [lockStatement] = queryRaw.mock.calls[0] as unknown as [{ sql: string; values: unknown[] }];
+    expect(lockStatement.sql).toMatch(/FROM "WorkspaceOnboarding" WHERE "workspaceId" = \? FOR UPDATE/);
+    expect(lockStatement.values).toEqual(["w1"]);
+    expect(executeRaw).not.toHaveBeenCalled();
+    expect(update).toHaveBeenCalledWith({ where: { workspaceId: "w1" }, data: { answers: { niches: ["fashion"], audience: "1k_10k" }, step: 5 } });
+    expect(saved.answers).toEqual({ niches: ["fashion"], audience: "1k_10k" });
+  });
+
+  it("prisma: creates the row on the first save and treats it as new", async () => {
+    const { client, executeRaw, update } = fakeClient([[], [row({}, { step: 1 })]]);
+    const seen: unknown[] = [];
+
+    await createPrismaRepository(client).updateWorkspaceOnboarding("w1", (current) => {
+      seen.push(current);
+      return { answers: { niches: ["fashion"] } };
+    });
+
+    expect(executeRaw).toHaveBeenCalledTimes(1);
+    expect((executeRaw.mock.calls[0][0] as { sql: string }).sql).toMatch(/ON CONFLICT \("workspaceId"\) DO NOTHING/);
+    expect(seen).toEqual([null]);
+    expect(update).toHaveBeenCalledWith({ where: { workspaceId: "w1" }, data: { answers: { niches: ["fashion"] } } });
+  });
+
+  it("prisma: merges into the answers of a first save that won the race to create the row", async () => {
+    const { client } = fakeClient([[], [row({ niches: ["fashion"] })]], 0);
+    const seen: unknown[] = [];
+
+    await createPrismaRepository(client).updateWorkspaceOnboarding("w1", (current) => {
+      seen.push(current?.answers);
+      return { answers: { ...current?.answers, audience: "1k_10k" } };
+    });
+
+    expect(seen).toEqual([{ niches: ["fashion"] }]);
   });
 });

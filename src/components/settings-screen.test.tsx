@@ -798,3 +798,60 @@ describe("SettingsScreen layout", () => {
     expect(screen.queryByRole("region", { name: /Pending invitations/ })).toBeNull();
   });
 });
+
+describe("SettingsScreen Facebook Page picker failures", () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, "", "/settings");
+  });
+
+  const edge502 = () => ({ ok: false, status: 502, json: async () => { throw new SyntaxError("Unexpected token '<', \"<!DOCTYPE \"... is not valid JSON"); } }) as unknown as Response;
+  const ok = (body: unknown) => ({ ok: true, status: 200, json: async () => body }) as unknown as Response;
+
+  it("shows a readable message with Retry when the Page list fails, not a JSON error", async () => {
+    window.history.replaceState({}, "", "/settings?facebook=select-page");
+    const base = stubSettingsFetch(() => undefined).getMockImplementation()!;
+    let failing = true;
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).startsWith("/api/facebook/oauth/pages")) return failing ? edge502() : ok({ data: [{ id: "page_1", name: "Acme Co" }] });
+      return base(input, init);
+    }));
+    await act(async () => { render(<SettingsScreen />); });
+
+    const alert = await screen.findByText(/Could not load your Facebook Pages/);
+    expect(alert.textContent).not.toMatch(/JSON|token/);
+    failing = false;
+    fireEvent.click(within(alert).getByRole("button", { name: "Retry" }));
+    const picker = await screen.findByLabelText("Choose Facebook Page");
+    await vi.waitFor(() => expect(picker.textContent).toContain("Acme Co"));
+    expect(screen.queryByText(/Could not load your Facebook Pages/)).toBeNull();
+  });
+
+  it("does not report a connected Page as failed when the refresh after it fails", async () => {
+    window.history.replaceState({}, "", "/settings?facebook=select-page");
+    const base = stubSettingsFetch(() => undefined).getMockImplementation()!;
+    let connected = false;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.startsWith("/api/facebook/oauth/pages")) return ok({ data: [{ id: "page_1", name: "Acme Co" }] });
+      if (url.startsWith("/api/facebook/oauth/select")) {
+        connected = true;
+        return ok({ data: { pageId: "page_1" } });
+      }
+      // The Page is saved, but the refreshes after it hit an outage.
+      if (connected && url.startsWith("/api/facebook/connection")) return edge502();
+      return base(input, init);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    await act(async () => { render(<SettingsScreen />); });
+
+    const connect = await screen.findByRole("button", { name: "Connect selected Page" });
+    await vi.waitFor(() => expect((screen.getByLabelText("Choose Facebook Page") as HTMLSelectElement).value).toBe("page_1"));
+    await act(async () => { fireEvent.click(connect); });
+    await vi.waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url).startsWith("/api/facebook/connection/health"))).toBe(true));
+    await vi.waitFor(() => expect(screen.getByRole("button", { name: "Connect selected Page" }).hasAttribute("disabled")).toBe(false));
+    expect(screen.queryByText(/Could not connect/)).toBeNull();
+    expect(screen.queryByText(/Could not load/)).toBeNull();
+  });
+});

@@ -128,8 +128,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ data: broadcast, audience }, { status: 201 });
   }
 
-  const deliveries = await Promise.all(recipients.map((recipient) =>
-    repository.ensureOutboundDelivery({
+  // One batched insert and one read for up to 500 people; one statement per
+  // person fired about 500 at once and starved the shared database pool.
+  let deliveries;
+  try {
+    deliveries = await repository.ensureOutboundDeliveries(recipients.map((recipient) => ({
       deliveryKey: deliveryKeys.broadcastRecipient(
         broadcast.id,
         recipient.instagramAccountId,
@@ -139,9 +142,17 @@ export async function POST(request: Request) {
       broadcastId: broadcast.id,
       instagramAccountId: recipient.instagramAccountId,
       recipientId: recipient.igScopedUserId,
-      kind: "BROADCAST_RECIPIENT",
+      kind: "BROADCAST_RECIPIENT" as const,
       payload: { type: "text", text: input.text },
     })));
+  } catch (error) {
+    // Nothing is queued yet. Close the broadcast (and any delivery rows that
+    // were stored) so it never sits in the list as running, and give the
+    // month's broadcast back, as when the row itself could not be created.
+    await repository.cancelBroadcast(session.workspaceId, broadcast.id).catch(() => undefined);
+    await repository.releaseMonthlyBroadcast(session.workspaceId, periodStart).catch(() => undefined);
+    throw error;
+  }
 
   const messagingWindow = await repository.getMessagingWindow(session.workspaceId).catch(() => null);
   const now = new Date();

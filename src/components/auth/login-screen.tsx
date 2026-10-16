@@ -16,6 +16,13 @@ type LoginScreenProps = {
    * address; true asks for it.
    */
   resend?: string | true;
+  /**
+   * Served on the owner-console host. Account creation and password reset
+   * live on the app host, so their links become plain anchors to it: a
+   * next/link would fetch the page from this host, get redirected to the app
+   * host, and trip the console's CSP connect-src.
+   */
+  adminHost?: boolean;
 };
 
 function withContext(path: string, nextPath: string, invite?: string): string {
@@ -24,11 +31,12 @@ function withContext(path: string, nextPath: string, invite?: string): string {
   return `${path}?${params.toString()}`;
 }
 
-export function LoginScreen({ nextPath, invite, error, notice, resend }: LoginScreenProps) {
+export function LoginScreen({ nextPath, invite, error, notice, resend, adminHost = false }: LoginScreenProps) {
   // This screen is served from the app host, so the marketing chrome needs the
   // marketing origin or its links resolve against the app host and bounce back
   // here (app.linkar.in/ -> /dashboard -> /login).
-  const { publicSiteUrl } = getServerEnv();
+  const { publicSiteUrl, appUrl } = getServerEnv();
+  const appOrigin = appUrl.replace(/\/+$/, "");
   return (
     <div data-header-tone="light">
       <MarketingHeader siteOrigin={publicSiteUrl} />
@@ -72,12 +80,26 @@ export function LoginScreen({ nextPath, invite, error, notice, resend }: LoginSc
             <SubmitButton pendingLabel="Signing in...">Sign in</SubmitButton>
           </form>
 
-          <p className="auth-page-foot">
-            New here? <Link href={withContext("/signup", nextPath, invite)} prefetch={false}>Create an account</Link>
-          </p>
-          <p className="auth-page-foot">
-            <Link href="/forgot-password" prefetch={false}>Forgot your password?</Link>
-          </p>
+          {adminHost ? (
+            <>
+              {/* The owner console is not a sign-up destination, so a new account starts on the app's default page. */}
+              <p className="auth-page-foot">
+                New here? <a href={`${appOrigin}${withContext("/signup", "/dashboard", invite)}`}>Create an account</a>
+              </p>
+              <p className="auth-page-foot">
+                <a href={`${appOrigin}/forgot-password`}>Forgot your password?</a>
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="auth-page-foot">
+                New here? <Link href={withContext("/signup", nextPath, invite)} prefetch={false}>Create an account</Link>
+              </p>
+              <p className="auth-page-foot">
+                <Link href="/forgot-password" prefetch={false}>Forgot your password?</Link>
+              </p>
+            </>
+          )}
         </div>
       </main>
       <MarketingFooter siteOrigin={publicSiteUrl} />
