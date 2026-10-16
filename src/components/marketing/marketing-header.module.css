@@ -60,18 +60,16 @@
   border-radius: inherit;
   transition:
     background-color 600ms cubic-bezier(.165, .84, .44, 1),
-    backdrop-filter 600ms cubic-bezier(.165, .84, .44, 1),
-    -webkit-backdrop-filter 600ms cubic-bezier(.165, .84, .44, 1);
+    backdrop-filter 600ms cubic-bezier(.165, .84, .44, 1);
 }
 
 .header[data-surface="solid"] .frame::before {
   background: color-mix(in srgb, var(--marketing-raised, #ffffff) 92%, transparent);
 }
 
-@supports (backdrop-filter: blur(60px)) or (-webkit-backdrop-filter: blur(60px)) {
+@supports (backdrop-filter: blur(60px)) {
   .header[data-surface="solid"] .frame::before {
     background: color-mix(in srgb, var(--marketing-raised, #ffffff) 50%, transparent);
-    -webkit-backdrop-filter: blur(60px);
     backdrop-filter: blur(60px);
   }
 

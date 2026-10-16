@@ -65,7 +65,6 @@ section.section[data-tone="yellow"] { --cta-tone: #fff100; }
   box-shadow: inset 0 0 0 6px rgb(255 255 255 / 5%), 0 40px 90px rgb(16 17 22 / 26%);
   /* Frosted, so the grid softens behind the glass instead of striping the thread. */
   backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
   text-align: start;
   transform: rotate(-6deg);
   transform-origin: 50% 25%;
@@ -225,7 +224,6 @@ section.section[data-tone="yellow"] { --cta-tone: #fff100; }
   border-radius: 20px;
   box-shadow: 0 30px 70px rgb(16 17 22 / 18%);
   backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
   text-align: start;
 }
 .nodeHead { display: flex; align-items: center; gap: 8px; margin: 0; }
@@ -328,7 +326,6 @@ section.section[data-tone="yellow"] { --cta-tone: #fff100; }
   border-radius: 20px;
   box-shadow: 0 22px 50px rgb(16 17 22 / 22%), inset 0 1px 0 rgb(255 255 255 / 14%);
   backdrop-filter: blur(18px) saturate(140%);
-  -webkit-backdrop-filter: blur(18px) saturate(140%);
   text-align: start;
 }
 

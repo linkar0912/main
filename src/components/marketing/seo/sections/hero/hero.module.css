@@ -159,7 +159,6 @@
   background: rgb(16 17 22 / 70%);
   border-radius: 999px;
   backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
   font-size: .75rem;
   font-weight: 700;
   line-height: 1.2;
@@ -265,7 +264,6 @@
   border-radius: 999px;
   box-shadow: 0 10px 26px rgb(16 17 22 / 18%);
   backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
   font-family: var(--font-sans, ui-sans-serif, sans-serif);
   font-size: .8125rem;
   font-weight: 700;

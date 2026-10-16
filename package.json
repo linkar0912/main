@@ -10,6 +10,7 @@
   "scripts": {
     "clean": "node scripts/clean.mjs",
     "check:branding": "node scripts/check-branding.mjs",
+    "check:built-css": "node scripts/check-built-css.mjs",
     "check:copy": "node scripts/check-customer-copy.mjs",
     "check:css-budget": "node scripts/check-css-budget.mjs",
     "check:deployment-hygiene": "node scripts/check-deployment-hygiene.mjs",
@@ -22,7 +23,7 @@
     "backfill:webhook-event-actors": "node scripts/backfill-webhook-event-actors.mjs",
     "preview:synthetic-accounts": "tsx scripts/preview-synthetic-accounts.ts",
     "dev": "next dev",
-    "build": "prisma generate && next build && pnpm build:worker",
+    "build": "prisma generate && next build && pnpm check:built-css && pnpm build:worker",
     "build:worker": "esbuild src/worker.ts --bundle --platform=node --format=esm --target=node24 --outfile=dist/worker.js --alias:server-only=./scripts/server-only-worker-shim.mjs --external:@prisma/client --external:bullmq --external:ioredis --define:process.env.LINKAR_PROCESS_ROLE='\"worker\"'",
     "start": "next start",
     "lint": "eslint .",
