@@ -42,6 +42,8 @@ const SAFE_FACEBOOK_ACTIVITY_CODES = new Set([
   // Deliberate skips on a busy Page (see admitPublicReply), not failures.
   "public_reply_hourly_limit",
   "public_reply_tapered",
+  // Facebook blocked the Page from posting, and Linkar paused its replies.
+  "page_limited",
   "outside scheduled window",
   "replyOncePerUser is set and this sender already received a reply",
 ]);

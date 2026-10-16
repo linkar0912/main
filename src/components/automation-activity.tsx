@@ -116,6 +116,7 @@ const FACEBOOK_REASONS: Record<string, string> = {
   // Same words as publicReplySkipMessage in src/lib/automation/send-rate-limiter.ts.
   public_reply_hourly_limit: "Hourly limit for public replies reached. No more are posted this hour, to keep the account safe.",
   public_reply_tapered: "Busy hour. Fewer comments get a public reply as volume rises, to keep the account safe.",
+  page_limited: "Facebook has limited this Page, so Linkar paused its replies for a while.",
   "outside scheduled window": "Came in outside this automation's active hours.",
   "replyOncePerUser is set and this sender already received a reply": "Already replied to this person once.",
 };

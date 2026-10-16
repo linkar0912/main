@@ -305,6 +305,23 @@ describe("AutomationActivity", () => {
     expect(container.textContent).not.toMatch(/public_reply_|\u2014/);
   });
 
+  it("says plainly when Facebook has limited the Page, instead of a generic failure", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        channel: { provider: "FACEBOOK", surface: "COMMENT", connectionName: "Acme Page" },
+        data: [
+          { id: "e1", provider: "FACEBOOK", surface: "COMMENT", connectionName: "Acme Page", eventType: "comment.created", result: "SKIPPED", safeErrorCode: "page_limited", createdAt: "2026-09-01T01:00:00.000Z" },
+        ],
+      }),
+    }) as unknown as Response));
+    const { container } = render(<AutomationActivity automationId="automation_1" />);
+
+    expect(await screen.findByText("Facebook has limited this Page, so Linkar paused its replies for a while.")).toBeTruthy();
+    expect(container.textContent).not.toContain("The reply couldn't be posted.");
+    expect(container.textContent).not.toMatch(/page_limited|\u2014/);
+  });
+
   it("names the stage a participant is currently sitting at", async () => {
     // Five bare dots gave no clue which stage stalled; the caption says it.
     stubFetch([participant({ state: "FOLLOW_REQUIRED", followStatus: false })]);

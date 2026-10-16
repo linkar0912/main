@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { FacebookClient, FacebookApiError } from "./client";
+import { FacebookClient, FacebookApiError, facebookAccountSignal } from "./client";
 
 const ORIGINAL_FETCH = globalThis.fetch;
 
@@ -115,5 +115,59 @@ describe("FacebookClient", () => {
       retryable: true,
     });
     expect(fetcher.mock.calls[0]?.[1]?.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("keeps the Graph subcode and Meta's usage headers on a rejected call", async () => {
+    globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({
+      error: { message: "Calls to this api have exceeded the rate limit.", code: 4, error_subcode: 2446079 },
+    }), {
+      status: 400,
+      headers: {
+        "content-type": "application/json",
+        "x-app-usage": JSON.stringify({ call_count: 100, total_cputime: 12, total_time: 20 }),
+      },
+    })) as typeof fetch;
+    const client = new FacebookClient({ apiVersion: "v25.0", baseUrl: "https://graph.facebook.com" });
+
+    const error = await client.postCommentReply({ pageId: "p", accessToken: "t" }, "c", "m").catch((thrown: unknown) => thrown);
+
+    expect(error).toMatchObject({ graphCode: 4, subcode: 2446079, retryable: true, usage: { highestPercent: 100, regainAccessMs: 0 } });
+    expect(facebookAccountSignal(error)).toBe("rate_limited");
+  });
+
+  it("reads the Pages rate limit (code 80001) as retryable and as a request to slow down", async () => {
+    // Meta does not always mark it transient, so the code alone has to count.
+    globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({
+      error: { message: "(#80001) There have been too many calls to this Page account. Wait a bit and try again.", code: 80001, type: "OAuthException" },
+    }), { status: 400, headers: { "content-type": "application/json" } })) as typeof fetch;
+    const client = new FacebookClient({ apiVersion: "v25.0", baseUrl: "https://graph.facebook.com" });
+
+    const error = await client.postCommentReply({ pageId: "p", accessToken: "t" }, "c", "m").catch((thrown: unknown) => thrown);
+
+    expect(error).toMatchObject({ status: 400, graphCode: 80001, responseReceived: true, retryable: true });
+    expect(facebookAccountSignal(error)).toBe("rate_limited");
+  });
+});
+
+describe("facebookAccountSignal", () => {
+  it.each([
+    ["error 368", new FacebookApiError("(#368) The action attempted has been deemed abusive or is otherwise disallowed", 400, true, false, 368)],
+    ["#2022 as the subcode", new FacebookApiError("Temporary", 500, true, true, 2, 2022)],
+    ["#2022 only in the message, under a permission code", new FacebookApiError("(#2022) This Page has been blocked from sending", 403, true, false, 200)],
+  ])("reads %s as a block on the whole Page", (_label, error) => {
+    expect(facebookAccountSignal(error)).toBe("account_blocked");
+  });
+
+  it("reads Graph throttling codes and HTTP 429 as a request to slow down", () => {
+    for (const code of [4, 17, 32, 613, 80001]) {
+      expect(facebookAccountSignal(new FacebookApiError("Slow down", 400, true, true, code))).toBe("rate_limited");
+    }
+    expect(facebookAccountSignal(new FacebookApiError("Too many", 429, true))).toBe("rate_limited");
+  });
+
+  it("reads only Facebook's own answers, never a transport failure or another error", () => {
+    expect(facebookAccountSignal(new FacebookApiError("Facebook request timed out", 0, false))).toBeNull();
+    expect(facebookAccountSignal(new FacebookApiError("Invalid OAuth", 400, true, false, 190))).toBeNull();
+    expect(facebookAccountSignal(new Error("(#368) blocked from sending messages"))).toBeNull();
   });
 });

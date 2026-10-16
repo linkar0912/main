@@ -17,7 +17,13 @@ import type {
 import type { ParticipantPatch } from "../repository";
 import { unsealSecret } from "../security/secrets";
 import { releaseDailySendSlots, renderTemplate, reserveDailySendSlots } from "./send-limits";
-import { deliveryKeys, executeOutboundDelivery } from "./outbound-delivery";
+import { deliveryKeys, executeOutboundDelivery, providerAccountSignal } from "./outbound-delivery";
+import {
+  checkAccountSendGate,
+  pauseAccountAfterBlock,
+  recordAccountThrottle,
+  type SendPauseTarget,
+} from "./account-pause";
 import {
   admitPublicReply,
   checkSendRateLimit,
@@ -25,7 +31,8 @@ import {
   type SendRateLimitBucket,
 } from "./send-rate-limiter";
 import { MESSAGING_WINDOW_MS } from "../messaging-window";
-import { SendDeferredError } from "./send-deferral";
+import { ACCOUNT_RECOVERING_REASON } from "../meta/errors";
+import { findSendDeferral, SendDeferredError } from "./send-deferral";
 import type { DeliveryTimingObserver } from "./delivery-timing";
 
 const RECHECK_COOLDOWN_MS = 10_000;
@@ -42,6 +49,11 @@ const DEFAULT_DISPATCH_LEASE_MS = 30_000;
 const PRIVATE_REPLY_WINDOW_MS = 7 * 24 * 60 * 60 * 1_000;
 // Stored as the opening reply's reason, which owners read in Activity.
 const PRIVATE_REPLY_EXPIRED_ERROR = "Instagram only allows a private reply within 7 days of the comment";
+
+// Why a public reply held by the account gate was skipped. Owners read these
+// in Activity after the "Skipped" status, like publicReplySkipMessage.
+const PUBLIC_REPLY_THROTTLED_MESSAGE = "Instagram asked Linkar to slow down. Public replies are not posted late, to keep the account safe.";
+const PUBLIC_REPLY_RECOVERING_MESSAGE = "Linkar is sending slowly while this account recovers from an Instagram limit. Public replies are not posted late, to keep it safe.";
 
 const INTERACTION_EVENT_TYPES = new Set<NormalizedEvent["type"]>([
   "quick_reply.received",
@@ -729,17 +741,13 @@ async function guardedDelivery(
         // Distinct from the daily send limit above, which is a product
         // setting: this one exists to keep the connected account under Meta's own
         // throttling. A reserved slot is given back and the dispatch lease
-        // released so the participant is retried rather than spending its budget.
+        // released (in the catch below, as for every hold) so the participant
+        // is retried rather than spending its budget.
         const rateLimit = await checkSendRateLimit(
           ctx.connection.igUserId,
           actionRateLimitBucket(spec.action),
         );
         if (!rateLimit.allowed) {
-          await releaseSlots();
-          await releaseOwnedAction(participant, repository, spec.action, prepared.dispatchOwner);
-          if (spec.onRetryablePending) {
-            await repository.transitionParticipant(participant.id, spec.allowedStates, spec.onRetryablePending());
-          }
           throw new SendDeferredError("Send rate limit reached for this Instagram account", rateLimit.retryAfterMs);
         }
       }
@@ -837,6 +845,33 @@ async function guardedDelivery(
       return updated ?? currentParticipant(participant, repository);
     } catch (error) {
       await releaseSlots();
+      const deferral = findSendDeferral(error);
+      if (deferral) {
+        // A held send: the hourly ceiling above, or (from
+        // executeOutboundDelivery) a cool-down or the slow restart after Meta
+        // limited the account. Give the dispatch lease back first.
+        await releaseOwnedAction(participant, repository, spec.action, prepared.dispatchOwner);
+        if (spec.action === "public_reply") {
+          // Skipped, never deferred, like one over the public-reply budget
+          // above. A parked public reply could also stay pending forever:
+          // once its DM sibling ends the flow (failed, expired or link
+          // sent), processExistingCampaignParticipant returns before it.
+          const reason = deferral.message === ACCOUNT_RECOVERING_REASON
+            ? PUBLIC_REPLY_RECOVERING_MESSAGE
+            : PUBLIC_REPLY_THROTTLED_MESSAGE;
+          const skipped = await repository.transitionParticipant(
+            participant.id,
+            spec.allowedStates,
+            spec.onLimit?.(reason) ?? spec.onFailure(reason),
+          );
+          return skipped ?? currentParticipant(participant, repository);
+        }
+        // Mark the step pending before the job is parked, so the retry can
+        // claim it and send instead of finding it taken and dropping the DM.
+        if (spec.onRetryablePending) {
+          await repository.transitionParticipant(participant.id, spec.allowedStates, spec.onRetryablePending());
+        }
+      }
       throw error;
     }
   }
@@ -1074,6 +1109,25 @@ async function promptForFollow(
 
 const COOLDOWN_NOTICE_TEXT = "Give it a few more seconds, then tap the button below again.";
 
+/**
+ * For the one campaign send that does not go through executeOutboundDelivery,
+ * what that does with Meta's refusal of any other send: a block pauses the
+ * whole account (its plain reason is returned, to store on this send) and a
+ * throttle counts toward the account's cool-down. Null for any other refusal.
+ */
+async function recordAccountSignal(
+  repository: AutomationRepository,
+  target: SendPauseTarget,
+  error: unknown,
+): Promise<string | null> {
+  const signal = providerAccountSignal(error);
+  if (signal === "account_blocked") return (await pauseAccountAfterBlock(repository, target)).reason;
+  if (signal === "rate_limited") {
+    await recordAccountThrottle(target, { usage: error instanceof MetaApiError ? error.usage : null });
+  }
+  return null;
+}
+
 async function sendCooldownNotice(
   participant: AutomationParticipantRecord,
   definition: FlowDefinitionV2,
@@ -1090,6 +1144,7 @@ async function sendCooldownNotice(
   );
   if (prepared.kind !== "send") return;
 
+  const pauseTarget: SendPauseTarget = { channel: "instagram", accountId: participant.instagramAccountId };
   const reservation = await reserveDailySendSlots({
     repository: ctx.repository,
     automationId: participant.automationId,
@@ -1119,6 +1174,17 @@ async function sendCooldownNotice(
       throw new SendDeferredError("Send rate limit reached for this Instagram account", rateLimit.retryAfterMs);
     }
 
+    // The same account gate every other send passes in executeOutboundDelivery,
+    // checked after the hourly ceiling as guardedDelivery does, so a notice the
+    // ceiling holds never takes a slot of the slow restart's share. This notice
+    // only means something right now, so while Meta has the account paused,
+    // cooling down or restarting slowly it is skipped, not held.
+    if ((await checkAccountSendGate(pauseTarget)).status !== "open") {
+      await releaseSlots();
+      await releaseOwnedAction(participant, ctx.repository, action, prepared.dispatchOwner);
+      return;
+    }
+
     const providerStartedAt = performance.now();
     ctx.timingObserver?.providerStarted();
     try {
@@ -1142,9 +1208,10 @@ async function sendCooldownNotice(
       if (!response.message_id) throw new Error("Meta accepted the cooldown notice without a delivery identifier");
       slotsReleased = true;
       await completeOwnedAction(participant, ctx.repository, action, prepared.dispatchOwner, "SENT", response.message_id);
-    } catch {
+    } catch (error) {
       await releaseSlots();
-      await completeOwnedAction(participant, ctx.repository, action, prepared.dispatchOwner, "FAILED", undefined, "Meta cooldown notice failed");
+      const reason = await recordAccountSignal(ctx.repository, pauseTarget, error) ?? "Meta cooldown notice failed";
+      await completeOwnedAction(participant, ctx.repository, action, prepared.dispatchOwner, "FAILED", undefined, reason);
     } finally {
       ctx.timingObserver?.providerFinished(performance.now() - providerStartedAt);
     }

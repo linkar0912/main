@@ -52,7 +52,7 @@ import {
   IG_USERNAME,
   person,
   postbackPayload,
-  postInstagramWebhook,
+  queuedJobs,
   resetWorld,
   seedWorkspace,
   setMonthlyDeliveryLimit,
@@ -282,7 +282,8 @@ describe("comment-to-link campaign when Meta limits the account", () => {
   const BLOCKED = "(#2022) The business has been blocked from sending messages via the IG Messaging API";
 
   beforeEach(() => {
-    // Pauses live in this process's memory here (the fake Redis has no key commands).
+    // Pauses live in the fake Redis (cleared by resetWorld) and in this
+    // process's memory, which is cleared here.
     resetAccountPauseStateForTests();
   });
 
@@ -298,54 +299,67 @@ describe("comment-to-link campaign when Meta limits the account", () => {
 
   const privateReplies = () => fakeMeta.calls.filter((call) => call.kind === "private_reply");
 
-  it("keeps answering comments through the slow restart after a block, instead of failing them", async () => {
+  it("holds comments past the slow restart's hourly share for a later hour, instead of failing them", async () => {
     // 25% of a 4-an-hour DM ceiling: one automatic send an hour while recovering.
     envOverrides.directMessageRateLimitPerHour = 4;
     const automation = await addAutomation(repository, "Launch", campaign({ publicReplies: [] }));
     fakeMeta.fail((call) => call.kind === "private_reply", { status: 400, error: { message: BLOCKED, code: 10 } });
-    const start = Date.now();
-    await withClock(start, () => deliverInstagram(commentPayload({ from: person(), text: "link", mediaId: MEDIA.id })));
+    // Five minutes past an hour, so every later step is clear of an hour's
+    // edge and of the up-to-a-minute jitter on a parked job.
+    const start = Math.ceil(Date.now() / HOUR) * HOUR + 5 * 60_000;
+    const comment = () => commentPayload({ from: person(), text: "link", mediaId: MEDIA.id });
+    await withClock(start, () => deliverInstagram(comment()));
     expect(privateReplies()).toHaveLength(1);
 
-    // During the pause new comments stop at Linkar instead of reaching Meta.
-    await withClock(start + HOUR, () => deliverInstagram(commentPayload({ from: person(), text: "link", mediaId: MEDIA.id })));
+    // During the pause new comments stop at Linkar instead of reaching Meta,
+    // even in a process that never saw Meta's error: the pause is in Redis.
+    resetAccountPauseStateForTests();
+    await withClock(start + HOUR, () => deliverInstagram(comment()));
     expect(privateReplies()).toHaveLength(1);
 
-    // While recovering, more comments than the hour's share all get their DM,
-    // hour after hour, and none fails once its job retries would have run out.
-    for (const hour of [0, 1, 23]) {
-      const at = start + 24 * HOUR + 60_000 + hour * HOUR;
-      for (let index = 0; index < 3; index += 1) {
-        const report = await withClock(at, () => deliverInstagram(commentPayload({ from: person(), text: "link", mediaId: MEDIA.id })));
-        expect(report.failed).toHaveLength(0);
-      }
+    // Recovering: of three comments in the first hour one DM goes out, and
+    // the other two jobs are parked without spending a retry.
+    const recovery = start + 24 * HOUR + 60_000;
+    const failed: unknown[] = [];
+    for (let index = 0; index < 3; index += 1) {
+      failed.push(...(await withClock(recovery, () => deliverInstagram(comment()))).failed);
     }
-    expect(privateReplies()).toHaveLength(10);
+    expect(privateReplies()).toHaveLength(2);
+    const parked = queuedJobs("instagram-event").filter((job) => job.state === "delayed");
+    expect(parked).toHaveLength(2);
+    expect(parked.every((job) => job.attemptsMade === 0)).toBe(true);
+
+    // Each later hour sends one more of them.
+    for (const hour of [1, 2]) {
+      failed.push(...(await withClock(recovery + hour * HOUR, () => drain())).failed);
+      expect(privateReplies()).toHaveLength(2 + hour);
+    }
+    expect(failed).toHaveLength(0);
     const participants = await repository.listParticipants(WORKSPACE_ID, automation.id, 20);
-    expect(participants.filter((participant) => participant.openingStatus === "SENT")).toHaveLength(9);
+    expect(participants.filter((participant) => participant.openingStatus === "SENT")).toHaveLength(3);
+    // Only the comment Meta refused and the one held during the pause failed.
     expect(participants.filter((participant) => participant.state === "FAILED")).toHaveLength(2);
   });
 
-  it("holds a comment's DM through a short throttle pause and sends it once, after the pause", async () => {
+  it("parks a comment's DM through a short throttle pause, without spending a retry, and sends it once after", async () => {
     const automation = await addAutomation(repository, "Launch", campaign({ publicReplies: [] }));
     const start = Date.now();
     // Three throttles close together pause the whole account for 15 minutes.
     for (let index = 0; index < 3; index += 1) {
       await recordAccountThrottle({ channel: "instagram", accountId: IG_ACCOUNT }, { now: start });
     }
-    await withClock(start, () => postInstagramWebhook(commentPayload({ from: person(), text: "link", mediaId: MEDIA.id })));
 
-    // Run the job, then each retry after the shortest wait BullMQ's jittered
-    // backoff could pick (half of 1, 2, 4, 8 and 16 minutes).
-    let at = start;
-    const runs: string[] = [];
-    for (const wait of [0, 30_000, 60_000, 120_000, 240_000, 480_000]) {
-      at += wait;
-      const report = await withClock(at, () => drain({ maxRuns: 1 }));
-      runs.push(report.completed.length ? "completed" : report.failed.length ? "failed" : "retrying");
-      if (at < start + 15 * 60_000) expect(privateReplies()).toHaveLength(0);
-    }
-    expect(runs).toEqual(["retrying", "retrying", "retrying", "retrying", "retrying", "completed"]);
+    const report = await withClock(start, () => deliverInstagram(commentPayload({ from: person(), text: "link", mediaId: MEDIA.id })));
+
+    expect(report.deferred).toHaveLength(1);
+    const [job] = queuedJobs("instagram-event");
+    expect(job).toMatchObject({ state: "delayed", attemptsMade: 0 });
+    expect(job!.processAt).toBeGreaterThanOrEqual(start + 15 * 60_000);
+    expect(privateReplies()).toHaveLength(0);
+    expect(await participantFor(automation)).toMatchObject({ state: "COMMENT_MATCHED", openingStatus: "PENDING" });
+
+    const after = await withClock(start + 16 * 60_000 + 1_000, () => drain());
+    expect(after.completed).toHaveLength(1);
     expect(privateReplies()).toHaveLength(1);
     expect(await participantFor(automation)).toMatchObject({ state: "OPENING_SENT", openingStatus: "SENT" });
   });

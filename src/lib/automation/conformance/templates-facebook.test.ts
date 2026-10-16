@@ -48,6 +48,7 @@ import {
   commentPayload,
   deliverFacebook,
   deliverInstagram,
+  drain,
   facebookCommentPayload,
   IG_ACCOUNT,
   messagePayload,
@@ -68,6 +69,8 @@ import type { AutomationRepository } from "../../repository";
 import type { FlowDefinitionV1, FlowDefinitionV2 } from "../types";
 import { basicAutomationTemplates, type PremadeTemplate } from "../templates";
 import { checkDefinitionForTarget } from "../activation-readiness";
+import { resetAccountPauseStateForTests } from "../account-pause";
+import { deriveAttentionItems } from "../../home-attention";
 
 let repository: AutomationRepository;
 
@@ -251,5 +254,92 @@ describe("Facebook Page comments -> public Page reply", () => {
     await deliverFacebook(facebookCommentPayload({ from: "fb_user_3", text: "price" }));
     const [execution] = await repository.listAutomationExecutions(WORKSPACE_ID, automation.id, 5);
     expect(execution).toMatchObject({ status: "FAILED", reason: "permission_missing" });
+  });
+});
+
+describe("Facebook Page replies when Meta limits the Page", () => {
+  const pageFlow: FlowDefinitionV1 = {
+    version: 1,
+    trigger: { type: "comment", match: "keyword", keywords: ["price"], mediaIds: [] },
+    conditions: [],
+    actions: [{ type: "private_reply", text: "Thanks {username}! Details are in our bio." }],
+  };
+  const onPage = { provider: "FACEBOOK" as const, instagramAccountId: undefined, facebookPageId: PAGE_ID };
+
+  beforeEach(() => {
+    // Pauses live in the fake Redis (cleared by resetWorld) and in this
+    // process's memory, which is cleared here.
+    resetAccountPauseStateForTests();
+  });
+
+  async function withClock<T>(at: number, run: () => Promise<T>): Promise<T> {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(at);
+      return await run();
+    } finally {
+      vi.useRealTimers();
+    }
+  }
+
+  it("pauses the Page when Facebook blocks a reply, skips later comments, and Home says until when", async () => {
+    const automation = await addAutomation(repository, "Page reply", pageFlow, onPage);
+    fakeMeta.fail((call) => call.kind === "facebook_comment_reply", {
+      status: 400,
+      error: { message: "(#368) The action attempted has been deemed abusive or is otherwise disallowed", code: 368 },
+    });
+
+    const first = await deliverFacebook(facebookCommentPayload({ from: "fb_user_4", text: "price" }));
+    // Not retried: the job finishes on Facebook's first refusal.
+    expect(first.failed).toHaveLength(0);
+    expect(queuedJobs("facebook-event")[0]).toMatchObject({ state: "completed", attemptsMade: 0 });
+    expect(fakeMeta.sends()).toHaveLength(1);
+
+    // The next comment stops at the pause, even in a process that never saw
+    // Facebook's answer: the pause is shared through Redis.
+    resetAccountPauseStateForTests();
+    await deliverFacebook(facebookCommentPayload({ from: "fb_user_5", text: "price" }));
+    expect(fakeMeta.sends()).toHaveLength(1);
+    const executions = await repository.listAutomationExecutions(WORKSPACE_ID, automation.id, 5);
+    expect(executions.map((execution) => `${execution.status}:${execution.reason}`).sort())
+      .toEqual(["FAILED:page_limited", "SKIPPED:page_limited"]);
+
+    const { GET: failuresGet } = await import("@/app/api/insights/failures/route");
+    const failures = (await (await failuresGet(new Request("https://app.linkar.test/api/insights/failures"))).json()).data;
+    const items = deriveAttentionItems({
+      connections: [{ kind: "facebook", name: "Studio Kavya", status: "CONNECTED" }],
+      automations: [{ id: automation.id, name: automation.name, status: "ACTIVE" }],
+      automationsKnown: true,
+      failures,
+      usage: null,
+    });
+    expect(items).toEqual([expect.objectContaining({
+      key: "account-paused",
+      chip: "Limited",
+      text: expect.stringMatching(/^Facebook has limited one of your Pages\. Linkar paused its automatic replies until .+\.$/),
+    })]);
+  });
+
+  it("parks the reply once repeated throttles pause the Page, then posts it once after the cool-down", async () => {
+    await addAutomation(repository, "Page reply", pageFlow, onPage);
+    fakeMeta.fail((call) => call.kind === "facebook_comment_reply", {
+      status: 400,
+      error: { message: "Calls to this api have exceeded the rate limit.", code: 4 },
+      times: 3,
+    });
+    const start = Date.now();
+
+    // Three throttled attempts (the harness runs retries straight away) pause
+    // the Page, and the fourth attempt is parked instead of calling Facebook.
+    const report = await withClock(start, () => deliverFacebook(facebookCommentPayload({ from: "fb_user_6", text: "price" })));
+    expect(fakeMeta.sends()).toHaveLength(3);
+    expect(report.deferred).toHaveLength(1);
+    const [job] = queuedJobs("facebook-event");
+    expect(job).toMatchObject({ state: "delayed", attemptsMade: 3 });
+    expect(job!.processAt).toBeGreaterThanOrEqual(start + 15 * 60_000);
+
+    const after = await withClock(start + 16 * 60_000 + 1_000, () => drain());
+    expect(after.completed).toHaveLength(1);
+    expect(fakeMeta.sends()).toHaveLength(4);
   });
 });

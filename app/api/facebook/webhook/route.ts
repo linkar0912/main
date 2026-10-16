@@ -8,6 +8,7 @@ import {
   RetryableFacebookError,
   isRetryableFacebookError,
 } from "@/src/lib/facebook/runner";
+import { findSendDeferral } from "@/src/lib/automation/send-deferral";
 import { enqueueFacebookEvents } from "@/src/lib/queue";
 import { getRepository } from "@/src/lib/repository-provider";
 import { verifyWebhookSignature } from "@/src/lib/security/signature";
@@ -91,7 +92,10 @@ export async function POST(request: Request) {
           pageId: event.pageId,
           error: error instanceof Error ? error.message : String(error),
         });
-        if (isRetryableFacebookError(error)) retryableFailure = true;
+        // A reply held while the Page cools down or restarts slowly after a
+        // limit (a SendDeferredError) has nothing claimed or recorded, so it
+        // is only sent if Meta delivers the event again: answer as retryable.
+        if (isRetryableFacebookError(error) || findSendDeferral(error)) retryableFailure = true;
       }
     }
   }

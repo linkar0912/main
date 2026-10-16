@@ -24,6 +24,27 @@ import {
   publicReplySkipMessage,
   resetSendRateLimitFallback,
 } from "./send-rate-limiter";
+import {
+  checkAccountSendGate,
+  recordAccountBlock,
+  recordAccountThrottle,
+  resetAccountPauseStateForTests,
+  type SendPauseTarget,
+} from "./account-pause";
+import { findSendDeferral } from "./send-deferral";
+import {
+  ACCOUNT_RECOVERING_REASON,
+  ACCOUNT_THROTTLED_REASON,
+  META_ERROR_REASONS,
+  parseAccountPauseReason,
+} from "../meta/errors";
+
+// The real hourly ceiling, wrapped so a test can make it hold one send
+// (without Redis it never holds a realtime DM on its own).
+vi.mock("./send-rate-limiter", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./send-rate-limiter")>();
+  return { ...actual, checkSendRateLimit: vi.fn(actual.checkSendRateLimit) };
+});
 
 const NOW = Date.parse("2026-08-21T10:00:00.000Z");
 const TOKEN_KEY = randomBytes(32).toString("hex");
@@ -1711,5 +1732,293 @@ describe("campaign send safety", () => {
     expect(client.sendPrivateReply).not.toHaveBeenCalled();
     expect(result).toMatchObject({ skipped: 1 });
     expect(await readParticipant(repository)).toMatchObject({ state: "EXPIRED", openingStatus: "SKIPPED" });
+  });
+});
+
+describe("campaign sends while Meta limits the account", () => {
+  const HOUR = 60 * 60_000;
+  const ACCOUNT: SendPauseTarget = { channel: "instagram", accountId: commentEvent.accountId };
+  // The plain reasons Activity shows after "Skipped" for a held public reply.
+  const PUBLIC_REPLY_THROTTLED = "Instagram asked Linkar to slow down. Public replies are not posted late, to keep the account safe.";
+  const PUBLIC_REPLY_RECOVERING = "Linkar is sending slowly while this account recovers from an Instagram limit. Public replies are not posted late, to keep it safe.";
+  const PAUSE_ENV_KEYS = ["REDIS_URL", "DIRECT_MESSAGE_RATE_LIMIT_PER_HOUR"] as const;
+  const savedEnv = Object.fromEntries(PAUSE_ENV_KEYS.map((key) => [key, process.env[key]]));
+  // No public reply, so the opening DM is the comment's only send.
+  const dmOnlyAutomation: AutomationRecord = {
+    ...automation,
+    id: "automation_campaign_dm_only",
+    definition: { ...definition, publicReplies: [] },
+  };
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    // No Redis: account pauses live in this process's memory.
+    for (const key of PAUSE_ENV_KEYS) delete process.env[key];
+    resetAccountPauseStateForTests();
+    resetSendRateLimitFallback();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    resetAccountPauseStateForTests();
+    for (const key of PAUSE_ENV_KEYS) {
+      if (savedEnv[key] === undefined) delete process.env[key];
+      else process.env[key] = savedEnv[key];
+    }
+  });
+
+  async function harnessFor(record: AutomationRecord) {
+    const repository = createMemoryRepository([record]);
+    await repository.upsertConnection({
+      workspaceId: record.workspaceId,
+      igUserId: commentEvent.accountId,
+      username: "creator",
+      accessTokenEncrypted: sealSecret("access-token", TOKEN_KEY),
+      status: "CONNECTED",
+    });
+    const mapping = await repository.findWorkspaceByInstagramAccount(commentEvent.accountId);
+    if (!mapping) throw new Error("test connection mapping was not created");
+    const client = createClient();
+    const options: CampaignRunnerOptions = { client, tokenEncryptionKey: TOKEN_KEY, interactionSecret: INTERACTION_SECRET };
+    return { client, repository, mapping, options };
+  }
+
+  /** Opts a non-follower in, then taps "I've followed" again too soon, which asks for the wait notice. */
+  async function tooSoonRecheck(harness: Awaited<ReturnType<typeof openParticipant>>): Promise<NormalizedEvent> {
+    vi.mocked(harness.client.getUserFollowStatus).mockResolvedValue({ isUserFollowingBusiness: false });
+    const optInEvent = interactionEvent(harness.optInPayload, NOW + 1_000);
+    vi.setSystemTime(optInEvent.timestamp);
+    await processPendingCampaignInteraction(optInEvent, harness.mapping, harness.repository, harness.options);
+    expect(harness.client.sendDirectMessage).toHaveBeenCalledTimes(1);
+    return interactionEvent(directPostbackPayload(harness.client), optInEvent.timestamp + 5_000, { id: "recheck_too_soon" });
+  }
+
+  async function noticeExecution(harness: Awaited<ReturnType<typeof openParticipant>>, event: NormalizedEvent) {
+    const participant = await readParticipant(harness.repository);
+    return harness.repository.getExecution(automation.workspaceId, `campaign:${participant.id}:cooldown_notice:${event.id}`);
+  }
+
+  it("holds a comment's DM through a throttle pause and sends it once after, but skips its public reply", async () => {
+    const { client, repository, mapping, options } = await createHarness();
+    // Three throttles close together pause the whole account for 15 minutes.
+    for (let index = 0; index < 3; index += 1) await recordAccountThrottle(ACCOUNT, { now: NOW });
+
+    const held = await processCampaignEvent(commentEvent, automation, mapping, repository, options)
+      .catch((thrown: unknown) => thrown);
+
+    const deferral = findSendDeferral(held);
+    expect(deferral?.message).toBe(ACCOUNT_THROTTLED_REASON);
+    expect(deferral!.delayMs).toBeGreaterThanOrEqual(15 * 60_000);
+    expect(client.sendPrivateReply).not.toHaveBeenCalled();
+    expect(client.replyToComment).not.toHaveBeenCalled();
+    const participant = await readParticipant(repository);
+    // Public replies are skipped, never posted late (see admitPublicReply).
+    expect(participant).toMatchObject({
+      state: "COMMENT_MATCHED",
+      openingStatus: "PENDING",
+      publicReplyStatus: "SKIPPED",
+      publicReplyError: PUBLIC_REPLY_THROTTLED,
+    });
+    // The dispatch claims were given back, so the parked job's retry can take the DM's.
+    for (const action of ["opening_reply", "public_reply"]) {
+      expect(await repository.getExecution(automation.workspaceId, `campaign:${participant.id}:${action}`)).toBeNull();
+    }
+
+    vi.setSystemTime(NOW + 16 * 60_000);
+    const retried = await processCampaignEvent(commentEvent, automation, mapping, repository, options);
+
+    expect(retried).toMatchObject({ handled: true, sent: 1 });
+    expect(client.sendPrivateReply).toHaveBeenCalledTimes(1);
+    expect(client.replyToComment).not.toHaveBeenCalled();
+    expect(await readParticipant(repository)).toMatchObject({
+      state: "OPENING_SENT",
+      openingStatus: "SENT",
+      publicReplyStatus: "SKIPPED",
+    });
+  });
+
+  it("skips a public reply Meta throttles, so it never waits on a DM that has already failed for good", async () => {
+    const { client, repository, mapping, options } = await createHarness(createClient({
+      replyToComment: vi.fn().mockRejectedValue(new MetaApiError("Application request limit reached", 400, true, true, 4)),
+      sendPrivateReply: vi.fn().mockRejectedValue(new MetaApiError("Permission missing", 400, true, false, 10)),
+    }));
+
+    // Not parked: the DM's failure is final, and nothing is left to retry.
+    const result = await processCampaignEvent(commentEvent, automation, mapping, repository, options);
+
+    expect(result).toMatchObject({ handled: true, failed: 1 });
+    expect(await readParticipant(repository)).toMatchObject({
+      state: "FAILED",
+      openingStatus: "FAILED",
+      publicReplyStatus: "SKIPPED",
+      publicReplyError: PUBLIC_REPLY_THROTTLED,
+    });
+
+    // A later delivery of the same comment posts nothing either.
+    vi.setSystemTime(NOW + 16 * 60_000);
+    await processCampaignEvent(commentEvent, automation, mapping, repository, options);
+    expect(client.replyToComment).toHaveBeenCalledTimes(1);
+  });
+
+  it("never leaves a public reply pending when it loses the slow restart's share to its DM", async () => {
+    // 25% of a 4-an-hour DM ceiling: one automatic send an hour while recovering,
+    // which the public reply and the DM compete for.
+    process.env.DIRECT_MESSAGE_RATE_LIMIT_PER_HOUR = "4";
+    await recordAccountBlock(ACCOUNT, { now: NOW - 24 * HOUR - 60_000 });
+    const { client, repository, mapping, options } = await createHarness(createClient({
+      sendPrivateReply: vi.fn().mockRejectedValue(new MetaApiError("Permission missing", 400, true, false, 10)),
+    }));
+
+    await processCampaignEvent(commentEvent, automation, mapping, repository, options).catch(() => undefined);
+    vi.setSystemTime(NOW + HOUR + 1_000);
+    await processCampaignEvent(commentEvent, automation, mapping, repository, options).catch(() => undefined);
+
+    // Whichever send won the slot, the public reply ends posted or skipped,
+    // and posted at most once.
+    const participant = await readParticipant(repository);
+    expect(participant.state).toBe("FAILED");
+    expect(["SENT", "SKIPPED"]).toContain(participant.publicReplyStatus);
+    if (participant.publicReplyStatus === "SKIPPED") expect(participant.publicReplyError).toBe(PUBLIC_REPLY_RECOVERING);
+    expect(vi.mocked(client.replyToComment).mock.calls.length).toBeLessThanOrEqual(1);
+  });
+
+  it("skips a public reply over the slow restart's share instead of parking it, and parks the DM", async () => {
+    process.env.DIRECT_MESSAGE_RATE_LIMIT_PER_HOUR = "4";
+    await recordAccountBlock(ACCOUNT, { now: NOW - 24 * HOUR - 60_000 });
+    // Another send already took this hour's one slot.
+    await expect(checkAccountSendGate(ACCOUNT)).resolves.toEqual({ status: "open" });
+    const { client, repository, mapping, options } = await createHarness();
+
+    const held = await processCampaignEvent(commentEvent, automation, mapping, repository, options)
+      .catch((thrown: unknown) => thrown);
+
+    expect(findSendDeferral(held)?.message).toBe(ACCOUNT_RECOVERING_REASON);
+    expect(client.replyToComment).not.toHaveBeenCalled();
+    expect(await readParticipant(repository)).toMatchObject({
+      openingStatus: "PENDING",
+      publicReplyStatus: "SKIPPED",
+      publicReplyError: PUBLIC_REPLY_RECOVERING,
+    });
+
+    vi.setSystemTime(NOW + HOUR + 1_000);
+    await expect(processCampaignEvent(commentEvent, automation, mapping, repository, options))
+      .resolves.toMatchObject({ handled: true, sent: 1 });
+    expect(client.sendPrivateReply).toHaveBeenCalledTimes(1);
+    expect(client.replyToComment).not.toHaveBeenCalled();
+  });
+
+  it("waits a minute after Meta throttles a comment's DM, then sends it once", async () => {
+    const { client, repository, mapping, options } = await harnessFor(dmOnlyAutomation);
+    vi.mocked(client.sendPrivateReply).mockRejectedValueOnce(
+      new MetaApiError("Application request limit reached", 400, true, true, 4),
+    );
+
+    const held = await processCampaignEvent(commentEvent, dmOnlyAutomation, mapping, repository, options)
+      .catch((thrown: unknown) => thrown);
+
+    const deferral = findSendDeferral(held);
+    expect(deferral?.message).toBe(ACCOUNT_THROTTLED_REASON);
+    expect(deferral!.delayMs).toBeGreaterThanOrEqual(60_000);
+    const [waiting] = await repository.listParticipants(dmOnlyAutomation.workspaceId, dmOnlyAutomation.id, 1);
+    expect(waiting).toMatchObject({ state: "COMMENT_MATCHED", openingStatus: "PENDING" });
+
+    vi.setSystemTime(NOW + 2 * 60_000 + 1_000);
+    const retried = await processCampaignEvent(commentEvent, dmOnlyAutomation, mapping, repository, options);
+
+    expect(retried).toMatchObject({ handled: true, sent: 1 });
+    expect(client.sendPrivateReply).toHaveBeenCalledTimes(2);
+    const [sent] = await repository.listParticipants(dmOnlyAutomation.workspaceId, dmOnlyAutomation.id, 1);
+    expect(sent).toMatchObject({ state: "OPENING_SENT", openingStatus: "SENT" });
+  });
+
+  it("holds a DM over the slow-restart share for a later hour, even on the job's last attempt", async () => {
+    // 25% of a 4-an-hour DM ceiling: one automatic send an hour while recovering.
+    process.env.DIRECT_MESSAGE_RATE_LIMIT_PER_HOUR = "4";
+    // A block whose 24-hour pause ended a minute ago.
+    await recordAccountBlock(ACCOUNT, { now: NOW - 24 * HOUR - 60_000 });
+    const { client, repository, mapping, options } = await harnessFor(dmOnlyAutomation);
+    const lastAttempt: CampaignRunnerOptions = { ...options, finalAttempt: true };
+    const second: NormalizedEvent = { ...commentEvent, id: "comment_2", commentId: "comment_2", recipientId: "commenter_2" };
+
+    const first = await processCampaignEvent(commentEvent, dmOnlyAutomation, mapping, repository, lastAttempt);
+    const held = await processCampaignEvent(second, dmOnlyAutomation, mapping, repository, lastAttempt)
+      .catch((thrown: unknown) => thrown);
+
+    expect(first).toMatchObject({ handled: true, sent: 1 });
+    const deferral = findSendDeferral(held);
+    expect(deferral?.message).toBe(ACCOUNT_RECOVERING_REASON);
+    // Until the next hour starts (NOW is on the hour), plus up to a minute of jitter.
+    expect(deferral!.delayMs).toBeGreaterThanOrEqual(HOUR);
+    expect(client.sendPrivateReply).toHaveBeenCalledTimes(1);
+    expect(await repository.findParticipantBySource(automation.workspaceId, commentEvent.accountId, "comment_2"))
+      .toMatchObject({ state: "COMMENT_MATCHED", openingStatus: "PENDING" });
+
+    vi.setSystemTime(NOW + HOUR + 1_000);
+    const retried = await processCampaignEvent(second, dmOnlyAutomation, mapping, repository, lastAttempt);
+
+    expect(retried).toMatchObject({ handled: true, sent: 1 });
+    expect(client.sendPrivateReply).toHaveBeenCalledTimes(2);
+  });
+
+  it("skips the follow-gate wait notice while the account is cooling down, without calling Meta", async () => {
+    const harness = await openParticipant();
+    const tooSoon = await tooSoonRecheck(harness);
+    for (let index = 0; index < 3; index += 1) await recordAccountThrottle(ACCOUNT);
+
+    await processPendingCampaignInteraction(tooSoon, harness.mapping, harness.repository, harness.options);
+
+    // Only the earlier follow prompt reached Meta.
+    expect(harness.client.sendDirectMessage).toHaveBeenCalledTimes(1);
+    expect(await noticeExecution(harness, tooSoon)).toBeNull();
+  });
+
+  it("lets the hourly ceiling hold the wait notice before it takes a slot of the slow restart's share", async () => {
+    const harness = await openParticipant();
+    const tooSoon = await tooSoonRecheck(harness);
+    // 25% of a 4-an-hour DM ceiling: one automatic send an hour while recovering.
+    process.env.DIRECT_MESSAGE_RATE_LIMIT_PER_HOUR = "4";
+    await recordAccountBlock(ACCOUNT, { now: Date.now() - 24 * HOUR - 60_000 });
+    vi.mocked(checkSendRateLimit).mockResolvedValueOnce({ allowed: false, retryAfterMs: 30 * 60_000 });
+
+    const held = await processPendingCampaignInteraction(tooSoon, harness.mapping, harness.repository, harness.options)
+      .catch((thrown: unknown) => thrown);
+
+    expect(findSendDeferral(held)?.message).toBe("Send rate limit reached for this Instagram account");
+    expect(harness.client.sendDirectMessage).toHaveBeenCalledTimes(1);
+    // The hour's one slot is still there for the next send.
+    await expect(checkAccountSendGate(ACCOUNT)).resolves.toEqual({ status: "open" });
+  });
+
+  it("pauses the account when Meta refuses the wait notice with a block", async () => {
+    const harness = await openParticipant();
+    const tooSoon = await tooSoonRecheck(harness);
+    vi.mocked(harness.client.sendDirectMessage).mockRejectedValueOnce(
+      new MetaApiError(META_ERROR_REASONS.accountBlocked, 400, true, false, 368),
+    );
+
+    await processPendingCampaignInteraction(tooSoon, harness.mapping, harness.repository, harness.options);
+
+    expect(harness.client.sendDirectMessage).toHaveBeenCalledTimes(2);
+    await expect(checkAccountSendGate(ACCOUNT)).resolves.toMatchObject({ status: "blocked" });
+    const notice = await noticeExecution(harness, tooSoon);
+    expect(notice).toMatchObject({ status: "FAILED" });
+    expect(parseAccountPauseReason(notice?.reason)).toEqual({ platform: "Instagram", durationMs: 24 * HOUR });
+  });
+
+  it("counts a throttled wait notice toward the account's cool-down", async () => {
+    const harness = await openParticipant();
+    const tooSoon = await tooSoonRecheck(harness);
+    // Two throttles already; the notice's makes the third.
+    for (let index = 0; index < 2; index += 1) await recordAccountThrottle(ACCOUNT);
+    await expect(checkAccountSendGate(ACCOUNT)).resolves.toEqual({ status: "open" });
+    vi.mocked(harness.client.sendDirectMessage).mockRejectedValueOnce(
+      new MetaApiError("Application request limit reached", 400, true, true, 4),
+    );
+
+    await processPendingCampaignInteraction(tooSoon, harness.mapping, harness.repository, harness.options);
+
+    await expect(checkAccountSendGate(ACCOUNT)).resolves.toMatchObject({ status: "throttled" });
+    expect(await noticeExecution(harness, tooSoon)).toMatchObject({ status: "FAILED", reason: "Meta cooldown notice failed" });
   });
 });

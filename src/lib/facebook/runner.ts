@@ -1,6 +1,6 @@
 import type { FacebookNormalizedEvent } from "./types";
 import { createHash } from "node:crypto";
-import { FacebookClient, FacebookApiError } from "./client";
+import { FacebookClient, FacebookApiError, facebookAccountSignal } from "./client";
 import { unsealSecret } from "../security/secrets";
 import { logger } from "../logger";
 import { createId } from "../id";
@@ -17,6 +17,13 @@ import { findMatchedKeyword, matchesTrigger, resolveReplyForMedia } from "../aut
 import { validateDefinitionForTarget } from "../automation/channels/registry";
 import type { DeliveryTimingObserver } from "../automation/delivery-timing";
 import { admitPublicReply } from "../automation/send-rate-limiter";
+import {
+  checkAccountSendGate,
+  pauseAccountAfterBlock,
+  recordAccountThrottle,
+  type SendPauseTarget,
+} from "../automation/account-pause";
+import { SendDeferredError } from "../automation/send-deferral";
 
 /**
  * Result shape parallel to the Instagram runner's RunnerResult so the
@@ -41,6 +48,16 @@ export type FacebookRunnerOptions = {
 
 const REPLY_CLAIM_LEASE_MS = 5 * 60 * 1_000;
 const DEFAULT_DELIVERY_CLAIM_LEASE_MS = 30_000;
+
+/**
+ * Execution reason (an Activity code) for a reply Meta refused because it has
+ * blocked the Page from posting, and for each reply skipped while that pause
+ * runs (see account-pause.ts).
+ */
+const PAGE_LIMITED_REASON = "page_limited";
+// Logged with the parked job; nothing is recorded for a reply that waits.
+const PAGE_THROTTLED_MESSAGE = "Facebook asked Linkar to slow down, so replies from this Page are waiting a few minutes.";
+const PAGE_RECOVERING_MESSAGE = "Linkar is replying slowly from this Page while it recovers from a Facebook limit.";
 
 export class RetryableFacebookError extends Error {
   readonly retryable = true;
@@ -93,6 +110,9 @@ export function selectFacebookReplyText(definition: FlowDefinitionV1, commentId:
 
 function classifyFacebookFailure(error: unknown): string {
   if (!(error instanceof FacebookApiError)) return "facebook_delivery_failed";
+  // Before the permission check: Meta sometimes sends #2022 with a
+  // permission-style code or a 403, and it must not read as either.
+  if (facebookAccountSignal(error) === "account_blocked") return PAGE_LIMITED_REASON;
   if (error.graphCode === 10 || error.graphCode === 200 || error.graphCode === 299 || error.status === 403) {
     return "permission_missing";
   }
@@ -137,6 +157,8 @@ async function deliverPublicReply(
     commentId: string;
     text: string;
     claimLeaseMs: number;
+    /** The Page, for the account pause a block or throttle from Meta starts. */
+    pauseTarget: SendPauseTarget;
   },
   post: (text: string) => Promise<{ id?: string }>,
   timingObserver?: DeliveryTimingObserver,
@@ -174,11 +196,22 @@ async function deliverPublicReply(
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (error instanceof FacebookApiError && error.responseReceived && error.status > 0) {
-      const retryable = isKnownNotPostedRetryable(error);
+      // What Meta's answer says about the whole Page, handled as for an
+      // Instagram send: a block pauses every reply from the Page (and is never
+      // retried, which would only add refused attempts to its record), and a
+      // throttle counts toward a short cool-down for the Page.
+      const signal = facebookAccountSignal(error);
+      const retryable = signal !== "account_blocked" && isKnownNotPostedRetryable(error);
+      // The pause reason carries its length, which Home reads back from this
+      // row to say when replies restart.
+      const reason = signal === "account_blocked"
+        ? (await pauseAccountAfterBlock(repository, request.pauseTarget)).reason
+        : message;
+      if (signal === "rate_limited") await recordAccountThrottle(request.pauseTarget, { usage: error.usage });
       await repository.failOutboundDelivery(
         request.deliveryKey,
         owner,
-        message,
+        reason,
         retryable,
         retryable ? "RETRYABLE_REJECTION" : "PROVIDER_REJECTED",
       ).catch(() => false);
@@ -294,6 +327,7 @@ export async function processNormalizedFacebookEvent(
 
   const result: FacebookRunnerResult = { matched: 0, sent: 0, skipped: 0, failed: 0 };
   let winnerSelected = false;
+  const pageTarget: SendPauseTarget = { channel: "facebook", accountId: mapping.page.pageId };
 
   for (const automation of automations) {
     const channelIssues = validateDefinitionForTarget(automation.definition, { provider: "FACEBOOK", surface: "COMMENT" });
@@ -338,6 +372,33 @@ export async function processNormalizedFacebookEvent(
       });
       result.skipped += 1;
       continue;
+    }
+
+    // The same account gate Instagram sends pass (account-pause.ts), checked
+    // before any claim or slot so a hold has nothing to give back. While Meta
+    // has the Page blocked, the reply is skipped with a plain reason, like a
+    // held Instagram send: a public reply posted a day late reads as spam. A
+    // cool-down or the slow restart after a block parks the job instead, so
+    // the reply still goes out once the Page may send. A reply an earlier
+    // attempt already handed to Meta carries on, to reuse or wait for its outcome.
+    const deliveryKey = facebookReplyDeliveryKey(automation.id, event.id);
+    const pageGate = await checkAccountSendGate(pageTarget);
+    if (pageGate.status !== "open" && !(await replyAlreadyDispatched(repository, deliveryKey))) {
+      if (pageGate.status === "blocked") {
+        await repository.recordExecution({
+          workspaceId: mapping.workspaceId,
+          automationId: automation.id,
+          externalEventId: event.id,
+          dedupeKey,
+          status: "SKIPPED",
+          reason: PAGE_LIMITED_REASON,
+        });
+        result.skipped += 1;
+        continue;
+      }
+      throw pageGate.status === "throttled"
+        ? new SendDeferredError(PAGE_THROTTLED_MESSAGE, pageGate.until - Date.now())
+        : new SendDeferredError(PAGE_RECOVERING_MESSAGE, pageGate.retryAfterMs);
     }
 
     const replyOnce = definition.trigger.type === "comment"
@@ -427,7 +488,6 @@ export async function processNormalizedFacebookEvent(
       // restriction risk. Past half the hourly budget a shrinking share of
       // comments get a reply; once it is used up the rest are skipped, not
       // deferred, because posting them later would still add to the burst.
-      const deliveryKey = facebookReplyDeliveryKey(automation.id, event.id);
       const admission = await admitPublicReply(mapping.page.pageId, event.commentId);
       if (!admission.allowed && !(await replyAlreadyDispatched(repository, deliveryKey))) {
         await repository.completeExecution(mapping.workspaceId, dedupeKey, {
@@ -449,6 +509,7 @@ export async function processNormalizedFacebookEvent(
         commentId: event.commentId,
         text,
         claimLeaseMs: options.claimLeaseMs ?? DEFAULT_DELIVERY_CLAIM_LEASE_MS,
+        pauseTarget: pageTarget,
       }, (payloadText) => options.client!.postCommentReply(connection, event.commentId, payloadText), options.timingObserver);
 
       if (delivery.status === "SENT") {
@@ -480,7 +541,10 @@ export async function processNormalizedFacebookEvent(
     } catch (error) {
       // Retry only when nothing was posted: Meta rejected the call with a
       // retryable answer, or another worker holds the reply's ledger claim.
-      if (isKnownNotPostedRetryable(error) || isRetryableFacebookError(error)) {
+      // Never into a block, even one Meta marks as transient: the Page is
+      // paused, and the gate above skips the reply on any later attempt.
+      const blocked = facebookAccountSignal(error) === "account_blocked";
+      if (!blocked && (isKnownNotPostedRetryable(error) || isRetryableFacebookError(error))) {
         await repository.releaseExecutionClaim(mapping.workspaceId, dedupeKey);
         throw retryableFacebookError(error);
       }

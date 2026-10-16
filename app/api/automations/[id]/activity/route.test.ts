@@ -393,4 +393,45 @@ describe("GET /api/automations/[id]/activity", () => {
       { id: "execution_tapered", result: "SKIPPED", safeErrorCode: "public_reply_tapered" },
     ]);
   });
+
+  it("exposes replies Facebook refused or Linkar held while the Page is limited with their own reason", async () => {
+    mocks.getAutomation.mockResolvedValue({
+      id: "automation_1",
+      workspaceId: "workspace_a",
+      provider: "FACEBOOK",
+      facebookPageId: "page_1",
+    });
+    mocks.listFacebookPages.mockResolvedValue([
+      { pageId: "page_1", pageName: "Acme Page", accessTokenEncrypted: "must-not-escape" },
+    ]);
+    mocks.listAutomationExecutions.mockResolvedValue([
+      {
+        id: "execution_held",
+        workspaceId: "workspace_a",
+        automationId: "automation_1",
+        status: "SKIPPED",
+        reason: "page_limited",
+        createdAt: "2026-09-01T01:00:00.000Z",
+      },
+      {
+        id: "execution_refused",
+        workspaceId: "workspace_a",
+        automationId: "automation_1",
+        status: "FAILED",
+        reason: "page_limited",
+        createdAt: "2026-09-01T00:00:00.000Z",
+      },
+    ]);
+
+    const body = await (await call()).json();
+
+    expect(body.data.map((item: { id: string; result: string; safeErrorCode?: string }) => ({
+      id: item.id,
+      result: item.result,
+      safeErrorCode: item.safeErrorCode,
+    }))).toEqual([
+      { id: "execution_held", result: "SKIPPED", safeErrorCode: "page_limited" },
+      { id: "execution_refused", result: "FAILED", safeErrorCode: "page_limited" },
+    ]);
+  });
 });

@@ -146,30 +146,101 @@ export class Worker {
 export const bullmqModule = { Queue, Worker, DelayedError };
 
 // ---------------------------------------------------------------------------
-// ioredis (only the send-rate limiter's admit script is exercised)
+// ioredis: the send-rate limiter's admit script, plus the plain key commands
+// the account pause uses (get, mget, set with PX/NX, incr, decr, pexpire).
 // ---------------------------------------------------------------------------
 
+type StoredValue = { value: string; expiresAt: number | null };
+
 export const redisStore = {
+  /** The admit script's per-window counters. */
   counters: new Map<string, number>(),
-  /** When set, every eval throws - simulates Redis being unreachable. */
+  /** Plain keys, each with its expiry (epoch ms, read against Date.now()) or null. */
+  values: new Map<string, StoredValue>(),
+  /** When set, every command throws - simulates Redis being unreachable. */
   down: false,
   reset() {
     this.counters.clear();
+    this.values.clear();
     this.down = false;
   },
 };
 
+function liveValue(key: string): StoredValue | undefined {
+  const entry = redisStore.values.get(key);
+  if (!entry) return undefined;
+  if (entry.expiresAt !== null && entry.expiresAt <= Date.now()) {
+    redisStore.values.delete(key);
+    return undefined;
+  }
+  return entry;
+}
+
+/** One Redis server shared by every instance, as the web container and worker share one. */
 export class FakeRedis {
   status = "ready";
   on() { return this; }
   disconnect() {}
   async quit() { return "OK"; }
-  async eval(_script: string, _keys: number, key: string, ceiling: number | string): Promise<number> {
+
+  private check(): void {
     if (redisStore.down) throw new Error("Redis connection refused");
+  }
+
+  async eval(_script: string, _keys: number, key: string, ceiling: number | string): Promise<number> {
+    this.check();
     const current = redisStore.counters.get(key) ?? 0;
     if (current >= Number(ceiling)) return 0;
     redisStore.counters.set(key, current + 1);
     return 1;
+  }
+
+  /** Also reads an admit-script counter, so the limiter's read-only peek sees the count its script keeps. */
+  async get(key: string): Promise<string | null> {
+    this.check();
+    const counter = redisStore.counters.get(key);
+    if (counter !== undefined) return String(counter);
+    return liveValue(key)?.value ?? null;
+  }
+
+  async mget(...keys: string[]): Promise<Array<string | null>> {
+    return Promise.all(keys.map((key) => this.get(key)));
+  }
+
+  async set(key: string, value: string | number, ...options: Array<string | number>): Promise<"OK" | null> {
+    this.check();
+    if (options.includes("NX") && liveValue(key)) return null;
+    const px = options.indexOf("PX");
+    redisStore.values.set(key, {
+      value: String(value),
+      expiresAt: px >= 0 ? Date.now() + Number(options[px + 1]) : null,
+    });
+    return "OK";
+  }
+
+  async incr(key: string): Promise<number> {
+    return this.incrementBy(key, 1);
+  }
+
+  async decr(key: string): Promise<number> {
+    return this.incrementBy(key, -1);
+  }
+
+  async pexpire(key: string, ms: number | string): Promise<number> {
+    this.check();
+    const entry = liveValue(key);
+    if (!entry) return 0;
+    entry.expiresAt = Date.now() + Number(ms);
+    return 1;
+  }
+
+  private async incrementBy(key: string, by: number): Promise<number> {
+    this.check();
+    const entry = liveValue(key);
+    const next = Number(entry?.value ?? 0) + by;
+    // Like Redis, INCR and DECR keep the key's expiry.
+    redisStore.values.set(key, { value: String(next), expiresAt: entry?.expiresAt ?? null });
+    return next;
   }
 }
 

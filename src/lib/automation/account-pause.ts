@@ -20,7 +20,7 @@ import type { AutomationRepository } from "../repository";
  * - Recovering: for ACCOUNT_RECOVERY_HOURS after that pause, the account may
  *   send only ACCOUNT_RECOVERY_SEND_PERCENT of its hourly DM ceiling, shared
  *   by its automatic sends, so it comes back slowly instead of in a burst
- *   (manual inbox replies and campaign actions are exceptions, see below).
+ *   (manual inbox replies neither use nor wait for that share).
  * - Throttled: after THROTTLE_STRIKES_TO_PAUSE throttling errors inside
  *   THROTTLE_STRIKE_WINDOW_MS, the account waits THROTTLE_PAUSE_MS so its
  *   other sends stop too, not only the one Meta refused.
@@ -31,20 +31,21 @@ import type { AutomationRepository } from "../repository";
  * still pauses the process that saw Meta's error (the worker, which makes
  * almost every send) instead of letting it keep sending.
  *
- * Instagram sends made through executeOutboundDelivery pass
- * checkAccountSendGate first, and a block or throttle Meta returns there is
- * recorded here. Two sends do not pass it yet: the follow-gate "give it a few
- * more seconds" notice (sendCooldownNotice in campaign-runner.ts), and
- * Facebook Page comment replies (facebook/runner.ts), which use their own
- * ledger path. Wiring those needs changes in those files.
- *
- * Campaign actions (the comment-to-DM flow) are counted toward the recovery
- * budget but never held by it: campaign-runner cannot yet park its job
- * without losing its dispatch claim, so a hold there would end as a failed
- * DM once the job's few retries ran out. They do wait out a throttle pause:
- * the realtime job's retries span at least 15.5 minutes (REALTIME_EVENT_RETRY
- * in queue.ts), longer than THROTTLE_PAUSE_MS. A longer pause that Meta asks
- * for in its usage headers can still outlast them.
+ * Every automatic send passes checkAccountSendGate first, and a block or
+ * throttle Meta returns is recorded here:
+ * - Instagram sends made through executeOutboundDelivery, campaign actions
+ *   (the comment-to-DM flow) included. A campaign DM held by a cool-down or
+ *   the recovery share gives back its dispatch claim and parks its job, so
+ *   it is sent later rather than lost. A held campaign public reply is
+ *   skipped instead, like one over the hourly public-reply budget: posted
+ *   late it would only add to the same burst.
+ * - The follow-gate "give it a few more seconds" notice (sendCooldownNotice
+ *   in campaign-runner.ts), which is skipped rather than held, since it only
+ *   means something at that moment.
+ * - Facebook Page comment replies (facebook/runner.ts), keyed by Page id. A
+ *   blocked Page skips its replies with a plain reason; a cool-down or the
+ *   recovery share parks the job instead (without a queue, the event route
+ *   answers retryable so Meta delivers the event again).
  *
  * The recovery budget is taken at the gate, so a send that turns out to be a
  * duplicate still uses a slot: it errs toward sending less, never more.

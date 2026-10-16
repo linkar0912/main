@@ -122,27 +122,29 @@ const NON_META_KINDS: ReadonlySet<OutboundDeliveryKind> = new Set(["LEAD_EMAIL",
  * Kinds whose callers already treat a thrown SendDeferredError as "park this
  * queue job" after releasing every claim they hold, exactly as for the hourly
  * send ceiling. A cool-down then waits without spending a retry. Campaign
- * actions hold a dispatch lease a throw would orphan, sequence steps run in a
- * sweep and manual replies in a web request, so those get a retryable
- * failure instead and keep their own retry timing.
+ * actions give back their dispatch lease and mark the step pending first, or
+ * skip a public reply instead of parking it (guardedDelivery in
+ * campaign-runner.ts). Sequence steps run in a sweep and manual replies in a
+ * web request, so those get a retryable failure instead and keep their own
+ * retry timing.
  */
 const DEFERRABLE_KINDS: ReadonlySet<OutboundDeliveryKind> = new Set([
   "CLASSIC_ACTION",
   "EMAIL_CAPTURE",
   "BROADCAST_RECIPIENT",
   "FLOW_FOLLOWUP",
+  "CAMPAIGN_ACTION",
 ]);
 
 /**
  * How each kind treats the reduced budget after a block pause. A teammate's
- * typed reply is neither limited by it nor uses it. Campaign actions use it
- * but are never held by it: campaign-runner turns a retryable failure into a
- * failed DM after a few job retries, so holding them for up to an hour would
- * drop the comment-to-DM replies instead of delaying them.
+ * typed reply is neither limited by it nor uses it. Every automatic send,
+ * comment-to-DM campaign replies included, uses it and waits once it is
+ * spent: the job is parked, so a DM is delayed, not dropped. (A campaign's
+ * public reply held here is skipped instead, never posted late.)
  */
 function recoveryModeFor(kind: OutboundDeliveryKind): RecoveryBudgetMode {
   if (kind === "MANUAL_INBOX") return "ignore";
-  if (kind === "CAMPAIGN_ACTION") return "count";
   return "enforce";
 }
 
