@@ -66,10 +66,12 @@ test("workspace navigation only loads visible data and reuses warm resources", a
   await expect(page.getByRole("heading", { level: 1, name: /^(Hello,|Welcome back)/ })).toBeVisible();
   expect(count("/api/meta/connection")).toBe(1);
   expect(count("/api/facebook/connection")).toBe(1);
-  expect(count("/api/insights?include=overview")).toBe(1);
+  // This workspace has no automations, so Home shows the guided start, which
+  // has no numbers panel: the insights are not asked for at all.
+  expect(count("/api/insights?include=overview")).toBe(0);
 
   await page.evaluate(() => window.dispatchEvent(new Event("focus")));
   await page.waitForTimeout(50);
   expect(count("/api/meta/connection")).toBe(1);
-  expect(count("/api/insights?include=overview")).toBe(1);
+  expect(count("/api/insights?include=overview")).toBe(0);
 });
