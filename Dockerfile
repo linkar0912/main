@@ -56,10 +56,13 @@ ENV HOSTNAME=0.0.0.0
 # image (glibc, no jemalloc, no MALLOC_ARENA_MAX) sharp already limits each
 # encode to one libvips thread by itself, so imgOptConcurrency in
 # next.config.ts changes nothing here. A burst of 8 or more uncached images
-# fills every slot and can keep every core busy. The Cloudflare cache and rate
-# rule on /_next/image must be in place before this ships; it is the hard
-# bound on image CPU (docs/ops/app-admin-inspection-2026-10-15.md, section 9).
-# The pool size itself is left to the owner (same report, section 11).
+# fills every slot. In production the web service is limited to one CPU
+# (Dokploy resource limit, checked 16 Oct 2026), so a burst slows this
+# container's own requests but cannot take CPU from the worker or the other
+# apps on the host; going back to 4 would not change that and would halve the
+# DNS headroom above. The Cloudflare cache and rate rule on /_next/image keeps
+# most image requests off the origin
+# (docs/ops/app-admin-inspection-2026-10-15.md, section 9).
 ENV UV_THREADPOOL_SIZE=8
 
 # Identifies the build itself. This cannot drift from the image it is baked into.

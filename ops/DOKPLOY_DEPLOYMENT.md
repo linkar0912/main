@@ -79,12 +79,35 @@ then take the service down.
 
   The Compose runs under plain `docker compose`, not Swarm. In that mode a
   failing check only marks the container `unhealthy`; Docker does not
-  restart it (a restart policy acts only when the process exits). So a worker
-  whose BullMQ connection is stuck (see `/live` below) is flagged, not
-  replaced. Watch for an `unhealthy` worker in Dokploy, and restart it there.
-  Making the worker exit on its own when `/live` stays failed, so the
-  Compose restart policy brings it back, is an open follow-up (confirm the
-  `worker` service has one, such as `restart: unless-stopped`; Valkey's does).
+  restart it (a restart policy acts only when the process exits). So the
+  worker restarts itself: when the `/live` signal has been failing for
+  `WORKER_LIVENESS_EXIT_AFTER_MS` (default five minutes, counted from launch;
+  `0` turns it off), it logs "Worker stopped consuming jobs; exiting so it
+  restarts", waits up to 30 s for running jobs and connections to close, and
+  exits with code 1 (`startLivenessWatchdog` in `src/lib/worker-health.ts`).
+  Checks run every 10 to 20 s, so a stuck worker is gone five to six
+  minutes after it stopped (the window, plus up to two check gaps and the
+  30 s close).
+  The restart policy then starts a fresh worker with new connections. At
+  startup the worker logs "Worker liveness watchdog" with the window in
+  effect (or `disabled`), and warns when the configured value was not usable
+  as written (only `0` turns it off; `off` or `5m` falls back to five
+  minutes). An idle queue, a worker that took a job in the last minute, and a
+  queue paused from the owner console do not trip it. During a Valkey outage
+  longer than the window the worker exits and restarts about every six
+  minutes until Valkey is back; that is expected.
+
+  **This needs a restart policy on the `worker` service**; without one an
+  exited worker stays down. Checked read-only on 16 Oct 2026 (`docker
+  inspect` of the running worker): `restart: unless-stopped`, no retry limit.
+  Re-check it after any edit to the Compose file.
+
+  Any shutdown (a deploy's SIGTERM included) also gives up after 30 s and
+  exits with code 1, logging "Worker shutdown did not finish; forcing exit",
+  since a wedged or unreachable Valkey can hold BullMQ's close for good. The
+  `worker` service has `stop_grace_period: 40s` (set 16 Oct 2026; Docker's
+  10 s default killed a draining worker before its 25 s drain could finish).
+  All three Compose services also cap their logs at 10 MB x 3 files.
 
 What each liveness endpoint checks:
 
@@ -93,17 +116,21 @@ What each liveness endpoint checks:
   a slow database never gets the web container replaced, and a stopped worker
   never fails it.
 - The worker's `/live` sends no command either, but answers 200 only while
-  both BullMQ consumers are running on ready Redis connections, BullMQ's
+  both BullMQ consumers are running and each one either started or finished
+  a job in the last minute or is on ready Redis connections, BullMQ's
   dedicated blocking clients included (`consumersProcessing` in
   `src/lib/worker-health.ts`). It fails while those connections are down, and
   when a blocking client stays stuck reconnecting after Valkey is back (seen
   with BullMQ 6.1.2 and ioredis 6.0.0: the worker stops taking jobs while its
-  main connection looks fine). With the Compose check (5 retries, 20 s apart)
-  the worker shows as `unhealthy` after about 2 minutes of that. A stuck one
-  never recovers by itself and a new worker connects afresh, so restart it
-  (see the `linkar-worker` note above: under `docker compose` this is manual
-  until the worker can exit on its own). A slow or unreachable database does
-  not fail it.
+  main connection looks fine). A blocking client that BullMQ closed itself
+  (`end`) does not fail it: BullMQ reconnects it on its next wait for a job,
+  and a worker working through a backlog may not wait for minutes. With the
+  Compose check (5 retries, 20 s apart) the worker shows as `unhealthy` after
+  about 2 minutes of that. A stuck one never recovers by itself and a new
+  worker connects afresh, so it exits five to seven minutes after it stopped
+  (up to a minute after its last job, then the window, up to two check gaps
+  and the 30 s close) and its restart policy brings it back (see the `linkar-worker` note above).
+  A slow or unreachable database does not fail it.
 
 Dependency state is readiness and stays on `/api/health` (web) and the
 worker's `/health`, which the release script and monitoring read. Each probe
@@ -248,9 +275,10 @@ gh run view <run-id> --log-failed
   `main` first and is (or will be) released by its own run.
 - `worker.heartbeat` is `stale`, or Dokploy shows the worker `unhealthy`: the
   worker is stopped, cannot reach Valkey, or BullMQ stopped consuming. Open
-  the "Linkar Production" Compose in Dokploy, check the `worker` logs, and
-  restart the worker; under `docker compose` an unhealthy worker is not
-  restarted for you.
+  the "Linkar Production" Compose in Dokploy and check the `worker` logs. A
+  worker that stopped consuming exits on its own five to seven minutes later;
+  if it keeps exiting, the logs say why (often Valkey down or a wrong
+  password). Restart it by hand if it is not coming back.
 
 The Dokploy panel and API are not published: Dokploy listens only on the
 host's `localhost:3000`. Reach them from an administrator machine through an
