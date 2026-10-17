@@ -18,6 +18,7 @@
     "preflight:billing": "node scripts/verify-billing-config.mjs",
     "preflight:instagram-ownership": "node scripts/preflight-instagram-ownership.mjs",
     "monitor:production": "node scripts/check-production-health.mjs",
+    "monitor:oauth": "node scripts/check-oauth-redirects.mjs",
     "backfill:member-user-ids": "node scripts/backfill-member-user-ids.mjs",
     "backfill:contact-last-inbound": "node scripts/backfill-contact-last-inbound.mjs",
     "backfill:webhook-event-actors": "node scripts/backfill-webhook-event-actors.mjs",

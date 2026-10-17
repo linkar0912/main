@@ -134,3 +134,13 @@ jobs:
             unset EXPECTED_RELEASE
           fi
           node scripts/check-production-health.mjs
+
+      # Facebook sign-in, and its Cancel, must come back to the app rather
+      # than the marketing site, and Google must name the app's own callback.
+      # Anonymous GETs only; both URLs are public, so no secret is needed.
+      - name: Verify sign-in redirects from outside
+        if: steps.current.outputs.deploy == 'true'
+        env:
+          APP_URL: https://app.linkar.in
+          SUPABASE_URL: https://pdrqwwhhimhxbcncpikq.supabase.co
+        run: node scripts/check-oauth-redirects.mjs

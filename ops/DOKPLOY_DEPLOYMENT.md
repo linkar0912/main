@@ -177,7 +177,8 @@ A push to `main` is a production deployment once CI passes. Do not push
       and waits for the worker container to report healthy.
 5. The workflow re-checks production from outside with
    `scripts/check-production-health.mjs` and `EXPECTED_RELEASE` set to the
-   commit.
+   commit, then checks the sign-in redirects with
+   `scripts/check-oauth-redirects.mjs` (see "Verification").
 
 Required GitHub Actions secrets:
 
@@ -252,7 +253,48 @@ Require all of the following:
 - `release` exactly equals the deployed 40-character commit;
 - `worker.heartbeat` is `ok` and `worker.release` equals the same commit;
 - Instagram and Facebook configuration states are expected;
-- `followGatedCampaigns` is `enabled` for the live feature.
+- `followGatedCampaigns` is `enabled` for the live feature;
+- `pnpm monitor:oauth` passes.
+
+### Sign-in redirects
+
+```bash
+pnpm monitor:oauth
+```
+
+The deploy job runs the same check (`scripts/check-oauth-redirects.mjs`)
+right after the health check. `APP_URL` and `SUPABASE_URL` default to
+production; both are public, so it needs no secret. It sends anonymous GETs
+only, with a normal browser User-Agent because Cloudflare turns away default
+client agents. It walks the chain one hop at a time itself (no request
+follows a redirect on its own), never sends or prints a cookie or a `state`
+value, and names only the host and path that were wrong. The only
+trace it leaves is the short-lived sign-in attempt Supabase records for any
+click on "Continue with Facebook".
+
+1. `GET https://app.linkar.in/api/auth/oauth/facebook?next=%2Fdashboard`
+   must answer 303 to `<SUPABASE_URL>/auth/v1/authorize` with `redirect_to`
+   exactly `https://app.linkar.in/auth/oauth/callback`, with no query string.
+   Supabase checks `redirect_to` against its Redirect URLs list and sends a
+   URL that is not on it, as the `?next=` form was not, to the Site URL
+   (`https://linkar.in`) instead.
+2. Following that authorize URL must redirect to `www.facebook.com`. This
+   proves Supabase accepted the request and Facebook login is enabled. The
+   script keeps the `state` Supabase gave Facebook for the next step.
+3. `GET <SUPABASE_URL>/auth/v1/callback?error=access_denied&error_description=release+check&state=...`,
+   the request Facebook sends when someone presses Cancel, must redirect to
+   `https://app.linkar.in/auth/oauth/callback` with `error=access_denied`.
+   This proves the trip back from Facebook lands in the app, which shows
+   "Sign-in was cancelled", and not on the marketing site. A completed
+   Facebook sign-in returns to the same address, so this covers it without
+   signing anyone in.
+4. `GET https://app.linkar.in/api/auth/oauth/google/start?next=%2Fdashboard`
+   must answer 303 to `accounts.google.com` with `redirect_uri` exactly
+   `https://app.linkar.in/api/auth/oauth/google/callback`, the address
+   registered with Google (`GOOGLE_REDIRECT_URI`).
+
+Network failures, timeouts, HTTP 429 and 5xx are retried (three attempts,
+5 seconds apart, each starting a fresh chain). A wrong redirect fails at once.
 
 ## Release failure triage
 
