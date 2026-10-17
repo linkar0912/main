@@ -1,7 +1,12 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
 export const GOOGLE_OAUTH_STATE_COOKIE = "linkar_google_oauth_state";
-const OAUTH_STATE_TTL_MS = 10 * 60 * 1_000;
+/**
+ * How long a Google sign-in may take, start to callback: long enough for an
+ * account chooser, a 2-step check or a new Google account. The start route's
+ * state cookie lasts as long (1800 s).
+ */
+export const OAUTH_STATE_TTL_MS = 30 * 60 * 1_000;
 
 type StatePayload = {
   next: string;
@@ -36,11 +41,8 @@ export function createGoogleOAuthState(
   return { state: `${payload}.${sign(payload, secret).toString("base64url")}`, nonce };
 }
 
-export function readGoogleOAuthState(
-  value: string,
-  secret: string,
-  now = new Date(),
-): { next: string; invite?: string; nonce: string } | null {
+/** The payload of a state whose signature verifies, expired or not; null otherwise. */
+function verifiedPayload(value: string, secret: string): Partial<StatePayload> | null {
   const [payload, encodedSignature] = value.split(".");
   if (!payload || !encodedSignature || secret.length < 32) return null;
 
@@ -52,20 +54,48 @@ export function readGoogleOAuthState(
     ) {
       return null;
     }
-    const decoded = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as Partial<StatePayload>;
-    if (
-      typeof decoded.next !== "string" || !decoded.next
-      || typeof decoded.nonce !== "string" || !decoded.nonce
-      || typeof decoded.expiresAt !== "number" || decoded.expiresAt <= now.getTime()
-    ) {
-      return null;
-    }
-    return {
-      next: decoded.next,
-      nonce: decoded.nonce,
-      ...(typeof decoded.invite === "string" && decoded.invite ? { invite: decoded.invite } : {}),
-    };
+    const decoded: unknown = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+    return typeof decoded === "object" && decoded !== null ? decoded as Partial<StatePayload> : null;
   } catch {
     return null;
   }
+}
+
+export function readGoogleOAuthState(
+  value: string,
+  secret: string,
+  now = new Date(),
+): { next: string; invite?: string; nonce: string } | null {
+  const decoded = verifiedPayload(value, secret);
+  if (
+    !decoded
+    || typeof decoded.next !== "string" || !decoded.next
+    || typeof decoded.nonce !== "string" || !decoded.nonce
+    || typeof decoded.expiresAt !== "number" || decoded.expiresAt <= now.getTime()
+  ) {
+    return null;
+  }
+  return {
+    next: decoded.next,
+    nonce: decoded.nonce,
+    ...(typeof decoded.invite === "string" && decoded.invite ? { invite: decoded.invite } : {}),
+  };
+}
+
+/**
+ * next and invite from any state this app signed, ignoring its expiry and
+ * whether it matches the cookie. For error redirects only, so a person who
+ * comes back too late, or in another tab, keeps their invitation; it never
+ * lets a sign-in through. readGoogleOAuthState stays the only reader for that.
+ */
+export function readGoogleOAuthStateContext(
+  value: string,
+  secret: string,
+): { next: string; invite?: string } | null {
+  const decoded = verifiedPayload(value, secret);
+  if (!decoded || typeof decoded.next !== "string" || !decoded.next) return null;
+  return {
+    next: decoded.next,
+    ...(typeof decoded.invite === "string" && decoded.invite ? { invite: decoded.invite } : {}),
+  };
 }

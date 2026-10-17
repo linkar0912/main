@@ -27,8 +27,10 @@ export async function GET(request: Request) {
     { next: nextPath, ...(inviteRaw ? { invite: inviteRaw } : {}) },
     env.authSessionSecret,
   );
+  // An invitation shows Google's account chooser, so the teammate picks the
+  // account it was sent to rather than a personal one signed in already.
   const response = NextResponse.redirect(
-    buildGoogleAuthorizeUrl(state, nonce, env),
+    buildGoogleAuthorizeUrl(state, nonce, env, { selectAccount: Boolean(inviteRaw) }),
     303,
   );
   response.cookies.set({
@@ -37,7 +39,8 @@ export async function GET(request: Request) {
     httpOnly: true,
     sameSite: "lax",
     secure: env.appUrl.startsWith("https://"),
-    maxAge: 600,
+    // As long as the signed state lasts (OAUTH_STATE_TTL_MS).
+    maxAge: 1800,
     path: "/",
     ...(cookieDomain ? { domain: cookieDomain } : {}),
   });

@@ -122,6 +122,49 @@ describe("OnboardingFlow (owner)", () => {
     expect(screen.getByRole("status").textContent).toMatch(/Nothing was connected/);
   });
 
+  it("says the sign-in could not be checked when a connect comes back unavailable", () => {
+    const view = ownerView({ step: 7 });
+    render(<OnboardingFlow view={view} client={fakeClient(view)} connectReturn={{ meta: "unavailable" }} />);
+    expect(screen.getByRole("status").textContent).toBe("We couldn’t check your sign-in just now. Try again in a minute.");
+  });
+
+  it.each([
+    [410, undefined, "Choosing a Page took too long. Connect Facebook again to pick one."],
+    [409, "already-connected", "That Page is already connected to another Linkar workspace."],
+  ])("brings the Facebook Connect link back after a %i when connecting the chosen Page", async (status, code, message) => {
+    const view = ownerView({ step: 7 });
+    const client = fakeClient(view);
+    // The status and code the real client attaches (SelectFacebookPageError).
+    client.selectFacebookPage.mockRejectedValueOnce(Object.assign(new Error(message), { status, code }));
+    render(<OnboardingFlow view={view} client={client} connectReturn={{ facebook: "select-page" }} />);
+
+    const connectPage = await screen.findByRole("button", { name: "Connect this Page" });
+    await waitFor(() => expect((screen.getByLabelText("Which Page should Linkar reply on?") as HTMLSelectElement).value).toBe("page_1"));
+    // While the picker is up, only Instagram offers a Connect link.
+    expect(screen.getAllByRole("link", { name: "Connect" })).toHaveLength(1);
+
+    await act(async () => { fireEvent.click(connectPage); });
+
+    expect((await screen.findByRole("alert")).textContent).toBe(message);
+    expect(screen.queryByRole("button", { name: "Connect this Page" })).toBeNull();
+    const links = screen.getAllByRole("link", { name: "Connect" });
+    expect(links.map((link) => link.getAttribute("href"))).toEqual(["/api/meta/oauth/start?return=onboarding", "/api/facebook/oauth/start?return=onboarding"]);
+  });
+
+  it("keeps the Page picker up after a refusal that choosing again can fix", async () => {
+    const view = ownerView({ step: 7 });
+    const client = fakeClient(view);
+    client.selectFacebookPage.mockRejectedValueOnce(Object.assign(new Error("Meta is temporarily unavailable. Try again in a moment."), { status: 502 }));
+    render(<OnboardingFlow view={view} client={client} connectReturn={{ facebook: "select-page" }} />);
+
+    const connectPage = await screen.findByRole("button", { name: "Connect this Page" });
+    await waitFor(() => expect((screen.getByLabelText("Which Page should Linkar reply on?") as HTMLSelectElement).value).toBe("page_1"));
+    await act(async () => { fireEvent.click(connectPage); });
+
+    expect((await screen.findByRole("alert")).textContent).toBe("Meta is temporarily unavailable. Try again in a moment.");
+    expect(screen.getByRole("button", { name: "Connect this Page" })).toBeTruthy();
+  });
+
   it("shows the plan with its assumptions, and Set up finishes onboarding first", async () => {
     const view = ownerView({ step: 8 });
     const client = fakeClient(view);

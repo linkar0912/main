@@ -3,12 +3,17 @@ import { FacebookOAuthError } from "@/src/lib/facebook/oauth";
 
 const mocks = vi.hoisted(() => ({
   getValidatedSession: vi.fn(),
+  getMemberRole: vi.fn(),
   listFacebookPages: vi.fn(),
   readSelection: vi.fn(),
 }));
 
 vi.mock("@/src/lib/auth/session", () => ({
   getValidatedSession: mocks.getValidatedSession,
+}));
+
+vi.mock("@/src/lib/repository-provider", () => ({
+  getRepository: () => ({ getMemberRole: mocks.getMemberRole }),
 }));
 
 vi.mock("@/src/lib/env", () => ({
@@ -39,7 +44,8 @@ function pagesRequest(): Request {
 
 describe("GET /api/facebook/oauth/pages", () => {
   beforeEach(() => {
-    mocks.getValidatedSession.mockReset().mockResolvedValue({ userId: "user_1", workspaceId: "workspace_1" });
+    mocks.getValidatedSession.mockReset().mockResolvedValue({ userId: "user_1", workspaceId: "workspace_1", email: "owner@example.com" });
+    mocks.getMemberRole.mockReset().mockResolvedValue("OWNER");
     mocks.readSelection.mockReset().mockReturnValue({
       workspaceId: "workspace_1",
       facebookUserId: "facebook_user_1",
@@ -47,6 +53,24 @@ describe("GET /api/facebook/oauth/pages", () => {
       selectionExpiresAt: "2099-01-01T00:00:00.000Z",
     });
     mocks.listFacebookPages.mockReset();
+  });
+
+  it("refuses a plain member, whose Page list it would read with someone else's Facebook token", async () => {
+    mocks.getMemberRole.mockResolvedValue("MEMBER");
+
+    const response = await GET(pagesRequest());
+
+    expect(response.status).toBe(403);
+    expect(mocks.readSelection).not.toHaveBeenCalled();
+    expect(mocks.listFacebookPages).not.toHaveBeenCalled();
+  });
+
+  it("reads only the signed-in person's own pending selection", async () => {
+    mocks.listFacebookPages.mockResolvedValue([]);
+
+    await GET(pagesRequest());
+
+    expect(mocks.readSelection).toHaveBeenCalledWith("sealed-selection", "a".repeat(64), "workspace_1", "user_1");
   });
 
   it("lists the Pages the selection's user token can manage", async () => {

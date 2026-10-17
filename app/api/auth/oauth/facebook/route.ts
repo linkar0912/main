@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { setFacebookSignInReturn } from "@/src/lib/auth/facebook-signin-return";
 import { safeNextPath } from "@/src/lib/auth/session";
 import { getServerEnv } from "@/src/lib/env";
 import { createSupabaseServerClient } from "@/src/lib/supabase/server";
@@ -23,24 +24,28 @@ export async function GET(request: Request) {
   const destinationOrigin = applicationOriginForPath(nextPath, env);
   const inviteRaw = url.searchParams.get("invite") ?? "";
 
-  const redirectTo = new URL("/auth/oauth/callback", env.appUrl);
-  redirectTo.searchParams.set("next", nextPath);
-  if (inviteRaw) redirectTo.searchParams.set("invite", inviteRaw);
-
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: "facebook",
     options: {
-      redirectTo: redirectTo.toString(),
+      // Exactly the URL on Supabase's redirect allow list. Supabase matches
+      // redirectTo including its query string, so carrying next and invite
+      // here stopped the exact entry matching and Supabase sent people to the
+      // Site URL instead of this callback. They travel in a signed cookie
+      // (facebook-signin-return.ts) instead.
+      redirectTo: new URL("/auth/oauth/callback", env.appUrl).toString(),
       // Supabase's own default scope for Facebook is `email` alone, which
       // this app's Facebook Login for Business setup rejects outright as an
       // invalid scope combination - Meta requires public_profile alongside
       // it (confirmed directly against Facebook's own authorize endpoint).
       scopes: "email public_profile",
+      // Facebook does not ask again for a permission the person declined
+      // once unless told to, and without email the sign-in cannot finish.
+      queryParams: { auth_type: "rerequest" },
     },
   });
   if (error || !data?.url) {
     return NextResponse.redirect(new URL("/login?error=oauth", destinationOrigin), 303);
   }
-  return NextResponse.redirect(data.url, 303);
+  return setFacebookSignInReturn(NextResponse.redirect(data.url, 303), { next: nextPath, invite: inviteRaw }, env);
 }

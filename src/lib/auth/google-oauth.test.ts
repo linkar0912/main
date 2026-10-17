@@ -27,6 +27,12 @@ describe("buildGoogleAuthorizeUrl", () => {
   it("throws when Google isn't configured", () => {
     expect(() => buildGoogleAuthorizeUrl("s", "n", { ...CONFIG, googleClientId: undefined })).toThrow();
   });
+
+  it("asks Google for the account chooser only when told to (an invited sign-in)", () => {
+    expect(new URL(buildGoogleAuthorizeUrl("s", "n", CONFIG)).searchParams.has("prompt")).toBe(false);
+    expect(new URL(buildGoogleAuthorizeUrl("s", "n", CONFIG, { selectAccount: false })).searchParams.has("prompt")).toBe(false);
+    expect(new URL(buildGoogleAuthorizeUrl("s", "n", CONFIG, { selectAccount: true })).searchParams.get("prompt")).toBe("select_account");
+  });
 });
 
 describe("exchangeGoogleCode", () => {

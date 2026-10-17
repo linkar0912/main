@@ -855,3 +855,113 @@ describe("SettingsScreen Facebook Page picker failures", () => {
     expect(screen.queryByText(/Could not load/)).toBeNull();
   });
 });
+
+describe("SettingsScreen connect banners and Reconnect links", () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, "", "/settings");
+  });
+
+  async function renderAt(search: string, options: Parameters<typeof stubSettingsFetch>[1] = {}, handler: Handler = () => undefined) {
+    window.history.replaceState({}, "", `/settings${search}`);
+    const fetchMock = stubSettingsFetch(handler, options);
+    await act(async () => { render(<SettingsScreen />); });
+    return fetchMock;
+  }
+
+  function banner(): string {
+    return screen.getAllByRole("status").map((node) => node.textContent ?? "").join(" ");
+  }
+
+  it.each([
+    ["limit-reached", /no room for another Instagram account/],
+    ["plan-required", /plan does not include this/],
+    ["unavailable", /could not check your sign-in just now/],
+  ])("explains ?meta=%s instead of a generic status line", async (state, copy) => {
+    await renderAt(`?meta=${state}`);
+    expect(banner()).toMatch(copy);
+    expect(banner()).not.toContain("Connection status updated.");
+  });
+
+  it("keeps internal details and review wording out of the Instagram banners", async () => {
+    await renderAt("?meta=token-exchange");
+    expect(banner()).toMatch(/Instagram could not finish signing in/);
+    expect(banner()).not.toContain("{callbackUrl}");
+    expect(banner()).not.toMatch(/Callback address/);
+    cleanup();
+
+    await renderAt("?meta=connected");
+    expect(banner()).toMatch(/Instagram is connected/);
+    expect(banner()).not.toMatch(/review testing/);
+  });
+
+  it.each([
+    ["limit-reached", /no room for another Facebook Page/],
+    ["plan-required", /plan does not include this/],
+    ["forbidden", /Only workspace owners and admins can connect Facebook Pages/],
+    ["unavailable", /could not check your sign-in just now/],
+  ])("explains ?facebook=%s instead of a generic status line", async (state, copy) => {
+    await renderAt(`?facebook=${state}`);
+    expect(banner()).toMatch(copy);
+    expect(banner()).not.toContain("Facebook connection status updated.");
+  });
+
+  it("says a Page needs full control when none was found", async () => {
+    await renderAt("?facebook=no-pages");
+    expect(banner()).toMatch(/no Facebook Page you fully manage/);
+    expect(banner()).toMatch(/full control of a Page/);
+  });
+
+  it("sends the account being reconnected with each Reconnect link", async () => {
+    const page = { id: "fb_rec_1", pageId: "12345", pageName: "Acme Co", status: "CONNECTED", connectedAt: "2026-08-29T10:00:00.000Z" };
+    await renderAt("", { connections: [creator], pages: [page] });
+
+    const instagramRow = (await screen.findByText("@creator")).closest("li")!;
+    const facebookRow = screen.getByText("Acme Co").closest("li")!;
+    expect(within(instagramRow).getByRole("link", { name: "Reconnect" }).getAttribute("href")).toBe("/api/meta/oauth/start?reconnect=connection_1");
+    expect(within(facebookRow).getByRole("link", { name: "Reconnect" }).getAttribute("href")).toBe("/api/facebook/oauth/start?reconnect=fb_rec_1");
+  });
+
+  it("explains a full plan when connecting the chosen Page is refused", async () => {
+    await renderAt("?facebook=select-page", {}, (url, init) => {
+      if (url.startsWith("/api/facebook/oauth/pages")) return { body: { data: [{ id: "page_1", name: "Acme Co" }] } };
+      if (url.startsWith("/api/facebook/oauth/select") && init?.method === "POST") return { status: 409, body: { error: "limit_reached", capability: "facebook", used: 1, limit: 1 } };
+      return undefined;
+    });
+
+    const connect = await screen.findByRole("button", { name: "Connect selected Page" });
+    await vi.waitFor(() => expect((screen.getByLabelText("Choose Facebook Page") as HTMLSelectElement).value).toBe("page_1"));
+    await act(async () => { fireEvent.click(connect); });
+
+    const alert = await screen.findByText(/no room for another Facebook Page/);
+    expect(alert.closest("[role=alert]")).toBeTruthy();
+    expect(alert.textContent).not.toMatch(/limit_reached|Limit reached/);
+  });
+
+  it("hides the Facebook Connect and Reconnect links from members, who cannot connect Pages", async () => {
+    const page = { id: "fb_rec_1", pageId: "12345", pageName: "Acme Co", status: "CONNECTED", connectedAt: "2026-08-29T10:00:00.000Z" };
+    stubSettingsFetch((url) => (url.includes("/api/workspace/bootstrap")
+      ? { body: { data: { email: "member@example.com", role: "MEMBER", plan: "free", mode: "configured" } } }
+      : undefined), { pages: [page] });
+    await act(async () => { render(<SettingsScreen />); });
+
+    const facebookCard = await screen.findByRole("region", { name: "Facebook Pages" });
+    await within(facebookCard).findByText("Acme Co");
+    expect(within(facebookCard).queryByRole("link", { name: "Reconnect" })).toBeNull();
+    expect(within(facebookCard).queryByRole("link", { name: /Connect another Page/ })).toBeNull();
+    expect(facebookCard.querySelector('a[href^="/api/facebook/oauth/start"]')).toBeNull();
+  });
+
+  it("hides the empty-state Facebook Connect link from members and says who can connect", async () => {
+    stubSettingsFetch((url) => (url.includes("/api/workspace/bootstrap")
+      ? { body: { data: { email: "member@example.com", role: "MEMBER", plan: "free", mode: "configured" } } }
+      : undefined));
+    await act(async () => { render(<SettingsScreen />); });
+
+    const facebookCard = await screen.findByRole("region", { name: "Facebook Pages" });
+    await within(facebookCard).findByText("No Page connected");
+    expect(within(facebookCard).queryByRole("link", { name: /Connect a Facebook Page/ })).toBeNull();
+    expect(facebookCard.textContent).toMatch(/Only workspace owners and admins can connect a Facebook Page/);
+  });
+});

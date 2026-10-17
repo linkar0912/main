@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
-import { createPrismaRepository, prisma } from "./prisma";
+import { createPrismaRepository, prisma, TRANSACTION_DEFAULTS } from "./prisma";
+import { FacebookPageOwnershipError, InstagramAccountOwnershipError } from "./repository";
 
 // Mock-client tests for the Prisma repository functions hardened against
 // concurrency: they assert on the statements the repository sends, since the
@@ -299,5 +300,221 @@ describe("listConnectionsExpiringBefore", () => {
       { tokenExpiresAt: null },
       { tokenExpiresAt: { lte: new Date("2026-11-10T00:00:00.000Z") } },
     ]);
+  });
+});
+
+function uniqueViolation() {
+  return new Prisma.PrismaClientKnownRequestError("duplicate", { code: "P2002", clientVersion: "test" });
+}
+
+describe("upsertFacebookPage", () => {
+  const input = {
+    workspaceId: "workspace_b",
+    pageId: "page_1",
+    pageName: "Acme",
+    accessTokenEncrypted: "sealed-token",
+    status: "CONNECTED" as const,
+  };
+  const row = {
+    ...input,
+    id: "facebook_page_1",
+    facebookUserId: null,
+    tokenExpiresAt: null,
+    connectedAt: new Date("2026-10-01T00:00:00.000Z"),
+    version: 1,
+  };
+
+  function pageClient(model: Record<string, unknown>) {
+    const facebookPageConnection = {
+      updateMany: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      upsert: vi.fn().mockRejectedValue(uniqueViolation()),
+      findUnique: vi.fn().mockResolvedValue(null),
+      findFirst: vi.fn().mockResolvedValue(null),
+      ...model,
+    };
+    const client = { facebookPageConnection } as Record<string, unknown>;
+    client.$transaction = vi.fn(async (callback: (tx: unknown) => unknown) => callback(client));
+    return { client: client as unknown as typeof prisma, model: facebookPageConnection };
+  }
+
+  it("refuses a Page another workspace owns, with no write keyed only by pageId", async () => {
+    const { client, model } = pageClient({
+      updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+      create: vi.fn().mockRejectedValue(uniqueViolation()),
+    });
+
+    await expect(createPrismaRepository(client).upsertFacebookPage(input)).rejects.toBeInstanceOf(FacebookPageOwnershipError);
+
+    expect(model.upsert).not.toHaveBeenCalled();
+    expect(model.update).not.toHaveBeenCalled();
+    expect(model.updateMany).toHaveBeenCalledTimes(2);
+    for (const [args] of model.updateMany.mock.calls) {
+      expect(args.where).toEqual({ pageId: "page_1", workspaceId: "workspace_b" });
+    }
+  });
+
+  it("updates a same-workspace reconnect through the conditional update", async () => {
+    const { client, model } = pageClient({
+      updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      findUnique: vi.fn().mockResolvedValue(row),
+    });
+
+    const record = await createPrismaRepository(client).upsertFacebookPage(input);
+
+    expect(record).toMatchObject({ id: "facebook_page_1", pageId: "page_1", workspaceId: "workspace_b" });
+    expect(model.updateMany).toHaveBeenCalledWith({ where: { pageId: "page_1", workspaceId: "workspace_b" }, data: input });
+    expect(model.create).not.toHaveBeenCalled();
+    expect(model.upsert).not.toHaveBeenCalled();
+    expect(model.update).not.toHaveBeenCalled();
+  });
+
+  it("creates the Page when nobody holds it yet", async () => {
+    const { client, model } = pageClient({
+      updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+      create: vi.fn().mockImplementation(async ({ data }) => ({ ...row, ...data })),
+    });
+
+    const record = await createPrismaRepository(client).upsertFacebookPage(input);
+
+    expect(model.create.mock.calls[0]?.[0]?.data).toMatchObject({ ...input, id: expect.stringMatching(/^facebook_page_/) });
+    expect(record.workspaceId).toBe("workspace_b");
+    expect(model.upsert).not.toHaveBeenCalled();
+  });
+});
+
+describe("upsertConnection", () => {
+  const input = {
+    workspaceId: "workspace_b",
+    igUserId: "ig_1",
+    username: "creator",
+    accessTokenEncrypted: "sealed-token",
+    status: "CONNECTED" as const,
+  };
+  const row = {
+    ...input,
+    id: "connection_1",
+    tokenExpiresAt: null,
+    connectedAt: new Date("2026-10-01T00:00:00.000Z"),
+    version: 1,
+  };
+
+  function connectionClient(model: Record<string, unknown>) {
+    const instagramConnection = {
+      updateMany: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      upsert: vi.fn().mockRejectedValue(uniqueViolation()),
+      findUnique: vi.fn().mockResolvedValue(null),
+      findFirst: vi.fn().mockResolvedValue(null),
+      ...model,
+    };
+    const client = { instagramConnection } as Record<string, unknown>;
+    client.$transaction = vi.fn(async (callback: (tx: unknown) => unknown) => callback(client));
+    return { client: client as unknown as typeof prisma, model: instagramConnection };
+  }
+
+  it("refuses an account another workspace owns, with no write keyed only by igUserId", async () => {
+    const { client, model } = connectionClient({
+      updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+      create: vi.fn().mockRejectedValue(uniqueViolation()),
+    });
+
+    await expect(createPrismaRepository(client).upsertConnection(input)).rejects.toBeInstanceOf(InstagramAccountOwnershipError);
+
+    expect(model.upsert).not.toHaveBeenCalled();
+    expect(model.update).not.toHaveBeenCalled();
+    expect(model.updateMany).toHaveBeenCalledTimes(2);
+    for (const [args] of model.updateMany.mock.calls) {
+      expect(args.where).toEqual({ igUserId: "ig_1", workspaceId: "workspace_b" });
+    }
+  });
+
+  it("updates a same-workspace reconnect through the conditional update", async () => {
+    const { client, model } = connectionClient({
+      updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      findUnique: vi.fn().mockResolvedValue(row),
+    });
+
+    const record = await createPrismaRepository(client).upsertConnection(input);
+
+    expect(record).toMatchObject({ id: "connection_1", igUserId: "ig_1", workspaceId: "workspace_b" });
+    expect(model.updateMany).toHaveBeenCalledWith({ where: { igUserId: "ig_1", workspaceId: "workspace_b" }, data: input });
+    expect(model.create).not.toHaveBeenCalled();
+    expect(model.upsert).not.toHaveBeenCalled();
+    expect(model.update).not.toHaveBeenCalled();
+  });
+
+  it("takes the conditional update when a same-workspace insert won the race", async () => {
+    const { client, model } = connectionClient({
+      updateMany: vi.fn().mockResolvedValueOnce({ count: 0 }).mockResolvedValueOnce({ count: 1 }),
+      create: vi.fn().mockRejectedValue(uniqueViolation()),
+      findUnique: vi.fn().mockResolvedValue(row),
+    });
+
+    await expect(createPrismaRepository(client).upsertConnection(input)).resolves.toMatchObject({ id: "connection_1" });
+    expect(model.updateMany).toHaveBeenCalledTimes(2);
+    expect(model.upsert).not.toHaveBeenCalled();
+  });
+});
+
+describe("acceptInvitation", () => {
+  const invitation = {
+    id: "invitation_1",
+    workspaceId: "workspace_1",
+    email: "Grace@Example.com",
+    role: "MEMBER",
+    tokenHash: "hash_1",
+    invitedByUserId: "user_owner",
+    expiresAt: new Date("2026-10-20T00:00:00.000Z"),
+    acceptedAt: new Date("2026-10-10T10:00:00.000Z"),
+    revokedAt: null,
+    createdAt: new Date("2026-10-01T00:00:00.000Z"),
+  };
+
+  function invitationClient(claimed: number) {
+    const transaction = {
+      workspaceInvitation: {
+        updateMany: vi.fn().mockResolvedValue({ count: claimed }),
+        findUniqueOrThrow: vi.fn().mockResolvedValue(invitation),
+      },
+      workspaceMember: { createMany: vi.fn().mockResolvedValue({ count: 1 }), create: vi.fn() },
+    };
+    const outside = {
+      workspaceInvitation: { updateMany: vi.fn(), findUniqueOrThrow: vi.fn() },
+      workspaceMember: { createMany: vi.fn(), create: vi.fn() },
+    };
+    const $transaction = vi.fn(async (callback: (tx: typeof transaction) => unknown) => callback(transaction));
+    const client = { ...outside, $transaction } as unknown as typeof prisma;
+    return { client, transaction, outside, $transaction };
+  }
+
+  it("claims the invitation and inserts the member in one transaction", async () => {
+    const { client, transaction, outside, $transaction } = invitationClient(1);
+
+    const record = await createPrismaRepository(client).acceptInvitation("invitation_1", "2026-10-10T10:00:00.000Z", "user_2");
+
+    expect($transaction).toHaveBeenCalledWith(expect.any(Function), TRANSACTION_DEFAULTS);
+    expect(transaction.workspaceInvitation.updateMany).toHaveBeenCalledWith({
+      where: { id: "invitation_1", acceptedAt: null, revokedAt: null, expiresAt: { gt: new Date("2026-10-10T10:00:00.000Z") } },
+      data: { acceptedAt: new Date("2026-10-10T10:00:00.000Z") },
+    });
+    expect(transaction.workspaceMember.createMany).toHaveBeenCalledWith({
+      data: [{ id: expect.stringMatching(/^member_/), workspaceId: "workspace_1", email: "grace@example.com", role: "MEMBER", userId: "user_2" }],
+      skipDuplicates: true,
+    });
+    expect(transaction.workspaceMember.create).not.toHaveBeenCalled();
+    expect(outside.workspaceInvitation.updateMany).not.toHaveBeenCalled();
+    expect(outside.workspaceMember.create).not.toHaveBeenCalled();
+    expect(outside.workspaceMember.createMany).not.toHaveBeenCalled();
+    expect(record).toMatchObject({ id: "invitation_1", workspaceId: "workspace_1", role: "MEMBER", acceptedAt: "2026-10-10T10:00:00.000Z" });
+  });
+
+  it("returns null and adds nobody when the invitation was not claimed", async () => {
+    const { client, transaction } = invitationClient(0);
+
+    await expect(createPrismaRepository(client).acceptInvitation("invitation_1", "2026-10-10T10:00:00.000Z", "user_2")).resolves.toBeNull();
+    expect(transaction.workspaceMember.createMany).not.toHaveBeenCalled();
   });
 });

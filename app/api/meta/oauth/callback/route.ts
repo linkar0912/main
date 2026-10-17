@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import { checkValidatedSession } from "@/src/lib/auth/session";
 import { getServerEnv } from "@/src/lib/env";
 import { logger } from "@/src/lib/logger";
 import { exchangeInstagramCode, InstagramPermissionError, MetaOAuthError } from "@/src/lib/meta/oauth";
@@ -41,7 +42,7 @@ export async function GET(request: Request) {
   if (!code) {
     const metaError = url.searchParams.get("error");
     if (metaError === "access_denied") {
-      return redirectTo("cancelled");
+      return withoutStateCookie(redirectTo("cancelled"));
     }
     if (metaError) {
       logger.warn("Instagram OAuth redirect returned an error", {
@@ -49,7 +50,7 @@ export async function GET(request: Request) {
         errorCode: url.searchParams.get("error_code"),
         description: url.searchParams.get("error_description"),
       });
-      return redirectTo("denied");
+      return withoutStateCookie(redirectTo("denied"));
     }
   }
 
@@ -67,6 +68,23 @@ export async function GET(request: Request) {
 
   try {
     const repository = getRepository();
+    // Only the person who started the connect, still a manager of the same
+    // workspace, may finish it. The state cookie alone does not show that: a
+    // shared browser can hold one person's state while someone else is
+    // signed in.
+    const { session, authUnavailable } = await checkValidatedSession(request);
+    if (authUnavailable) return withoutStateCookie(redirectTo("unavailable"));
+    if (
+      !session
+      || !responseState.userId
+      || session.userId !== responseState.userId
+      || session.workspaceId !== responseState.workspaceId
+    ) {
+      return withoutStateCookie(redirectTo("invalid-state"));
+    }
+    const role = await repository.getMemberRole(session.workspaceId, session.email);
+    if (role !== "OWNER" && role !== "ADMIN") return withoutStateCookie(redirectTo("forbidden"));
+
     const token = await exchangeInstagramCode(code, env);
     const tokenExpiresAt = token.expiresIn
       ? new Date(Date.now() + token.expiresIn * 1_000).toISOString()
@@ -109,10 +127,14 @@ export async function GET(request: Request) {
     // still not atomic without a DB-level lock or reservation row, but it
     // shrinks the race window from "the whole OAuth exchange" to "one
     // in-process count query."
+    //
+    // The account that just came back is left out of the count: reconnecting
+    // an account the workspace already has (an expired one, say) renews its
+    // row instead of adding one.
     await getEntitlementService().assertEntitled(
       responseState.workspaceId,
       "instagram",
-      (await repository.listConnections(responseState.workspaceId)).length,
+      (await repository.listConnections(responseState.workspaceId)).filter((c) => c.igUserId !== profile.id).length,
     );
     await repository.upsertConnection({
       workspaceId: responseState.workspaceId,

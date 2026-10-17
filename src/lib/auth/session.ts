@@ -157,24 +157,28 @@ async function checkSessionClaims(): Promise<ClaimsCheck> {
  * email) rather than embedded in the token, since Supabase doesn't expose a
  * custom session claim shape without extra setup.
  *
+ * authUnavailable says Supabase Auth could not answer, so a null session may
+ * be wrong: a route can then say "try again shortly" instead of sending the
+ * person to sign in.
+ *
  * The `_request` parameter is reserved for symmetry with how route handlers
  * are typed (`(request: Request, context) => …`) and so a future change to
  * pull additional context (IP-bound rate limiting, request-scoped caches,
  * etc.) doesn't need to update every call site. It is intentionally unused
  * today - cookie reads happen via next/headers in checkSessionClaims().
  */
-export async function getValidatedSession(
+export async function checkValidatedSession(
   _request: Request,
   options: GetValidatedSessionOptions = {},
-): Promise<AppSession | null> {
-  const { claims } = await checkSessionClaims();
-  if (!claims) return null;
+): Promise<RequestSessionCheck> {
+  const { claims, authUnavailable } = await checkSessionClaims();
+  if (!claims) return { session: null, authUnavailable };
 
   const userId = String(claims.sub);
   const email = String(claims.email);
   const issuedAt = typeof claims.iat === "number" ? claims.iat : null;
   const access = await assertApplicationAccess(userId, email, issuedAt);
-  if (!access) return null;
+  if (!access) return { session: null, authUnavailable: false };
 
   const session = { userId, email: access.email, workspaceId: access.workspaceId };
   const allowed = await (options.validateApplicationSession?.({
@@ -182,7 +186,15 @@ export async function getValidatedSession(
     claims: claims as Record<string, unknown>,
   }) ?? true);
 
-  return allowed ? session : null;
+  return { session: allowed ? session : null, authUnavailable: false };
+}
+
+/** checkValidatedSession's session alone: null when there is none, for whatever reason. */
+export async function getValidatedSession(
+  request: Request,
+  options: GetValidatedSessionOptions = {},
+): Promise<AppSession | null> {
+  return (await checkValidatedSession(request, options)).session;
 }
 
 export type RequestSessionCheck = {
@@ -197,7 +209,7 @@ export type RequestSessionCheck = {
  * and its page can both ask for the session without repeating the Supabase
  * JWT verification and the access-state database queries.
  *
- * Route handlers must keep using getValidatedSession: cache() scopes to the
+ * Route handlers must keep using getValidatedSession (or checkValidatedSession): cache() scopes to the
  * React render pass and offers no dedupe guarantees outside one, and the
  * options hook (validateApplicationSession) is a route-handler concern.
  */

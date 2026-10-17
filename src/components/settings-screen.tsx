@@ -138,6 +138,10 @@ function sameQuietHours(a: QuietHours, b: QuietHours): boolean {
   return !a.enabled || (a.start === b.start && a.end === b.end && a.timezone === b.timezone);
 }
 
+const PLAN_REQUIRED_MESSAGE = "Your plan does not include this. Change plans in Billing.";
+const SIGN_IN_UNAVAILABLE_MESSAGE = "We could not check your sign-in just now. Try connecting again in a minute.";
+const FACEBOOK_PAGE_LIMIT_MESSAGE = "Your plan has no room for another Facebook Page. Upgrade in Billing or disconnect one first.";
+
 type InviteErrorPayload = { error?: string; limit?: number } | null;
 
 function inviteErrorMessage(payload: InviteErrorPayload): string {
@@ -171,6 +175,8 @@ export function SettingsScreen() {
   const [mode, setMode] = useState<"demo" | "configured">("demo");
   // Marks the signed-in person's own row in Team.
   const [viewerEmail, setViewerEmail] = useState("");
+  // From the bootstrap; unknown (null) keeps every link, and the server still decides.
+  const [viewerRole, setViewerRole] = useState<string | null>(null);
   // useSearchParams (not a window.location initializer) so the server and the
   // first client render agree on this value - no hydration mismatch to fix up.
   const searchParams = useSearchParams();
@@ -434,6 +440,7 @@ export function SettingsScreen() {
       setFacebookPages(fbPages);
       setMode(bootstrap?.mode ?? "demo");
       setViewerEmail(bootstrap?.email ?? "");
+      setViewerRole(bootstrap?.role ?? null);
       setConnectionsLoading(false);
 
       // Provider health can be noticeably slower than our own connection
@@ -599,17 +606,20 @@ export function SettingsScreen() {
   }
 
   const statusMessage: Record<string, string> = {
-    connected: "Instagram is connected. The account is ready for review testing.",
+    connected: "Instagram is connected. Your automations can use it now.",
     "missing-config": "Instagram setup is not complete yet. Ask the workspace administrator to finish the connection settings.",
     "missing-encryption-key": "Secure connection storage is not ready yet. Ask the workspace administrator to finish setup.",
     "invalid-state": "The Meta sign-in expired. Start the connection again.",
     cancelled: "You cancelled the Instagram authorization - click Connect again whenever you're ready.",
     denied: "Instagram refused this connection before it started. Make sure this workspace owner has a role on the Meta app (or the app is Live with Instagram advanced access), then retry.",
-    "token-exchange": "Instagram could not finish signing in. Check the connection settings or contact support. Callback address: {callbackUrl}",
+    "token-exchange": "Instagram could not finish signing in. Check the connection settings or contact support.",
     "missing-permissions": "Instagram did not approve everything Linkar needs. Reconnect and allow every requested permission.",
     "profile-fetch": "Signed in, but Linkar could not read the account profile back from Instagram. This is usually transient - retry the connection.",
     "already-connected": "That Instagram account already belongs to another Linkar workspace. Disconnect it there before connecting it here.",
     forbidden: "Only workspace owners and admins can connect Instagram accounts. Ask one of them to connect it.",
+    "limit-reached": "Your plan has no room for another Instagram account. Upgrade in Billing or disconnect one first.",
+    "plan-required": PLAN_REQUIRED_MESSAGE,
+    unavailable: SIGN_IN_UNAVAILABLE_MESSAGE,
     error: "Meta could not finish the connection. Check the app settings and try again.",
   };
 
@@ -623,9 +633,13 @@ export function SettingsScreen() {
     denied: "Facebook refused this connection before it started. Make sure this workspace owner has a role on the Meta app and that the Pages the user manages appear under their Business portfolio.",
     "token-exchange": "Facebook could not finish signing in. Check the connection settings or contact support.",
     "missing-permissions": "Facebook did not approve everything Linkar needs. Reconnect and allow every requested permission.",
-    "no-pages": "Signed in, but no Facebook Pages were found under this account. Create a Page in Business Manager or claim an existing one, then retry.",
+    "no-pages": "Signed in, but we found no Facebook Page you fully manage under this account. You need full control of a Page to connect it.",
     "page-listing": "Signed in, but Linkar could not read the Pages from Meta. This is usually transient - retry the connection.",
     "already-connected": "That Facebook Page already belongs to another Linkar workspace. Disconnect it there before connecting it here.",
+    forbidden: "Only workspace owners and admins can connect Facebook Pages. Ask one of them to connect it.",
+    "limit-reached": FACEBOOK_PAGE_LIMIT_MESSAGE,
+    "plan-required": PLAN_REQUIRED_MESSAGE,
+    unavailable: SIGN_IN_UNAVAILABLE_MESSAGE,
     error: "Meta could not finish the Facebook connection. Check the app settings and try again.",
   };
 
@@ -660,6 +674,8 @@ export function SettingsScreen() {
     team: (team?.members.length ?? 0) + (team?.invitations.length ?? 0),
   };
   const connectedChannelCount = Number(connections.length > 0) + Number(facebookPages.length > 0);
+  // Members cannot connect Pages, so they get no link that ends in a refusal.
+  const canConnectFacebook = viewerRole === null || viewerRole === "OWNER" || viewerRole === "ADMIN";
 
   const healthEntries = [...health, ...facebookHealth];
   const webhookState = connectedChannelCount === 0
@@ -816,7 +832,7 @@ export function SettingsScreen() {
                                   fields: accountHealth.requiredFields.map((field) => ({ label: WEBHOOK_FIELD_LABELS[field] ?? field, live: !accountHealth.missingFields.includes(field) })),
                                 } : undefined}
                                 healthLabel={connections.length > 1 ? `Connection check for @${connection.username}` : "Connection check"}
-                                reconnectHref="/api/meta/oauth/start"
+                                reconnectHref={`/api/meta/oauth/start?reconnect=${encodeURIComponent(connection.id)}`}
                                 reconnectHint="Reconnect Instagram to refresh the subscription."
                                 focused={focusedAccountId === connection.id}
                                 busy={disconnectingId === connection.id}
@@ -847,7 +863,7 @@ export function SettingsScreen() {
                       id="facebook-group-title"
                       title={<><FacebookGlyph size={18} brand /> Facebook Pages</>}
                       description={facebookPages.length > 0 ? `${facebookPages.length} ${facebookPages.length === 1 ? "Page" : "Pages"} replying to public comments` : undefined}
-                      action={facebookPages.length > 0 ? <a className="button button-secondary button-small" href="/api/facebook/oauth/start"><Plus size={14} aria-hidden="true" /> Connect another Page</a> : null}
+                      action={facebookPages.length > 0 && canConnectFacebook ? <a className="button button-secondary button-small" href="/api/facebook/oauth/start"><Plus size={14} aria-hidden="true" /> Connect another Page</a> : null}
                     />
                     <div className="prefs-card">
                       {facebookState === "select-page" && (
@@ -878,11 +894,15 @@ export function SettingsScreen() {
                         <div className="prefs-row prefs-empty">
                           <div className="prefs-row-copy">
                             <strong id="facebook-channel-title">No Page connected</strong>
-                            <small>Connect a Facebook Page to auto-reply to comments on its public posts.</small>
+                            <small>{canConnectFacebook
+                              ? "Connect a Facebook Page to auto-reply to comments on its public posts."
+                              : "Only workspace owners and admins can connect a Facebook Page. Ask one of them to connect it."}</small>
                           </div>
-                          <div className="prefs-row-control">
-                            <a className="button button-primary button-small" href="/api/facebook/oauth/start">Connect a Facebook Page <ExternalLink size={13} aria-hidden="true" /></a>
-                          </div>
+                          {canConnectFacebook ? (
+                            <div className="prefs-row-control">
+                              <a className="button button-primary button-small" href="/api/facebook/oauth/start">Connect a Facebook Page <ExternalLink size={13} aria-hidden="true" /></a>
+                            </div>
+                          ) : null}
                         </div>
                       ) : (
                         <ul className="prefs-list">
@@ -904,8 +924,8 @@ export function SettingsScreen() {
                                   fields: [{ label: "Feed (Page posts + comments)", live: !pageHealth.missingFields.includes("feed") }],
                                 } : undefined}
                                 healthLabel={facebookPages.length > 1 ? `Facebook connection check for ${page.pageName}` : "Facebook connection check"}
-                                reconnectHref="/api/facebook/oauth/start"
-                                reconnectHint="Reconnect the Page to refresh the subscription."
+                                reconnectHref={canConnectFacebook ? `/api/facebook/oauth/start?reconnect=${encodeURIComponent(page.id)}` : undefined}
+                                reconnectHint={canConnectFacebook ? "Reconnect the Page to refresh the subscription." : "Ask a workspace owner or admin to reconnect the Page."}
                                 focused={focusedAccountId === page.id}
                                 busy={facebookBusyId === page.id}
                                 confirming={confirmingDisconnect?.channel === "facebook" && confirmingDisconnect.id === page.id}
@@ -1250,6 +1270,8 @@ export function SettingsScreen() {
 function facebookPagesError(status: number, error: string | undefined, fallback: string): string {
   if (status === 401) return "Your session has ended. Sign in again, then connect Facebook.";
   if (status === 410) return "Choosing a Page took too long. Connect Facebook again to pick one.";
+  if (error === "limit_reached") return FACEBOOK_PAGE_LIMIT_MESSAGE;
+  if (error === "entitlement_required") return PLAN_REQUIRED_MESSAGE;
   if (typeof error === "string" && error.trim() && !/webhook|subscription/i.test(error)) return toReadableApiError(error, fallback);
   return fallback;
 }
@@ -1324,7 +1346,8 @@ function AccountRow({
   status: ConnectionStatus;
   health?: AccountHealthView;
   healthLabel: string;
-  reconnectHref: string;
+  /** Left out when the viewer cannot reconnect this account. */
+  reconnectHref?: string;
   reconnectHint: string;
   focused: boolean;
   busy: boolean;
@@ -1349,7 +1372,7 @@ function AccountRow({
         </div>
         <div className="prefs-account-actions">
           <StatusBadge {...accountStatus(status, health)} />
-          <a className={`button ${problem ? "button-secondary" : "button-ghost"} button-small`} href={reconnectHref}>Reconnect</a>
+          {reconnectHref ? <a className={`button ${problem ? "button-secondary" : "button-ghost"} button-small`} href={reconnectHref}>Reconnect</a> : null}
           <button
             className="button button-ghost button-small prefs-danger-text"
             type="button"

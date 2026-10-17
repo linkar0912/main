@@ -13,6 +13,12 @@ import { logger } from "@/src/lib/logger";
 
 export const runtime = "nodejs";
 
+/**
+ * Graph refuses subscribed_apps with a 403 (permission error #200 or #10)
+ * when the person has only partial access to the Page.
+ */
+const NEEDS_FULL_CONTROL = "You need full control of this Page on Facebook to connect it. Ask a Page admin for full control, or connect it from their account.";
+
 export async function POST(request: Request) {
   const guard = await requireManager(request);
   if (!guard.ok) return guard.error;
@@ -26,16 +32,18 @@ export async function POST(request: Request) {
   const cookieStore = await cookies();
   const sealed = cookieStore.get(FACEBOOK_PAGE_SELECTION_COOKIE)?.value;
   const selection = sealed
-    ? readFacebookPageSelection(sealed, env.facebookTokenEncryptionKey, session.workspaceId)
+    ? readFacebookPageSelection(sealed, env.facebookTokenEncryptionKey, session.workspaceId, session.userId)
     : null;
   if (!selection) return NextResponse.json({ error: "Facebook Page selection expired" }, { status: 410 });
   const repository = getRepository();
   let page;
   let subscription;
+  let subscribing = false;
   try {
     page = (await listFacebookPages(selection.userAccessToken, env.facebookApiVersion, undefined, env.facebookAppSecret))
       .find((candidate) => candidate.id === body.pageId);
     if (!page) return NextResponse.json({ error: "Facebook Page is not available to this account" }, { status: 403 });
+    subscribing = true;
     subscription = await subscribeFacebookPageToWebhooks(page.id, page.accessToken, env.facebookApiVersion, undefined, env.facebookAppSecret);
   } catch (error) {
     // listFacebookPages and subscribeFacebookPageToWebhooks both throw
@@ -48,6 +56,9 @@ export async function POST(request: Request) {
       pageId: body.pageId,
       error: error instanceof Error ? error.message : String(error),
     });
+    if (subscribing && error instanceof FacebookOAuthError && error.status === 403) {
+      return NextResponse.json({ error: NEEDS_FULL_CONTROL }, { status: 403 });
+    }
     const retryable = error instanceof FacebookOAuthError && error.retryable;
     return NextResponse.json(
       { error: retryable ? "Meta is temporarily unavailable. Try again in a moment." : "Could not connect that Facebook Page. Reconnect and try again." },
@@ -65,10 +76,14 @@ export async function POST(request: Request) {
   // reservation row, but it shrinks the race window from "the whole page
   // listing + webhook subscribe round-trip" to one in-process count query.
   try {
+    const storedPages = await repository.listFacebookPages(session.workspaceId);
+    // Reconnecting a Page the workspace already has (an expired one, say)
+    // renews its row instead of adding one, so that Page is left out of the
+    // count. The plan's Facebook switch still applies.
     await getEntitlementService().assertEntitled(
       session.workspaceId,
       "facebook",
-      (await repository.listFacebookPages(session.workspaceId)).length,
+      storedPages.filter((stored) => stored.pageId !== page.id).length,
     );
   } catch (error) {
     return entitlementErrorResponse(error)

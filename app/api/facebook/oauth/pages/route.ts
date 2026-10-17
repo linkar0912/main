@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import { getValidatedSession } from "@/src/lib/auth/session";
+import { requireManager } from "@/src/lib/auth/require-role";
 import { getServerEnv } from "@/src/lib/env";
 import { listFacebookPages, FacebookOAuthError } from "@/src/lib/facebook/oauth";
 import { FACEBOOK_PAGE_SELECTION_COOKIE, readFacebookPageSelection } from "@/src/lib/facebook/page-selection";
@@ -9,13 +9,17 @@ import { logger } from "@/src/lib/logger";
 export const runtime = "nodejs";
 
 export async function GET(request: Request) {
-  const session = await getValidatedSession(request);
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Listing the Pages uses the person's Facebook token, so it is held to the
+  // same rule as connecting one: owners and admins, and only the person who
+  // granted it (readFacebookPageSelection).
+  const guard = await requireManager(request);
+  if (!guard.ok) return guard.error;
+  const { session } = guard;
   const env = getServerEnv();
   if (!env.facebookTokenEncryptionKey) return NextResponse.json({ error: "Facebook is not configured" }, { status: 503 });
   const sealed = (await cookies()).get(FACEBOOK_PAGE_SELECTION_COOKIE)?.value;
   const selection = sealed
-    ? readFacebookPageSelection(sealed, env.facebookTokenEncryptionKey, session.workspaceId)
+    ? readFacebookPageSelection(sealed, env.facebookTokenEncryptionKey, session.workspaceId, session.userId)
     : null;
   if (!selection) return NextResponse.json({ error: "Facebook Page selection expired" }, { status: 410 });
   try {

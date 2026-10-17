@@ -41,6 +41,16 @@ describe("buildFacebookAuthorizeUrl", () => {
     expect(url.searchParams.get("scope")).toBe("pages_show_list");
   });
 
+  it("re-asks permissions the person declined, so Reconnect can grant them again", () => {
+    const url = new URL(buildFacebookAuthorizeUrl("state-xyz", {
+      facebookAppId: "app-1",
+      facebookRedirectUri: "https://app.example.com/api/facebook/oauth/callback",
+      facebookScopes: ["pages_show_list", "pages_manage_metadata"],
+      facebookApiVersion: "v25.0",
+    }));
+    expect(url.searchParams.get("auth_type")).toBe("rerequest");
+  });
+
   it("throws when facebookAppId is missing", () => {
     expect(() => buildFacebookAuthorizeUrl("s", {
       facebookAppId: "",
@@ -109,6 +119,75 @@ describe("listFacebookPages", () => {
   it("returns an empty list when the data array is missing or empty", async () => {
     globalThis.fetch = vi.fn(async () => jsonResponse(200, {})) as typeof fetch;
     expect(await listFacebookPages("u", "v25.0")).toEqual([]);
+  });
+
+  function page(id: string, extra: Record<string, unknown> = {}) {
+    return { id, name: `Page ${id}`, access_token: `tok-${id}`, ...extra };
+  }
+
+  it("follows the after cursor past the first 100 Pages, signing every request", async () => {
+    const firstBatch = Array.from({ length: 100 }, (_, index) => page(`p${index + 1}`));
+    const fetcher = vi.fn(async (input: string | URL | Request) => {
+      const url = new URL(input instanceof Request ? input.url : input.toString());
+      if (url.searchParams.get("after") === "c2") {
+        return jsonResponse(200, { data: [page("p150")], paging: { cursors: { before: "c2", after: "c3" } } });
+      }
+      return jsonResponse(200, {
+        data: firstBatch,
+        // Never fetched as given: the next request is rebuilt from the cursor.
+        paging: { cursors: { before: "c1", after: "c2" }, next: "https://evil.example/me/accounts?after=c2" },
+      });
+    });
+
+    const pages = await listFacebookPages("user-tok", "v25.0", fetcher as typeof fetch, "app-secret");
+
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(pages).toHaveLength(101);
+    expect(pages.at(-1)).toMatchObject({ id: "p150", accessToken: "tok-p150" });
+    for (const [input, init] of fetcher.mock.calls as unknown as [URL, RequestInit][]) {
+      const url = new URL(input.toString());
+      expect(url.origin).toBe("https://graph.facebook.com");
+      expect(url.pathname).toBe("/v25.0/me/accounts");
+      expect(url.searchParams.get("appsecret_proof")).toMatch(/^[0-9a-f]{64}$/);
+      expect(url.searchParams.get("limit")).toBe("100");
+      expect(new Headers(init.headers).get("authorization")).toBe("Bearer user-tok");
+      expect(init.signal).toBeInstanceOf(AbortSignal);
+    }
+    expect(new URL((fetcher.mock.calls[1]?.[0] as URL).toString()).searchParams.get("after")).toBe("c2");
+  });
+
+  it("stops following pages after 10 requests", async () => {
+    let request = 0;
+    const fetcher = vi.fn(async () => {
+      request += 1;
+      return jsonResponse(200, {
+        data: Array.from({ length: 100 }, (_, index) => page(`r${request}_${index}`)),
+        paging: { cursors: { after: `c${request + 1}` }, next: "https://graph.facebook.com/next" },
+      });
+    });
+
+    const pages = await listFacebookPages("user-tok", "v25.0", fetcher as typeof fetch);
+
+    expect(fetcher).toHaveBeenCalledTimes(10);
+    expect(pages).toHaveLength(1_000);
+  });
+
+  it("asks for Page tasks and drops Pages whose token cannot manage the Page", async () => {
+    const fetcher = vi.fn(async () => jsonResponse(200, {
+      data: [
+        page("analyst", { tasks: ["ANALYZE", "ADVERTISE"] }),
+        page("manager", { tasks: ["ANALYZE", "MANAGE"] }),
+        page("moderator", { tasks: ["MODERATE"] }),
+        page("creator", { tasks: ["CREATE_CONTENT"] }),
+        page("untasked"),
+      ],
+    }));
+
+    const pages = await listFacebookPages("user-tok", "v25.0", fetcher as typeof fetch);
+
+    const fields = new URL((fetcher.mock.calls[0] as unknown as [URL])[0].toString()).searchParams.get("fields")?.split(",");
+    expect(fields).toEqual(expect.arrayContaining(["id", "name", "access_token", "category", "tasks"]));
+    expect(pages.map((entry) => entry.id)).toEqual(["manager", "moderator", "creator", "untasked"]);
   });
 });
 

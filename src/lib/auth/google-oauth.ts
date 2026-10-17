@@ -34,11 +34,16 @@ function isTimeoutOrAbort(error: unknown): boolean {
  * hash to the ID token's `nonce` claim, so the claim must already be a hash
  * for the two to match - callers pass the same raw `nonce` straight through
  * to signInWithIdToken.
+ *
+ * `selectAccount` asks Google to show its account chooser even when the
+ * browser is signed in to one account, so an invited teammate picks the
+ * account the invitation went to instead of a personal one in one click.
  */
 export function buildGoogleAuthorizeUrl(
   state: string,
   nonce: string,
   config: Pick<GoogleOAuthConfig, "googleClientId" | "googleRedirectUri">,
+  options: { selectAccount?: boolean } = {},
 ): string {
   if (!config.googleClientId) throw new Error("Google sign-in is not configured");
   const url = new URL("https://accounts.google.com/o/oauth2/v2/auth");
@@ -48,6 +53,7 @@ export function buildGoogleAuthorizeUrl(
   url.searchParams.set("scope", "openid email profile");
   url.searchParams.set("state", state);
   url.searchParams.set("nonce", createHash("sha256").update(nonce).digest("hex"));
+  if (options.selectAccount) url.searchParams.set("prompt", "select_account");
   return url.toString();
 }
 

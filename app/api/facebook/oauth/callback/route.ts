@@ -1,6 +1,8 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import { checkValidatedSession } from "@/src/lib/auth/session";
 import { getServerEnv } from "@/src/lib/env";
+import { getRepository } from "@/src/lib/repository-provider";
 import { logger } from "@/src/lib/logger";
 import {
   exchangeFacebookCode,
@@ -44,7 +46,7 @@ export async function GET(request: Request) {
   if (!code) {
     const metaError = url.searchParams.get("error");
     if (metaError === "access_denied") {
-      return redirectTo("cancelled");
+      return withoutStateCookie(redirectTo("cancelled"));
     }
     if (metaError) {
       logger.warn("Facebook OAuth redirect returned an error", {
@@ -52,7 +54,7 @@ export async function GET(request: Request) {
         errorCode: url.searchParams.get("error_code"),
         description: url.searchParams.get("error_description"),
       });
-      return redirectTo("denied");
+      return withoutStateCookie(redirectTo("denied"));
     }
   }
 
@@ -68,8 +70,29 @@ export async function GET(request: Request) {
     return withoutStateCookie(redirectTo("missing-encryption-key"));
   }
 
+  // Graph helpers all throw FacebookOAuthError, so the step that failed is
+  // what tells a refused code apart from a Page listing that did not load.
+  let failedStep: "token-exchange" | "page-listing" = "token-exchange";
   try {
+    // Only the person who started the connect, still a manager of the same
+    // workspace, may finish it. The state cookie alone does not show that: a
+    // shared browser can hold one person's state while someone else is
+    // signed in.
+    const { session, authUnavailable } = await checkValidatedSession(request);
+    if (authUnavailable) return withoutStateCookie(redirectTo("unavailable"));
+    if (
+      !session
+      || !responseState.userId
+      || session.userId !== responseState.userId
+      || session.workspaceId !== responseState.workspaceId
+    ) {
+      return withoutStateCookie(redirectTo("invalid-state"));
+    }
+    const role = await getRepository().getMemberRole(session.workspaceId, session.email);
+    if (role !== "OWNER" && role !== "ADMIN") return withoutStateCookie(redirectTo("forbidden"));
+
     const token = await exchangeFacebookCode(code, env);
+    failedStep = "page-listing";
     const tokenExpiresAt = token.expiresIn
       ? new Date(Date.now() + token.expiresIn * 1_000).toISOString()
       : undefined;
@@ -83,7 +106,8 @@ export async function GET(request: Request) {
     response.cookies.set({
       name: FACEBOOK_PAGE_SELECTION_COOKIE,
       value: createFacebookPageSelection({
-        workspaceId: responseState.workspaceId,
+        workspaceId: session.workspaceId,
+        userId: session.userId,
         facebookUserId,
         userAccessToken: token.accessToken,
         tokenExpiresAt,
@@ -104,7 +128,7 @@ export async function GET(request: Request) {
     });
     let status = "error";
     if (error instanceof FacebookPermissionError) status = "missing-permissions";
-    else if (error instanceof FacebookOAuthError) status = "token-exchange";
+    else if (error instanceof FacebookOAuthError) status = failedStep;
     else if (error instanceof FacebookApiError) status = "page-listing";
     return withoutStateCookie(redirectTo(status));
   }

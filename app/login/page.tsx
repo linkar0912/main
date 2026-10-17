@@ -40,6 +40,14 @@ const ERRORS: Record<string, string> = {
   "resend-email": "Enter a valid email address to resend the confirmation link.",
   "resend-locked": "Too many confirmation emails requested. Try again in an hour.",
   unavailable: "We could not reach the sign-in service, so your password was not checked. Try again in a minute.",
+  // Google and Facebook sign-in (app/api/auth/oauth/google/callback,
+  // app/auth/oauth/callback). No password was involved, so not "unavailable".
+  "oauth-unavailable": "We could not finish signing you in just now. Try again in a minute.",
+  "oauth-confirm": "Check your inbox. We sent a link to confirm your email address. Open it, then sign in again.",
+  "oauth-blocked": "This account cannot sign in. Contact support if you think this is a mistake.",
+  "oauth-signup-disabled": "New accounts cannot be created right now. Try again later, or sign in with an existing account.",
+  "oauth-no-email": "Facebook did not share your email address, so we could not sign you in. Try again and allow access to your email, or continue with Google or your email and password.",
+  "invite-mismatch": "That invitation was sent to a different email address, has expired, or was already used. Continue with the account the invitation was sent to, or ask for a new invitation.",
 };
 
 // Shown on a page load, when nothing was submitted: Supabase Auth could not

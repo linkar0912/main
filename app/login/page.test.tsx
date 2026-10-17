@@ -172,6 +172,25 @@ describe("auth pages", () => {
     expect(screen.getByRole("alert").textContent).toBe("Signing in with Google or Facebook did not finish. Try again, or use your email and password.");
   });
 
+  it("explains each way a Google or Facebook sign-in can stop", async () => {
+    const copy: Record<string, string> = {
+      "oauth-unavailable": "We could not finish signing you in just now. Try again in a minute.",
+      "oauth-confirm": "Check your inbox. We sent a link to confirm your email address. Open it, then sign in again.",
+      "oauth-blocked": "This account cannot sign in. Contact support if you think this is a mistake.",
+      "oauth-signup-disabled": "New accounts cannot be created right now. Try again later, or sign in with an existing account.",
+      "oauth-no-email": "Facebook did not share your email address, so we could not sign you in. Try again and allow access to your email, or continue with Google or your email and password.",
+      "invite-mismatch": "That invitation was sent to a different email address, has expired, or was already used. Continue with the account the invitation was sent to, or ask for a new invitation.",
+    };
+    for (const [error, text] of Object.entries(copy)) {
+      render(await LoginPage({ searchParams: Promise.resolve({ error, next: "/automations", invite: "raw-token" }) }));
+      expect(screen.getByRole("alert").textContent, error).toBe(text);
+      expect(text, error).not.toMatch(/\u2014|\bpayloads?\b|\brecipients?\b|\bwebhooks?\b/i);
+      // The invitation stays on the form, so the next attempt can still accept it.
+      expect(screen.getByRole("form", { name: "Sign in to Linkar" }).querySelector<HTMLInputElement>('input[name="invite"]')?.value, error).toBe("raw-token");
+      cleanup();
+    }
+  });
+
   it("carries an invite through the login form, OAuth links and the signup link", async () => {
     render(await LoginPage({ searchParams: Promise.resolve({ next: "/automations", invite: "raw-token" }) }));
     const form = screen.getByRole("form", { name: "Sign in to Linkar" });

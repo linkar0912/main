@@ -21,6 +21,7 @@ const HTTP_METHODS = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"
 /** Workspace routes: a validated app session (optionally with a role check). */
 const SESSION_GUARDS = [
   "getValidatedSession",
+  "checkValidatedSession",
   "requireRole",
   "requireManager",
   "requireBillingReader",

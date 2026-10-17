@@ -71,6 +71,10 @@ export function buildFacebookAuthorizeUrl(
   url.searchParams.set("redirect_uri", config.facebookRedirectUri);
   url.searchParams.set("response_type", "code");
   url.searchParams.set("scope", config.facebookScopes.join(","));
+  // Re-asks only the permissions the person declined earlier. Without it Meta
+  // silently skips a declined permission, so Reconnect could never restore one
+  // a person switched off.
+  url.searchParams.set("auth_type", "rerequest");
   url.searchParams.set("state", state);
   return url.toString();
 }
@@ -142,11 +146,27 @@ export type FacebookPageSummary = {
   category?: string;
 };
 
+/** Graph caps /me/accounts at 100 rows a request; follow at most 10 requests. */
+const PAGES_PER_REQUEST = 100;
+const MAX_PAGE_REQUESTS = 10;
+const MAX_PAGES = 1_000;
+
+/**
+ * Page tasks whose Page token subscribed_apps accepts. A person who can only
+ * analyse or advertise gets a Page token that cannot subscribe the Page.
+ */
+const MANAGING_PAGE_TASKS = new Set(["CREATE_CONTENT", "MANAGE", "MODERATE"]);
+
 /**
  * List the Pages the current user owns/administrates. The user token must
  * carry `pages_show_list` for this call to return anything. Each Page row
  * carries its own Page access token; we persist that (not the user token)
  * because every Page-scoped Graph API call authenticates with the Page token.
+ *
+ * Follows Graph paging up to MAX_PAGE_REQUESTS requests or MAX_PAGES Pages.
+ * Each next request is rebuilt from the `after` cursor on the same
+ * /me/accounts URL rather than fetching `paging.next` as given, so every
+ * request stays on graph.facebook.com and carries appsecret_proof.
  */
 export async function listFacebookPages(
   userAccessToken: string,
@@ -154,28 +174,55 @@ export async function listFacebookPages(
   fetcher: typeof fetch = fetch,
   appSecret?: string,
 ): Promise<FacebookPageSummary[]> {
-  const url = new URL(`https://graph.facebook.com/${apiVersion}/me/accounts`);
-  url.searchParams.set("fields", "id,name,access_token,category");
-  url.searchParams.set("limit", "100");
-  withAppSecretProof(url, userAccessToken, appSecret);
-  const payload = await jsonOrThrow(
-    await fetchWithTimeout(fetcher, url, { headers: { authorization: `Bearer ${userAccessToken}` } }),
-  );
-  const data = Array.isArray(payload.data) ? payload.data : [];
   const pages: FacebookPageSummary[] = [];
-  for (const entry of data) {
-    if (typeof entry !== "object" || entry === null) continue;
-    const candidate = entry as Record<string, unknown>;
-    if (typeof candidate.id !== "string" || !candidate.id) continue;
-    if (typeof candidate.access_token !== "string" || !candidate.access_token) continue;
-    pages.push({
-      id: candidate.id,
-      name: typeof candidate.name === "string" ? candidate.name : candidate.id,
-      accessToken: candidate.access_token,
-      ...(typeof candidate.category === "string" ? { category: candidate.category } : {}),
-    });
+  const seenCursors = new Set<string>();
+  let after: string | undefined;
+  for (let request = 0; request < MAX_PAGE_REQUESTS && pages.length < MAX_PAGES; request += 1) {
+    const url = new URL(`https://graph.facebook.com/${apiVersion}/me/accounts`);
+    url.searchParams.set("fields", "id,name,access_token,category,tasks");
+    url.searchParams.set("limit", String(PAGES_PER_REQUEST));
+    if (after) url.searchParams.set("after", after);
+    withAppSecretProof(url, userAccessToken, appSecret);
+    const payload = await jsonOrThrow(
+      await fetchWithTimeout(fetcher, url, { headers: { authorization: `Bearer ${userAccessToken}` } }),
+    );
+    const data = Array.isArray(payload.data) ? payload.data : [];
+    for (const entry of data) {
+      const summary = toPageSummary(entry);
+      if (summary) pages.push(summary);
+    }
+    after = nextPageCursor(payload);
+    // Graph leaves `next` out on the last page; stop on an empty batch or a
+    // repeated cursor too, so a misbehaving response cannot loop.
+    if (!after || data.length === 0 || seenCursors.has(after)) break;
+    seenCursors.add(after);
   }
-  return pages;
+  return pages.slice(0, MAX_PAGES);
+}
+
+function nextPageCursor(payload: Record<string, unknown>): string | undefined {
+  const paging = typeof payload.paging === "object" && payload.paging !== null ? payload.paging as Record<string, unknown> : {};
+  if (typeof paging.next !== "string" || !paging.next) return undefined;
+  const cursors = typeof paging.cursors === "object" && paging.cursors !== null ? paging.cursors as Record<string, unknown> : {};
+  return typeof cursors.after === "string" && cursors.after ? cursors.after : undefined;
+}
+
+function toPageSummary(entry: unknown): FacebookPageSummary | null {
+  if (typeof entry !== "object" || entry === null) return null;
+  const candidate = entry as Record<string, unknown>;
+  if (typeof candidate.id !== "string" || !candidate.id) return null;
+  if (typeof candidate.access_token !== "string" || !candidate.access_token) return null;
+  // Keep a Page when Graph leaves tasks out; drop it only when the tasks it
+  // lists include none that let the Page token subscribe the Page.
+  if (Array.isArray(candidate.tasks) && !candidate.tasks.some((task) => typeof task === "string" && MANAGING_PAGE_TASKS.has(task))) {
+    return null;
+  }
+  return {
+    id: candidate.id,
+    name: typeof candidate.name === "string" ? candidate.name : candidate.id,
+    accessToken: candidate.access_token,
+    ...(typeof candidate.category === "string" ? { category: candidate.category } : {}),
+  };
 }
 
 export async function validateFacebookPermissions(

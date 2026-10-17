@@ -43,7 +43,7 @@ vi.mock("@/src/lib/repository-provider", () => ({
   }),
 }));
 
-const { checkRequestSession, getRequestSession, getValidatedSession, safeNextPath } = await import("./session");
+const { checkRequestSession, checkValidatedSession, getRequestSession, getValidatedSession, safeNextPath } = await import("./session");
 
 /** The options session.ts gave the Supabase server client. */
 function clientOptions() {
@@ -276,6 +276,35 @@ describe("session checks while Supabase Auth is failing", () => {
       session: { userId: "user_1", email: "member@example.com", workspaceId: "workspace_1" },
       authUnavailable: false,
     });
+  });
+
+  // The connect routes send a person back to a "try again shortly" banner
+  // instead of the sign-in page when "no session" may only mean Auth is down.
+  it("tells a route handler when Supabase Auth could not answer, while getValidatedSession still answers null", async () => {
+    const request = new Request("http://localhost");
+
+    mocks.getClaims.mockResolvedValue({ data: null, error: new AuthRetryableFetchError("Service Unavailable", 503) });
+    expect(await checkValidatedSession(request)).toEqual({ session: null, authUnavailable: true });
+    expect(await getValidatedSession(request)).toBeNull();
+
+    mocks.getClaims.mockRejectedValue(new AuthRetryableFetchError("Supabase Auth answered 503 to a token refresh", 503));
+    expect(await checkValidatedSession(request)).toEqual({ session: null, authUnavailable: true });
+    expect(await getValidatedSession(request)).toBeNull();
+
+    mocks.getClaims.mockResolvedValue({ data: null, error: new AuthApiError("Request rate limit reached", 429, "over_request_rate_limit") });
+    expect(await checkValidatedSession(request)).toEqual({ session: null, authUnavailable: true });
+
+    mocks.getClaims.mockResolvedValue({ data: null, error: new AuthApiError("Invalid Refresh Token: Refresh Token Not Found", 400, "refresh_token_not_found") });
+    expect(await checkValidatedSession(request)).toEqual({ session: null, authUnavailable: false });
+    expect(mocks.getSessionAccessSnapshot).not.toHaveBeenCalled();
+
+    mocks.getClaims.mockResolvedValue({ data: { claims: { sub: "user_1", email: "member@example.com" } }, error: null });
+    expect(await checkValidatedSession(request)).toEqual({
+      session: { userId: "user_1", email: "member@example.com", workspaceId: "workspace_1" },
+      authUnavailable: false,
+    });
+    expect(await checkValidatedSession(request, { validateApplicationSession: () => false }))
+      .toEqual({ session: null, authUnavailable: false });
   });
 
   it("still resolves the session in a Server Component render, where cookies cannot be written", async () => {

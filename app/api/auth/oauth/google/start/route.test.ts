@@ -52,6 +52,19 @@ describe("GET /api/auth/oauth/google/start", () => {
     expect(setCookie.toLowerCase()).toContain("httponly");
   });
 
+  it("keeps the state cookie for 30 minutes, as long as the signed state lasts", async () => {
+    const response = await GET(startRequest({ next: "/automations" }));
+    expect(response.headers.get("set-cookie")).toContain("Max-Age=1800");
+  });
+
+  it("shows Google's account chooser for an invitation, so a personal account is not picked in one click", async () => {
+    const invited = new URL(location(await GET(startRequest({ next: "/automations", invite: "tok-123" }))));
+    expect(invited.searchParams.get("prompt")).toBe("select_account");
+
+    const plain = new URL(location(await GET(startRequest({ next: "/automations" }))));
+    expect(plain.searchParams.has("prompt")).toBe(false);
+  });
+
   it("shares the state cookie across production app and admin subdomains", async () => {
     vi.resetModules();
     vi.doMock("@/src/lib/env", () => ({

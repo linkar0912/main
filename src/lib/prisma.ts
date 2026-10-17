@@ -1038,14 +1038,23 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
     },
 
     async acceptInvitation(id, nowIso, userId) {
-      const accepted = await client.workspaceInvitation.updateMany({
-        where: { id, acceptedAt: null, revokedAt: null, expiresAt: { gt: new Date(nowIso) } },
-        data: { acceptedAt: new Date(nowIso) },
-      });
-      if (accepted.count !== 1) return null;
-      const record = await client.workspaceInvitation.findUniqueOrThrow({ where: { id } });
-      await addMember(record.workspaceId, record.email, record.role as MemberRole, userId);
-      return mapInvitation(record);
+      // Claim and membership commit together, so a failed insert cannot leave
+      // an invitation marked accepted with nobody added. A caught P2002 aborts
+      // a Postgres transaction, so duplicates are skipped (ON CONFLICT DO
+      // NOTHING) instead of going through addMember.
+      return client.$transaction(async (transaction) => {
+        const accepted = await transaction.workspaceInvitation.updateMany({
+          where: { id, acceptedAt: null, revokedAt: null, expiresAt: { gt: new Date(nowIso) } },
+          data: { acceptedAt: new Date(nowIso) },
+        });
+        if (accepted.count !== 1) return null;
+        const record = await transaction.workspaceInvitation.findUniqueOrThrow({ where: { id } });
+        await transaction.workspaceMember.createMany({
+          data: [{ id: createId("member"), workspaceId: record.workspaceId, email: record.email.toLowerCase(), role: record.role, userId }],
+          skipDuplicates: true,
+        });
+        return mapInvitation(record);
+      }, TRANSACTION_DEFAULTS);
     },
 
     async revokeInvitation(workspaceId, id) {
@@ -1591,32 +1600,27 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
     },
 
     async upsertConnection(input) {
-      // Wrap the ownership check and the upsert in a single transaction so
-      // two concurrent calls from different workspaces cannot both pass the
-      // pre-check and then race on the unique key. The transaction's
-      // SERIALIZABLE-equivalent isolation (Prisma's default for $transaction
-      // callbacks) makes the check + write atomic.
+      // The ownership check lives in the UPDATE's own WHERE clause, so it holds
+      // under READ COMMITTED: a row owned by another workspace never matches,
+      // and nothing writes by igUserId alone. No row matched: insert. A unique
+      // violation means someone else inserted first; retry the conditional
+      // update, and 0 rows then means another workspace owns the account.
+      const updateOwned = async () => {
+        const owned = { igUserId: input.igUserId, workspaceId: input.workspaceId };
+        const updated = await client.instagramConnection.updateMany({ where: owned, data: input });
+        if (updated.count !== 1) return null;
+        const record = await client.instagramConnection.findUnique({ where: owned });
+        return record ? mapConnection(record) : null;
+      };
+      const existing = await updateOwned();
+      if (existing) return existing;
       try {
-        return await client.$transaction(async (transaction) => {
-          const owner = await transaction.instagramConnection.findUnique({ where: { igUserId: input.igUserId } });
-          if (owner && owner.workspaceId !== input.workspaceId) throw new InstagramAccountOwnershipError();
-          const record = await transaction.instagramConnection.upsert({
-            where: { igUserId: input.igUserId },
-            create: { id: createId("connection"), ...input },
-            update: input,
-          });
-          return mapConnection(record);
-        });
+        return mapConnection(await client.instagramConnection.create({ data: { id: createId("connection"), ...input } }));
       } catch (error) {
-        if (error instanceof InstagramAccountOwnershipError) throw error;
         if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
-        // A concurrent transaction from another workspace won the unique-key
-        // race. Re-read and surface the same ownership error so the caller
-        // does not silently overwrite a foreign connection.
-        const winner = await client.instagramConnection.findUnique({ where: { igUserId: input.igUserId } });
-        if (winner?.workspaceId !== input.workspaceId) throw new InstagramAccountOwnershipError();
-        if (!winner) throw error;
-        return mapConnection(winner);
+        const winner = await updateOwned();
+        if (!winner) throw new InstagramAccountOwnershipError();
+        return winner;
       }
     },
 
@@ -1635,24 +1639,24 @@ export function createPrismaRepository(client = prisma): AutomationRepository {
       return record ? { workspaceId: record.workspaceId, page: mapFacebookPage(record) } : null;
     },
     async upsertFacebookPage(input) {
+      // Same conditional update, insert, then conditional update on P2002 as
+      // upsertConnection: nothing writes by pageId alone.
+      const updateOwned = async () => {
+        const owned = { pageId: input.pageId, workspaceId: input.workspaceId };
+        const updated = await client.facebookPageConnection.updateMany({ where: owned, data: input });
+        if (updated.count !== 1) return null;
+        const record = await client.facebookPageConnection.findUnique({ where: owned });
+        return record ? mapFacebookPage(record) : null;
+      };
+      const existing = await updateOwned();
+      if (existing) return existing;
       try {
-        return await client.$transaction(async (transaction) => {
-          const owner = await transaction.facebookPageConnection.findUnique({ where: { pageId: input.pageId } });
-          if (owner && owner.workspaceId !== input.workspaceId) throw new FacebookPageOwnershipError();
-          const record = await transaction.facebookPageConnection.upsert({
-            where: { pageId: input.pageId },
-            create: { id: createId("facebook_page"), ...input },
-            update: input,
-          });
-          return mapFacebookPage(record);
-        });
+        return mapFacebookPage(await client.facebookPageConnection.create({ data: { id: createId("facebook_page"), ...input } }));
       } catch (error) {
-        if (error instanceof FacebookPageOwnershipError) throw error;
         if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
-        const winner = await client.facebookPageConnection.findUnique({ where: { pageId: input.pageId } });
-        if (winner?.workspaceId !== input.workspaceId) throw new FacebookPageOwnershipError();
-        if (!winner) throw error;
-        return mapFacebookPage(winner);
+        const winner = await updateOwned();
+        if (!winner) throw new FacebookPageOwnershipError();
+        return winner;
       }
     },
     async updateFacebookPageToken(id, accessTokenEncrypted, tokenExpiresAt) {

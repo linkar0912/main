@@ -80,6 +80,7 @@ const CONNECT_MESSAGES: Record<string, string> = {
   "limit-reached": "Your plan has no room for another account.",
   "already-connected": "That account is already connected to another Linkar workspace.",
   "no-pages": "We couldn’t find a Facebook Page you manage.",
+  unavailable: "We couldn’t check your sign-in just now. Try again in a minute.",
 };
 
 function connectMessage(status: string | undefined, channel: "Instagram" | "Facebook"): string | null {
@@ -542,6 +543,11 @@ export function OnboardingFlow({ view, client, connectReturn, initialStep, initi
       setPlanRequest((request) => request + 1);
     } catch (error) {
       setFacebookError(error instanceof Error ? error.message : "Could not connect that Page");
+      // Taken by another workspace or no room on the plan (409), or the
+      // choice expired (410): picking again here cannot work, so the Connect
+      // link comes back instead of a picker that would fail the same way.
+      const status = failedStatus(error);
+      if (status === 409 || status === 410) setFacebookChoices(null);
     } finally {
       setBusy(false);
     }
