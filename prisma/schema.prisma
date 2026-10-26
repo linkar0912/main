@@ -119,6 +119,11 @@ enum AdminDeletionStageState {
   FAILED
 }
 
+enum AdminMcpKeyScope {
+  READ
+  WRITE
+}
+
 enum ExecutionStatus {
   PROCESSING
   SENT
@@ -1045,4 +1050,22 @@ model AdminDeletionStage {
 
   @@id([jobId, stage])
   @@index([state, updatedAt])
+}
+
+/// Owner-minted bearer key for the admin MCP endpoint. Only the SHA-256
+/// digest of the key is stored; the key itself is shown once at creation.
+model AdminMcpKey {
+  id          String           @id
+  ownerUserId String
+  ownerEmail  String
+  label       String
+  scope       AdminMcpKeyScope
+  tokenHash   String           @unique
+  tokenPrefix String
+  createdAt   DateTime         @default(now())
+  expiresAt   DateTime
+  lastUsedAt  DateTime?
+  revokedAt   DateTime?
+
+  @@index([ownerUserId, createdAt])
 }

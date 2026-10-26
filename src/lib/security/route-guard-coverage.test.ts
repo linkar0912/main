@@ -29,7 +29,16 @@ const SESSION_GUARDS = [
 ];
 
 /** Owner console routes: platform-owner allow-list plus AAL2 (2FA). */
-const ADMIN_GUARDS = ["requireAdminRead", "requireAdminWrite", "getPlatformOwnerSession"];
+const ADMIN_GUARDS = ["requireAdminRead", "requireAdminWrite", "requireAdminSessionRead", "requireAdminSessionWrite", "getPlatformOwnerSession"];
+
+/**
+ * The owner MCP endpoint authenticates an owner-minted bearer key instead of a
+ * browser session; the admin routes it calls in-process still run their own
+ * AAL2 guards, which accept the verified key's owner.
+ */
+const ADMIN_KEY_ROUTES: Record<string, string> = {
+  "app/api/admin/mcp/route.ts": "owner MCP key minted at AAL2, re-checked against the owner allowlist and control state on every request",
+};
 
 /**
  * Owner console routes allowed to use the AAL1 owner guard: enrolling the
@@ -149,7 +158,9 @@ describe("route handler guard coverage", () => {
     const failures = routes
       .filter((route) => route.path.startsWith("app/api/admin/"))
       .flatMap((route) => {
-        const guards = route.path in ADMIN_AAL1_ROUTES ? [...ADMIN_GUARDS, "requireAdminIdentityWrite", "getPlatformOwnerIdentity"] : ADMIN_GUARDS;
+        const guards = route.path in ADMIN_AAL1_ROUTES
+          ? [...ADMIN_GUARDS, "requireAdminIdentityWrite", "getPlatformOwnerIdentity"]
+          : route.path in ADMIN_KEY_ROUTES ? ["authenticateAdminMcpKey"] : ADMIN_GUARDS;
         return unguardedHandlers(route.source, guards).map((method) => `${method} ${route.path}`);
       });
     expect(failures).toEqual([]);

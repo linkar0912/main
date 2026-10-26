@@ -56,4 +56,33 @@ describe("AuditConsole", () => {
     expect((await screen.findByRole("status")).textContent).toContain("Audit log CSV downloaded.");
     expect(screen.queryByRole("dialog")).toBeNull();
   });
+
+  it("filters to actions made with Claude MCP keys", async () => {
+    render(<AuditConsole events={[event]} nextCursor={null} filters={{ actor: "", action: "", phase: "", origin: "" }} />);
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Made with" }), "Claude MCP key");
+    await userEvent.click(screen.getByRole("button", { name: "Apply filters" }));
+    expect(push).toHaveBeenCalledWith("/admin/audit?origin=mcp");
+  });
+
+  it("labels an MCP action and links to everything its key did", () => {
+    render(<AuditConsole events={[{ ...event, origin: "mcp", mcpKeyId: "mcpkey_1" }]} nextCursor={null} filters={{ actor: "", action: "", phase: "" }} />);
+    expect(screen.getByText("via Claude MCP key")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "This key’s actions" }).getAttribute("href")).toBe("/admin/audit?mcpKeyId=mcpkey_1");
+  });
+
+  it("keeps the key filter when other filters change", async () => {
+    render(<AuditConsole events={[]} nextCursor={null} filters={{ actor: "", action: "", phase: "", mcpKeyId: "mcpkey_1" }} />);
+    expect(screen.getByText(/Only actions made with MCP key/)).toBeTruthy();
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Outcome" }), "Failed");
+    await userEvent.click(screen.getByRole("button", { name: "Apply filters" }));
+    expect(push).toHaveBeenCalledWith("/admin/audit?phase=FAILURE&mcpKeyId=mcpkey_1");
+  });
+
+  it("lists MCP key changes in the action filter and names their target", () => {
+    render(<AuditConsole events={[{ ...event, action: "mcp_key.revoke", targetType: "mcp_key", workspaceId: null }]} nextCursor={null} filters={{ actor: "", action: "", phase: "" }} />);
+    const action = screen.getByRole("combobox", { name: "Action" });
+    expect(within(action).getByRole("option", { name: "Revoked a Claude MCP key" })).toBeTruthy();
+    expect(screen.getAllByText("Claude MCP key").length).toBeGreaterThan(0);
+  });
 });
+

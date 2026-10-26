@@ -13,7 +13,7 @@ import type { FacebookNormalizedEvent } from "@/src/lib/facebook/types";
 import type { NormalizedEvent } from "@/src/lib/automation/types";
 import { isValidationError, toReadableValidationError } from "@/src/lib/validation-error";
 import { AdminWorkspaceError } from "../workspace-service";
-import type { AdminOperationKind } from "./types";
+import { adminOperationActions, type AdminOperationKind } from "./types";
 
 export const AdminOperationCommandSchema = z.object({
   action: z.string().regex(/^[a-z_]{2,40}$/),
@@ -22,13 +22,6 @@ export const AdminOperationCommandSchema = z.object({
 }).strict();
 export type AdminOperationCommand = z.infer<typeof AdminOperationCommandSchema>;
 
-const allowed: Record<AdminOperationKind, readonly string[]> = {
-  automation: ["update", "activate", "pause", "archive", "restore_version"],
-  sequence: ["update", "activate", "pause", "archive"], broadcast: ["cancel_pending", "retry_failed"],
-  contact: ["update", "suppress", "unsuppress", "delete", "export_one"],
-  tracked_link: ["update_destination", "disable", "enable", "delete"],
-  delivery: ["retry", "cancel_pending", "release_stale_claim"], webhook: ["reprocess"],
-};
 
 async function protectWorkspace(workspaceId: string) {
   const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId }, select: { status: true, members: { where: { userId: { in: getServerEnv().platformOwnerUserIds } }, select: { userId: true }, take: 1 } } });
@@ -74,7 +67,7 @@ function csvCell(value: unknown): string {
 }
 
 export async function executeAdminOperation(kind: AdminOperationKind, id: string, command: AdminOperationCommand, actorUserId: string) {
-  if (!allowed[kind].includes(command.action)) throw new AdminWorkspaceError(400, "action_not_allowed");
+  if (!adminOperationActions[kind].includes(command.action)) throw new AdminWorkspaceError(400, "action_not_allowed");
 
   if (kind === "automation") {
     const record = await prisma.automation.findUnique({ where: { id } }); if (!record) throw new AdminWorkspaceError(404, "operation_not_found");

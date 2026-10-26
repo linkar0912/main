@@ -116,3 +116,20 @@ describe("owner authorization DAL", () => {
     await expect(getPlatformOwnerSession()).rejects.toMatchObject({ status: 401, code: "unauthorized" });
   });
 });
+
+describe("owner lookup inside an MCP key principal", () => {
+  it("returns the key's owner without reading a Supabase session", async () => {
+    const { runWithAdminKeyPrincipal, currentAdminKeyPrincipal } = await import("./mcp/principal");
+    const owner = { userId: OWNER_ID, email: "owner@linkar.in", sessionId: "mcp_key:mcpkey_1", aal: "aal2" as const };
+    mocks.getClaims.mockReset();
+
+    const seen = await runWithAdminKeyPrincipal({ keyId: "mcpkey_1", label: "Laptop", scope: "READ", expiresAt: "2026-11-24T00:00:00.000Z", owner }, async () => ({
+      session: await getPlatformOwnerSession(),
+      identity: await getPlatformOwnerIdentity(),
+    }));
+
+    expect(seen).toEqual({ session: owner, identity: owner });
+    expect(mocks.getClaims).not.toHaveBeenCalled();
+    expect(currentAdminKeyPrincipal()).toBeUndefined();
+  });
+});

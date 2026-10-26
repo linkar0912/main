@@ -67,6 +67,7 @@ vi.mock("@/src/lib/supabase/server", () => ({
 }));
 
 const { GET, POST } = await import("./route");
+const { runWithAdminKeyPrincipal } = await import("@/src/lib/admin/mcp/principal");
 
 function request(body: unknown): Request {
   return new Request("https://app.linkar.in/api/admin/security", {
@@ -242,4 +243,25 @@ describe("/api/admin/security", () => {
     expect(mocks.sql).toHaveBeenCalledBefore(mocks.listFactors);
   });
 
+});
+
+describe("/api/admin/security with an MCP key", () => {
+  const principal = { keyId: "mcpkey_1", label: "Laptop", scope: "WRITE" as const, expiresAt: "2026-11-24T00:00:00.000Z", owner: { ...OWNER, sessionId: "mcp_key:mcpkey_1", aal: "aal2" as const } };
+
+  beforeEach(() => {
+    for (const mock of Object.values(mocks)) mock.mockReset();
+  });
+
+  it("never lets a key read or change owner MFA", async () => {
+    const read = await runWithAdminKeyPrincipal(principal, () => GET(new Request("https://admin.linkar.in/api/admin/security")));
+    const write = await runWithAdminKeyPrincipal(principal, () => POST(request({ action: "enroll" })));
+
+    for (const response of [read, write]) {
+      expect(response.status).toBe(403);
+      expect(await response.json()).toEqual({ error: "mcp_key_not_allowed" });
+    }
+    expect(mocks.getPlatformOwnerIdentity).not.toHaveBeenCalled();
+    expect(mocks.listFactors).not.toHaveBeenCalled();
+    expect(mocks.enroll).not.toHaveBeenCalled();
+  });
 });

@@ -8,6 +8,7 @@ import {
   createAdminChallenge,
 } from "@/src/lib/admin/challenges";
 import { getPlatformOwnerIdentity } from "@/src/lib/admin/authorization";
+import { currentAdminKeyPrincipal } from "@/src/lib/admin/mcp/principal";
 import {
   requireAdminIdentityWrite,
   requireAdminWrite,
@@ -131,7 +132,15 @@ function confirmationPhrase(factor: AdminSecurityFactor): string {
   return `REMOVE MFA ${factor.friendlyName}`;
 }
 
+// Owner MFA is managed only from a browser session. No MCP tool reaches this
+// route; the check keeps it that way if one ever did.
+function refuseMcpKey(): NextResponse | null {
+  return currentAdminKeyPrincipal() ? noStoreJson({ error: "mcp_key_not_allowed" }, { status: 403 }) : null;
+}
+
 export async function GET(_request: Request): Promise<NextResponse> {
+  const refused = refuseMcpKey();
+  if (refused) return refused;
   try {
     const owner = await getPlatformOwnerIdentity();
     return noStoreJson({ data: await loadAdminSecurityState(owner.aal) });
@@ -141,6 +150,8 @@ export async function GET(_request: Request): Promise<NextResponse> {
 }
 
 export async function POST(request: Request): Promise<NextResponse> {
+  const refused = refuseMcpKey();
+  if (refused) return refused;
   try {
     const input = SecurityAction.parse(await request.json());
 

@@ -149,3 +149,50 @@ it("decodes percent-encoded reasons and rejects malformed encodings", async () =
   expect(decoded.reason).toBe(reason);
   await expect(requireAdminWrite(writeRequest({ ...base, "x-admin-reason": "bad %E0%A4 encoding" }), options)).rejects.toMatchObject({ status: 422, code: "reason_required" });
 });
+
+const { runWithAdminKeyPrincipal } = await import("./mcp/principal");
+const { requireAdminSessionRead, requireAdminSessionWrite } = await import("./request-guard");
+
+describe("admin request guard inside an MCP key principal", () => {
+  const keyOwner = { ...OWNER, sessionId: "mcp_key:mcpkey_1" };
+  const principal = (scope: "READ" | "WRITE") => ({ keyId: "mcpkey_1", label: "Laptop", scope, expiresAt: "2026-11-24T00:00:00.000Z", owner: keyOwner });
+  const options = { action: "workspace.suspend", targetType: "workspace", targetId: "w1" };
+  const mcpHeaders = { "content-type": "application/json", "x-admin-reason": "Investigate abuse", "idempotency-key": "mcp-call-key-000001", "user-agent": "claude-code/2.1" };
+
+  beforeEach(() => {
+    mocks.getServerEnv.mockReturnValue({ appUrl: "https://app.linkar.in", adminUrl: "https://admin.linkar.in", authSessionSecret: "test-only", trustedProxyHops: 0 });
+    mocks.getPlatformOwnerSession.mockReset().mockResolvedValue(keyOwner);
+    mocks.getPlatformOwnerIdentity.mockReset().mockResolvedValue(keyOwner);
+  });
+
+  it("accepts a write key without a browser Origin and records the MCP origin", async () => {
+    const result = await runWithAdminKeyPrincipal(principal("WRITE"), () => requireAdminWrite(writeRequest(mcpHeaders), options));
+    expect(result).toMatchObject({ owner: keyOwner, origin: "mcp", reason: "Investigate abuse", userAgent: "claude-code/2.1" });
+  });
+
+  it("still requires JSON, a reason and an idempotency key from a write key", async () => {
+    await expect(runWithAdminKeyPrincipal(principal("WRITE"), () => requireAdminWrite(writeRequest({ ...mcpHeaders, "content-type": "text/plain" }), options))).rejects.toMatchObject({ status: 415, code: "json_required" });
+    await expect(runWithAdminKeyPrincipal(principal("WRITE"), () => requireAdminWrite(writeRequest({ ...mcpHeaders, "x-admin-reason": "" }), options))).rejects.toMatchObject({ status: 422, code: "reason_required" });
+    await expect(runWithAdminKeyPrincipal(principal("WRITE"), () => requireAdminWrite(writeRequest({ ...mcpHeaders, "idempotency-key": "short" }), options))).rejects.toMatchObject({ status: 422, code: "invalid_idempotency_key" });
+  });
+
+  it("refuses every write from a read-only key", async () => {
+    await expect(runWithAdminKeyPrincipal(principal("READ"), () => requireAdminWrite(writeRequest(mcpHeaders), options))).rejects.toMatchObject({ status: 403, code: "mcp_key_read_only" });
+    await expect(runWithAdminKeyPrincipal(principal("READ"), () => requireAdminIdentityWrite(writeRequest(mcpHeaders), options))).rejects.toMatchObject({ status: 403, code: "mcp_key_read_only" });
+  });
+
+  it("lets a read-only key read", async () => {
+    await expect(runWithAdminKeyPrincipal(principal("READ"), () => requireAdminRead(new Request("https://admin.linkar.in/api/admin/overview")))).resolves.toEqual(keyOwner);
+  });
+
+  it("keeps the session-only guards closed to every key", async () => {
+    await expect(runWithAdminKeyPrincipal(principal("WRITE"), () => requireAdminSessionRead(new Request("https://admin.linkar.in/api/admin/mcp-keys")))).rejects.toMatchObject({ status: 403, code: "mcp_key_not_allowed" });
+    await expect(runWithAdminKeyPrincipal(principal("WRITE"), () => requireAdminSessionWrite(writeRequest(mcpHeaders), options))).rejects.toMatchObject({ status: 403, code: "mcp_key_not_allowed" });
+  });
+
+  it("opens the session-only guards to a browser session", async () => {
+    mocks.getPlatformOwnerSession.mockResolvedValue(OWNER);
+    await expect(requireAdminSessionRead(new Request("https://admin.linkar.in/api/admin/mcp-keys"))).resolves.toEqual(OWNER);
+    await expect(requireAdminSessionWrite(writeRequest({ ...mcpHeaders, origin: "https://admin.linkar.in" }), options)).resolves.toMatchObject({ owner: OWNER, origin: "https://admin.linkar.in" });
+  });
+});

@@ -102,6 +102,23 @@ function answer(method: string, url: URL, body: unknown): Answer {
     return { status: 200, body: { data: { redirectTo: "/dev-preview/admin" } } };
   }
 
+  if (path === "/api/admin/mcp-keys" && write) {
+    const input = body as { label?: string; scope?: "READ" | "WRITE"; ttlDays?: number } | null;
+    return {
+      status: 201,
+      body: {
+        data: {
+          key: { id: "mcpkey_preview_new", label: input?.label ?? "New key", scope: input?.scope ?? "READ", tokenPrefix: "lkadm_pReViE", createdAt: ago(0), expiresAt: ahead(60 * 24 * (input?.ttlDays ?? 30)), lastUsedAt: null, revokedAt: null, status: "ACTIVE" },
+          token: "lkadm_pReViEwOnLyKeyThatDoesNotWorkAnywhere000000",
+        },
+      },
+    };
+  }
+  match = /^\/api\/admin\/mcp-keys\/([^/]+)$/.exec(path);
+  if (match && method === "DELETE") {
+    return { status: 200, body: { data: { id: decodeURIComponent(match[1]), label: "Work laptop", scope: "WRITE", tokenPrefix: "lkadm_7Hq2xP", createdAt: ago(60 * 24 * 5), expiresAt: ahead(60 * 24 * 25), lastUsedAt: ago(12), revokedAt: ago(0), status: "REVOKED" } } };
+  }
+
   if (path === "/api/admin/deletions/preview") {
     return {
       status: 200,

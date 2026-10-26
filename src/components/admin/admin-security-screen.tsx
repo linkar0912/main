@@ -6,6 +6,8 @@ import { KeyRound, Plus, Trash2 } from "lucide-react";
 
 import { PageHeader } from "@/src/components/page-header";
 import { StatusBadge } from "@/src/components/ui/status-badge";
+import type { AdminMcpKeySummary } from "@/src/lib/admin/mcp/keys";
+import { AdminMcpKeysPanel } from "./admin-mcp-keys-panel";
 import { encodeAdminReason } from "./shared/admin-request";
 import { AdminDialog } from "./shared/admin-dialog";
 import { ReasonField } from "./shared/reason-dialog";
@@ -138,10 +140,15 @@ function messageFor(error: unknown): string {
 export function AdminSecurityScreen({
   ownerEmail,
   initialSecurity,
+  mcpKeys,
+  mcpUrl,
   onVerified = (path) => window.location.assign(path),
 }: {
   ownerEmail: string;
   initialSecurity: AdminSecurityScreenState;
+  /** Loaded only for an AAL2 session (null when loading failed); keys can be managed from nowhere else. */
+  mcpKeys?: AdminMcpKeySummary[] | null;
+  mcpUrl?: string;
   onVerified?: (path: string) => void;
 }) {
   const [security, setSecurity] = useState<AdminSecurityScreenState>(initialSecurity);
@@ -393,6 +400,8 @@ export function AdminSecurityScreen({
           </ul>
         </section>
       ) : null}
+
+      {verified && mcpKeys !== undefined && mcpUrl ? <AdminMcpKeysPanel initialKeys={mcpKeys} mcpUrl={mcpUrl} /> : null}
 
       <section className="admin-card" aria-label="Owner identity">
         <div className="admin-card-head">
