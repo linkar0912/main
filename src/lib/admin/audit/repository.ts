@@ -6,7 +6,7 @@ import { prisma } from "@/src/lib/prisma";
 import { AuditFilterSchema, AuditExportFilterSchema } from "./query-schema";
 import { decodeAdminCursor, encodeAdminCursor } from "../cursor";
 
-export type AuditFilters = { actor?: string; action?: string; targetType?: string; targetId?: string; workspaceId?: string; requestId?: string; phase?: AdminAuditPhase; origin?: string; from?: string; to?: string; cursor?: string | null; limit?: number };
+export type AuditFilters = { actor?: string; action?: string; targetType?: string; targetId?: string; workspaceId?: string; requestId?: string; phase?: AdminAuditPhase; origin?: string; mcpKeyId?: string; from?: string; to?: string; cursor?: string | null; limit?: number };
 
 function whereFor(filter: AuditFilters, cursorSecret: string): Prisma.AdminAuditEventWhereInput {
   const cursor = filter.cursor ? decodeAdminCursor(filter.cursor, cursorSecret) : null;
@@ -16,18 +16,22 @@ function whereFor(filter: AuditFilters, cursorSecret: string): Prisma.AdminAudit
     targetType: filter.targetType || undefined, targetId: filter.targetId || undefined,
     workspaceId: filter.workspaceId || undefined, requestId: filter.requestId || undefined,
     phase: filter.phase, origin: filter.origin ? { contains: filter.origin, mode: "insensitive" } : undefined,
+    sessionId: filter.mcpKeyId ? `${MCP_KEY_SESSION_PREFIX}${filter.mcpKeyId}` : undefined,
     createdAt: filter.from || filter.to ? { gte: filter.from ? new Date(filter.from) : undefined, lte: filter.to ? new Date(filter.to) : undefined } : undefined,
     ...(cursor ? { OR: [{ createdAt: { lt: new Date(cursor.createdAt) } }, { createdAt: new Date(cursor.createdAt), id: { lt: cursor.id } }] } : {}),
   };
 }
 
-const safeSelect = { id: true, requestId: true, phase: true, actorUserId: true, actorEmail: true, action: true, targetType: true, targetId: true, workspaceId: true, reason: true, before: true, after: true, errorCode: true, origin: true, createdAt: true } as const;
+// Audit rows made with an MCP key carry the key in sessionId (request-guard);
+// only that key id is passed on, never a browser session's id.
+const MCP_KEY_SESSION_PREFIX = "mcp_key:";
+const safeSelect = { id: true, requestId: true, phase: true, actorUserId: true, actorEmail: true, action: true, targetType: true, targetId: true, workspaceId: true, reason: true, before: true, after: true, errorCode: true, origin: true, sessionId: true, createdAt: true } as const;
 
 export async function listAdminAuditEvents(filter: AuditFilters, client = prisma, cursorSecret = getServerEnv().authSessionSecret) {
   filter = AuditFilterSchema.parse(filter);
   const limit = filter.limit ?? 50;
   const rows = await client.adminAuditEvent.findMany({ where: whereFor(filter, cursorSecret), orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: limit + 1, select: safeSelect });
-  const items = rows.slice(0, limit); const last = items.at(-1);
+  const items = rows.slice(0, limit).map(({ sessionId, ...row }) => ({ ...row, mcpKeyId: sessionId.startsWith(MCP_KEY_SESSION_PREFIX) ? sessionId.slice(MCP_KEY_SESSION_PREFIX.length) : null })); const last = items.at(-1);
   return { items, nextCursor: rows.length > limit && last ? encodeAdminCursor({ id: last.id, createdAt: last.createdAt.toISOString() }, cursorSecret) : null };
 }
 

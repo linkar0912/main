@@ -9,13 +9,16 @@ import {
   getPlatformOwnerSession,
   type PlatformOwnerIdentity,
 } from "@/src/lib/admin/authorization";
+import { currentAdminKeyPrincipal } from "@/src/lib/admin/mcp/principal";
 
 export type AdminRequestErrorCode =
   | "origin_required"
   | "origin_mismatch"
   | "json_required"
   | "reason_required"
-  | "invalid_idempotency_key";
+  | "invalid_idempotency_key"
+  | "mcp_key_read_only"
+  | "mcp_key_not_allowed";
 
 export class AdminRequestError extends Error {
   constructor(
@@ -70,6 +73,20 @@ export async function requireAdminWrite(
   return buildAdminWriteContext(request, options, owner);
 }
 
+/** For actions an MCP key must never take, such as minting or revoking keys. */
+export async function requireAdminSessionRead(request: Request): Promise<PlatformOwnerIdentity> {
+  if (currentAdminKeyPrincipal()) throw new AdminRequestError(403, "mcp_key_not_allowed");
+  return requireAdminRead(request);
+}
+
+export async function requireAdminSessionWrite(
+  request: Request,
+  options: AdminWriteOptions,
+): Promise<AdminWriteContext> {
+  if (currentAdminKeyPrincipal()) throw new AdminRequestError(403, "mcp_key_not_allowed");
+  return requireAdminWrite(request, options);
+}
+
 export async function requireAdminIdentityWrite(
   request: Request,
   options: AdminWriteOptions,
@@ -84,17 +101,24 @@ function buildAdminWriteContext(
   owner: PlatformOwnerIdentity,
 ): AdminWriteContext {
   const env = getServerEnv();
-  const origin = request.headers.get("origin")?.trim();
-  if (!origin) throw new AdminRequestError(403, "origin_required");
+  const principal = currentAdminKeyPrincipal();
+  if (principal?.scope === "READ") throw new AdminRequestError(403, "mcp_key_read_only");
 
-  let normalizedOrigin: string;
-  try {
-    normalizedOrigin = new URL(origin).origin;
-  } catch {
-    throw new AdminRequestError(403, "origin_mismatch");
-  }
-  if (normalizedOrigin !== new URL(env.adminUrl ?? env.appUrl).origin) {
-    throw new AdminRequestError(403, "origin_mismatch");
+  // The Origin check stops a browser on another site from using the owner's
+  // ambient cookies. An MCP key is an explicit bearer credential, not an
+  // ambient one, so its calls carry no Origin and are recorded as "mcp".
+  let normalizedOrigin = "mcp";
+  if (!principal) {
+    const origin = request.headers.get("origin")?.trim();
+    if (!origin) throw new AdminRequestError(403, "origin_required");
+    try {
+      normalizedOrigin = new URL(origin).origin;
+    } catch {
+      throw new AdminRequestError(403, "origin_mismatch");
+    }
+    if (normalizedOrigin !== new URL(env.adminUrl ?? env.appUrl).origin) {
+      throw new AdminRequestError(403, "origin_mismatch");
+    }
   }
 
   const contentType = request.headers.get("content-type")?.toLowerCase() ?? "";

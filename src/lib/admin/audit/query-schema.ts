@@ -3,7 +3,7 @@ import { z } from "zod";
 const Text = z.preprocess((value) => value === "" ? undefined : value, z.string().trim().max(500).optional());
 const DateFilter = z.preprocess((value) => value === "" ? undefined : value, z.string().datetime({ offset: true }).optional());
 export const AuditFilterFields = z.object({
-  actor: Text, action: Text, targetType: Text, targetId: Text, workspaceId: Text, requestId: Text, origin: Text,
+  actor: Text, action: Text, targetType: Text, targetId: Text, workspaceId: Text, requestId: Text, origin: Text, mcpKeyId: Text,
   phase: z.preprocess((value) => value === "" ? undefined : value, z.enum(["ATTEMPT", "SUCCESS", "FAILURE"]).optional()),
   from: DateFilter, to: DateFilter,
 }).strict();

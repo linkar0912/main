@@ -29,6 +29,8 @@ type Event = {
   after: unknown;
   errorCode: string | null;
   origin: string | null;
+  /** Set when the change was made with a Claude MCP key. */
+  mcpKeyId?: string | null;
   createdAt: Date | string;
 };
 
@@ -47,6 +49,7 @@ const TARGET_TYPES: Record<string, string> = {
   tracked_link: "Tracked link",
   delivery: "Message delivery",
   webhook: "Incoming Meta event",
+  mcp_key: "Claude MCP key",
 };
 
 function targetLabel(type: string): string {
@@ -66,6 +69,7 @@ const ACTION_GROUPS: Array<{ label: string; prefixes: string[]; any: string }> =
   { label: "Service health", prefixes: ["system."], any: "Any service health action" },
   { label: "Delete data", prefixes: ["deletion.", "synthetic_cleanup."], any: "Any deletion" },
   { label: "Your security", prefixes: ["security."], any: "Any two-factor change" },
+  { label: "Claude MCP keys", prefixes: ["mcp_key."], any: "Any MCP key change" },
   { label: "Audit log", prefixes: ["audit."], any: "Any audit log export" },
 ];
 
@@ -146,11 +150,22 @@ export function AuditConsole({ events, nextCursor, filters, cursor = null, histo
             <option value="FAILURE">Failed</option>
           </select>
         </label>
+        <label className="field">
+          <span>Made with</span>
+          <select name="origin" defaultValue={filters.origin ?? ""}>
+            <option value="">Anything</option>
+            <option value="mcp">Claude MCP key</option>
+          </select>
+        </label>
+        {filters.mcpKeyId ? <input type="hidden" name="mcpKeyId" value={filters.mcpKeyId} /> : null}
         <button className="button button-secondary" type="submit">Apply filters</button>
       </form>
 
       <section className="admin-section" aria-label="Audit events">
-        <div className="admin-results"><span>{events.length ? `Showing ${events.length} ${events.length === 1 ? "event" : "events"}` : "No events to show"}</span></div>
+        <div className="admin-results">
+          <span>{events.length ? `Showing ${events.length} ${events.length === 1 ? "event" : "events"}` : "No events to show"}</span>
+          {filters.mcpKeyId ? <span>Only actions made with MCP key <code>{filters.mcpKeyId}</code>. <Link href="/admin/audit">Show all</Link></span> : null}
+        </div>
         <div className="admin-card is-flush">
           {events.length === 0 ? (
             <div className="admin-empty">
@@ -168,6 +183,10 @@ export function AuditConsole({ events, nextCursor, filters, cursor = null, histo
                       {event.reason ? <p>{event.reason}</p> : null}
                       <div className="cell-meta">
                         <span>by {event.actorEmail}</span>
+                        {event.origin === "mcp" ? <span>via Claude MCP key</span> : null}
+                        {event.mcpKeyId && event.mcpKeyId !== filters.mcpKeyId
+                          ? <Link href={`/admin/audit?mcpKeyId=${encodeURIComponent(event.mcpKeyId)}`}>This key’s actions</Link>
+                          : null}
                         {event.workspaceId
                           ? <Link href={`/admin/workspaces/${event.workspaceId}`}>Open workspace</Link>
                           : <span>{targetLabel(event.targetType)}</span>}

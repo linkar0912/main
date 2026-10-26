@@ -3,6 +3,7 @@ import "server-only";
 import { getServerEnv } from "@/src/lib/env";
 import { createSupabaseServerClient } from "@/src/lib/supabase/server";
 import { getRepository } from "@/src/lib/repository-provider";
+import { currentAdminKeyPrincipal } from "@/src/lib/admin/mcp/principal";
 
 export type PlatformOwnerIdentity = {
   userId: string;
@@ -60,6 +61,10 @@ export async function getPlatformOwnerSession(): Promise<PlatformOwnerIdentity> 
 }
 
 async function getAuthorizedOwner(requireAal2: boolean): Promise<PlatformOwnerIdentity> {
+  // An MCP key was verified against the same allowlist and control state at
+  // the MCP endpoint, and was minted from an AAL2 session.
+  const principal = currentAdminKeyPrincipal();
+  if (principal) return principal.owner;
   const claims = await getVerifiedClaims();
   const owner = authorizePlatformOwner(claims, getServerEnv().platformOwnerUserIds, requireAal2);
   const control = await getRepository().getPlatformUserControlState(owner.userId);

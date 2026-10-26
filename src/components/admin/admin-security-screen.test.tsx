@@ -215,4 +215,26 @@ describe("AdminSecurityScreen", () => {
     expect(await screen.findByText("Primary")).toBeTruthy();
     expect(screen.getAllByRole("button", { name: /Remove/ })).toHaveLength(2);
   });
+
+  it("offers MCP keys only once the session is verified", () => {
+    const factors = [{ id: "f1", friendlyName: "Primary", factorType: "totp", status: "verified" as const }];
+    const key = { id: "mcpkey_1", label: "Work laptop", scope: "READ" as const, tokenPrefix: "lkadm_AAAAAA", createdAt: "2026-10-20T09:00:00.000Z", expiresAt: "2026-11-19T09:00:00.000Z", lastUsedAt: null, revokedAt: null, status: "ACTIVE" as const };
+
+    const { unmount } = render(<AdminSecurityScreen ownerEmail="owner@linkar.in" initialSecurity={{ aal: "aal1", nextAal: "aal2", factors }} mcpKeys={[key]} mcpUrl="https://admin.linkar.in/api/admin/mcp" />);
+    expect(screen.queryByText("Claude MCP keys")).toBeNull();
+    unmount();
+
+    render(<AdminSecurityScreen ownerEmail="owner@linkar.in" initialSecurity={{ aal: "aal2", nextAal: "aal2", factors }} mcpKeys={[key]} mcpUrl="https://admin.linkar.in/api/admin/mcp" />);
+    expect(screen.getByText("Claude MCP keys")).toBeTruthy();
+    expect(screen.getByText("Work laptop")).toBeTruthy();
+  });
+
+  it("keeps two-factor settings usable when MCP keys cannot be loaded", () => {
+    const factors = [{ id: "f1", friendlyName: "Primary", factorType: "totp", status: "verified" as const }];
+    render(<AdminSecurityScreen ownerEmail="owner@linkar.in" initialSecurity={{ aal: "aal2", nextAal: "aal2", factors }} mcpKeys={null} mcpUrl="https://admin.linkar.in/api/admin/mcp" />);
+    expect(screen.getByText("Primary")).toBeTruthy();
+    expect(screen.getByText("Claude MCP keys")).toBeTruthy();
+    expect(screen.getByText(/could not be loaded/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Create key" })).toBeNull();
+  });
 });

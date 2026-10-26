@@ -35,6 +35,8 @@ const SENTENCES: Record<string, string> = {
   "security.factor.verify": "Verified two-factor sign-in",
   "security.factor.prepare_unenroll": "Started removing a two-factor app",
   "security.factor.unenroll": "Removed a two-factor app",
+  "mcp_key.create": "Created a Claude MCP key",
+  "mcp_key.revoke": "Revoked a Claude MCP key",
 
   "system.queue.pause": "Paused a job queue",
   "system.queue.resume": "Resumed a job queue",

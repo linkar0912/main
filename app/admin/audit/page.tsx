@@ -12,6 +12,8 @@ async function Data({ searchParams }: PageProps<"/admin/audit">) {
     actor: typeof params.actor === "string" ? params.actor : "",
     action: typeof params.action === "string" ? params.action : "",
     phase: typeof params.phase === "string" ? params.phase : "",
+    origin: typeof params.origin === "string" ? params.origin : "",
+    mcpKeyId: typeof params.mcpKeyId === "string" ? params.mcpKeyId : "",
   };
   const validated = AuditFilterSchema.safeParse({
     ...filters,

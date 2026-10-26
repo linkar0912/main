@@ -69,6 +69,20 @@ describe("proxy authentication boundaries", () => {
     );
   });
 
+  // Admin API routes authorize themselves; the proxy only canonicalizes their host.
+  it("lets a cookie-less MCP call reach the owner MCP endpoint, which checks its own key, only on the admin host", async () => {
+    mocks.getClaims.mockResolvedValue({ data: { claims: null }, error: null });
+
+    const mcp = await proxy(new NextRequest("https://admin.linkar.in/api/admin/mcp", { method: "POST", headers: { authorization: "Bearer lkadm_x", "content-type": "application/json" } }));
+    expect(mcp.status).toBe(200);
+    expect(mcp.headers.get("location")).toBeNull();
+    expect(mocks.getClaims).not.toHaveBeenCalled();
+
+    const appHost = await proxy(new NextRequest("https://app.linkar.in/api/admin/mcp", { method: "POST", headers: { authorization: "Bearer lkadm_x" } }));
+    expect(appHost.status).toBe(307);
+    expect(appHost.headers.get("location")).toBe("https://admin.linkar.in/api/admin/mcp");
+  });
+
   it("rejects cross-site state-changing API calls but lets same-origin and provider callbacks through", async () => {
     const crossSite = await proxy(new NextRequest("https://app.linkar.in/api/automations", { method: "POST", headers: { origin: "https://evil.example", "sec-fetch-site": "cross-site" } }));
     expect(crossSite.status).toBe(403);
